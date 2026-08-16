@@ -92,7 +92,7 @@ blast_radius:
 ## Traceability
 
 - Requirement: "gestor de usuarios" (consola de administración).
-- Commit: shell 598a2b8 / root (pendiente)
+- Commit: shell 598a2b8 / root b0572d8
 - Deployment: `npm run frontend`.
 
 ## Definition of Done
