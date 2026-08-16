@@ -44,6 +44,10 @@ class DomainCreateRequest(BaseModel):
     site_id: str | None = None
 
 
+class DomainUpdateRequest(BaseModel):
+    fqdn: str
+
+
 def _traefik_flags() -> list[str]:
     return [
         "--entrypoints.web.address=:80",
@@ -107,6 +111,22 @@ def _write_route(docker, site_name: str, fqdns: list[str], backend: str, net_nam
         heredoc,
         volumes=[f"{TRAEFIK_CONF_VOLUME}:/c"],
     )
+
+
+def _remove_route(docker, site_name: str) -> None:
+    docker.run_once_container(
+        "alpine:3.20",
+        f"rm -f /c/{site_name}.yml",
+        volumes=[f"{TRAEFIK_CONF_VOLUME}:/c"],
+    )
+
+
+def _sync_site_route(docker, site) -> None:
+    all_domains = json.loads(site.domains_json or "[]")
+    if all_domains:
+        _write_route(docker, site.name, all_domains, site.container_name)
+    else:
+        _remove_route(docker, site.name)
 
 
 @router.get("/traefik/status")
@@ -173,7 +193,8 @@ def create_domain(
         all_domains = json.loads(site.domains_json or "[]")
         if fqdn not in all_domains:
             all_domains.append(fqdn)
-        _write_route(docker, site.name, all_domains, site.container_name, net_name)
+        site.domains_json = json.dumps(all_domains)
+        _sync_site_route(docker, site)
     except docker.DockerAdapterError as exc:
         raise HTTPException(status_code=502, detail=f"traefik: {exc}") from exc
 
@@ -234,6 +255,112 @@ def list_domains(
         }
         for row in rows
     ]
+
+
+@router.patch("/domains/{domain_id}")
+def update_domain(
+    domain_id: str,
+    payload: DomainUpdateRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+):
+    row = db.execute(
+        text(
+            """
+            SELECT d.*, s.name AS site_name, s.container_name, s.domains_json
+            FROM hosting_domain d
+            JOIN hosting_site s ON s.id = d.site_id
+            WHERE d.id = :id AND s.tenant_id = :tenant
+            """
+        ),
+        {"id": domain_id, "tenant": user.tenant_id},
+    ).mappings().first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="dominio no encontrado")
+
+    new_fqdn = payload.fqdn.strip().lower()
+    if "." not in new_fqdn or "/" in new_fqdn:
+        raise HTTPException(status_code=422, detail="fqdn invalido")
+
+    if new_fqdn != row.fqdn:
+        dup = db.execute(
+            text("SELECT 1 FROM hosting_domain WHERE fqdn = :fqdn AND id != :id"),
+            {"fqdn": new_fqdn, "id": domain_id},
+        ).first()
+        if dup is not None:
+            raise HTTPException(status_code=409, detail="dominio ya registrado")
+
+    db.execute(
+        text("UPDATE hosting_domain SET fqdn = :fqdn WHERE id = :id"),
+        {"fqdn": new_fqdn, "id": domain_id},
+    )
+
+    all_domains = json.loads(row.domains_json or "[]")
+    if row.fqdn in all_domains:
+        all_domains[all_domains.index(row.fqdn)] = new_fqdn
+    db.execute(
+        text("UPDATE hosting_site SET domains_json = :domains WHERE id = :site"),
+        {"site": row.site_id, "domains": json.dumps(all_domains)},
+    )
+    db.commit()
+
+    docker = _docker()
+    try:
+        class _Site:
+            pass
+        site_proxy = _Site()
+        site_proxy.name = row.site_name
+        site_proxy.container_name = row.container_name
+        site_proxy.domains_json = json.dumps(all_domains)
+        _sync_site_route(docker, site_proxy)
+    except docker.DockerAdapterError as exc:
+        raise HTTPException(status_code=502, detail=f"traefik: {exc}") from exc
+
+    return {"id": domain_id, "site_id": row.site_id, "fqdn": new_fqdn, "ssl_status": row.ssl_status}
+
+
+@router.delete("/domains/{domain_id}", status_code=204)
+def delete_domain(
+    domain_id: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+):
+    row = db.execute(
+        text(
+            """
+            SELECT d.*, s.name AS site_name, s.container_name, s.domains_json
+            FROM hosting_domain d
+            JOIN hosting_site s ON s.id = d.site_id
+            WHERE d.id = :id AND s.tenant_id = :tenant
+            """
+        ),
+        {"id": domain_id, "tenant": user.tenant_id},
+    ).mappings().first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="dominio no encontrado")
+
+    db.execute(text("DELETE FROM hosting_domain WHERE id = :id"), {"id": domain_id})
+
+    all_domains = json.loads(row.domains_json or "[]")
+    if row.fqdn in all_domains:
+        all_domains.remove(row.fqdn)
+    db.execute(
+        text("UPDATE hosting_site SET domains_json = :domains WHERE id = :site"),
+        {"site": row.site_id, "domains": json.dumps(all_domains)},
+    )
+    db.commit()
+
+    docker = _docker()
+    try:
+        class _Site:
+            pass
+        site_proxy = _Site()
+        site_proxy.name = row.site_name
+        site_proxy.container_name = row.container_name
+        site_proxy.domains_json = json.dumps(all_domains)
+        _sync_site_route(docker, site_proxy)
+    except docker.DockerAdapterError as exc:
+        raise HTTPException(status_code=502, detail=f"traefik: {exc}") from exc
 
 
 def register(context: PluginContext) -> None:
