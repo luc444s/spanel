@@ -1,2 +1,4 @@
 node_modules/
 apps/web/dist/
+.env
+vendor/systutor-core/.env
