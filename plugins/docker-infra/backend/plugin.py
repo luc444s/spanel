@@ -133,6 +133,27 @@ def run_container(
     _run_remote_docker(args, timeout=180)
 
 
+def run_once_container(
+    image: str,
+    shell_cmd: str,
+    *,
+    env: dict[str, str] | None = None,
+    volumes: list[str] | None = None,
+    network: str | None = None,
+    timeout: int = 300,
+) -> str:
+    args = ["run", "--rm"]
+    for key, value in (env or {}).items():
+        args += ["-e", f"{key}={value}"]
+    for volume in volumes or []:
+        args += ["-v", volume]
+    if network:
+        args += ["--network", network]
+    args.append(image)
+    args += ["sh", "-c", f"'{shell_cmd}'"]
+    return _run_remote_docker(args, timeout=timeout)
+
+
 def exec_container(name: str, cmd: list[str], timeout: int = 120) -> str:
     return _run_remote_docker(["exec", name, *cmd], timeout=timeout)
 
@@ -155,6 +176,14 @@ def network_remove(name: str) -> None:
 
 def volume_create(name: str) -> None:
     _run_remote_docker(["volume", "create", name])
+
+
+def volume_ensure(name: str) -> None:
+    try:
+        volume_create(name)
+    except DockerAdapterError as exc:
+        if "already exists" not in str(exc):
+            raise
 
 
 def volume_remove(name: str) -> None:
