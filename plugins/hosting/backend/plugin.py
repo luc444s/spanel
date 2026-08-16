@@ -213,3 +213,50 @@ def site_logs(
         return {"lines": docker.logs_container(site.container_name, tail=tail)}
     except docker.DockerAdapterError as exc:
         raise HTTPException(status_code=502, detail=f"docker remoto: {exc}") from exc
+
+
+@router.get("/sites/{site_id}")
+def site_detail(
+    site_id: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+):
+    site = _get_own_site(db, site_id, user)
+    docker = _docker_infra()
+    origin = {
+        "public_urls": [f"https://{d}" for d in json.loads(site.domains_json or "[]")],
+        "backend": None,
+        "network": None,
+        "host_ip": docker.SSH_HOST,
+        "container_status": "missing",
+    }
+    try:
+        info = docker.inspect_container(site.container_name)
+        state = info.get("State") or {}
+        network_settings = info.get("NetworkSettings") or {}
+        networks = network_settings.get("Networks") or {}
+        origin["container_status"] = state.get("Status", "unknown")
+        origin["network"] = list(networks.keys())[0] if networks else None
+        ports = network_settings.get("Ports") or {}
+        private_ports = sorted(
+            {
+                str(binding[0]["HostPort"])
+                for binding in ports.values()
+                if binding and binding[0] and binding[0].get("HostPort")
+            }
+        ) if ports else []
+        exposed = []
+        for binding in ports.values():
+            if binding and binding[0] and binding[0].get("HostPort"):
+                exposed.append(binding[0]["HostPort"])
+        origin["backend"] = (
+            f"{site.container_name}:{private_ports[0]}"
+            if private_ports
+            else site.container_name
+        )
+    except docker.ContainerNotFoundError:
+        pass
+    except docker.DockerAdapterError:
+        origin["container_status"] = "unreachable"
+
+    return {**_site_row_to_dict(site), "origin": origin}
