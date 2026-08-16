@@ -41,6 +41,7 @@ router = APIRouter(tags=["proxy"])
 
 class DomainCreateRequest(BaseModel):
     fqdn: str
+    site_id: str | None = None
 
 
 def _traefik_flags() -> list[str]:
@@ -82,12 +83,13 @@ def _ensure_traefik(docker) -> None:
     )
 
 
-def _write_route(docker, site_name: str, fqdn: str, backend: str, net_name: str | None = None) -> None:
+def _write_route(docker, site_name: str, fqdns: list[str], backend: str, net_name: str | None = None) -> None:
+    host_rules = " || ".join(f'Host("{fqdn}")' for fqdn in fqdns)
     yaml = (
         "http:\n"
         "  routers:\n"
         f"    {site_name}:\n"
-        f'      rule: Host("{fqdn}")\n'
+        f"      rule: {host_rules}\n"
         f"      service: {site_name}\n"
         "      entryPoints: [web]\n"
         "  services:\n"
@@ -132,16 +134,24 @@ def create_domain(
     if "." not in fqdn or "/" in fqdn:
         raise HTTPException(status_code=422, detail="fqdn invalido")
 
-    site = db.execute(
-        text(
-            "SELECT * FROM hosting_site WHERE tenant_id = :tenant AND container_name = :container"
-        ),
-        {"tenant": user.tenant_id, "container": f"spanel-{fqdn.split('.')[0]}-wp"},
-    ).mappings().first()
+    if payload.site_id:
+        site = db.execute(
+            text(
+                "SELECT * FROM hosting_site WHERE id = :id AND tenant_id = :tenant"
+            ),
+            {"id": payload.site_id, "tenant": user.tenant_id},
+        ).mappings().first()
+    else:
+        site = db.execute(
+            text(
+                "SELECT * FROM hosting_site WHERE tenant_id = :tenant AND container_name = :container"
+            ),
+            {"tenant": user.tenant_id, "container": f"spanel-{fqdn.split('.')[0]}-wp"},
+        ).mappings().first()
     if site is None:
         raise HTTPException(
             status_code=404,
-            detail="no hay site wordpress con ese nombre (spanel-<nombre>-wp)",
+            detail="no hay site wordpress con ese nombre (spanel-<nombre>-wp) — usa site_id",
         )
 
     existing = db.execute(
@@ -160,7 +170,10 @@ def create_domain(
         except docker.DockerAdapterError as exc:
             if "already exists" not in str(exc):
                 raise
-        _write_route(docker, site.name, fqdn, site.container_name, net_name)
+        all_domains = json.loads(site.domains_json or "[]")
+        if fqdn not in all_domains:
+            all_domains.append(fqdn)
+        _write_route(docker, site.name, all_domains, site.container_name, net_name)
     except docker.DockerAdapterError as exc:
         raise HTTPException(status_code=502, detail=f"traefik: {exc}") from exc
 
