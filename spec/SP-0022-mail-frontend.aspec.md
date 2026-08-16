@@ -26,11 +26,16 @@ vez al crear el buzón.
 
 ### Frontend (`plugins/mail/frontend/`)
 
-- `MailView.tsx` — componente principal con 3 secciones:
-  1. Server status — badge estado + botón "Provisionar" si no existe.
-  2. Dominios — tabla + botón agregar + eliminar.
-  3. Buzones — tabla + botón crear + eliminar. Modal post-creación
-     muestra email + contraseña una sola vez.
+- `MailView.tsx` — layout unificado 2 paneles:
+  - **Header**: título "Mail", badge estado server, botón "Provisionar".
+  - **Panel izquierdo**: lista de dominios. Clickeable para filtrar
+    buzones. Botón agregar dominio + eliminar por fila.
+  - **Panel derecho**: buzones del dominio seleccionado. Si no hay
+    dominio seleccionado → "Seleccioná un dominio". Botón crear
+    buzón (dominio pre-seleccionado) + eliminar por fila.
+  - **Dialog post-creación**: muestra email + contraseña una sola vez.
+  - Layout responsive: 2 paneles lado a lado (desktop) / apilados
+    (mobile).
 - `register.tsx` — route `/mail` + nav item "Mail".
 - `plugin.json` — `frontend_entrypoint` actualizado a `.tsx`.
 
