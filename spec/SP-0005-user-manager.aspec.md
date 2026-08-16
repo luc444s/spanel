@@ -14,11 +14,12 @@ habilitar/deshabilitarlos desde la UI.
 
 ## SCOPE
 
-- Ruta `/users` con menú existente.
-- Tabla: nombre, email, categoría, estado, roles asignados, acciones.
-- Formulario crear/editar: nombre, email, password (solo en creación),
-  categoría (`GET /api/v1/core/users/categories`), roles (multi-select
-  desde SP-0004).
+- `UsersView` genérica en `vendor/systutor-shell/src/admin/users.tsx`.
+- Ruta `/users` en el host (menú existente).
+- Tabla: nombre, email, categoría, estado, nº roles, acciones.
+- Formulario crear/editar (Dialog): nombre, email, password (solo en
+  creación), categoría (`GET /api/v1/core/users/categories`), roles
+  (multi-select con roles de SP-0004).
 - Acciones: crear (`POST /api/v1/core/users`), editar (`PATCH`),
   disable/enable (`POST /{id}/disable|enable`).
 - Error visible por operación fallida; refresco tras cambios.
@@ -65,9 +66,10 @@ estorbase.
 ```yaml
 change_surface:
   allowed:
+    - vendor/systutor-shell/src/**
     - apps/web/src/**
   prohibited:
-    - vendor/**
+    - vendor/systutor-core/**
     - apps/web/vite.config.ts
     - apps/web/package.json
 ```
@@ -90,7 +92,7 @@ blast_radius:
 ## Traceability
 
 - Requirement: "gestor de usuarios" (consola de administración).
-- Commit:
+- Commit: shell 598a2b8 / root (pendiente)
 - Deployment: `npm run frontend`.
 
 ## Definition of Done
