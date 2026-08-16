@@ -6,6 +6,7 @@
     "frontend:stop": "pids=$(pgrep -f 'vite/bin/vite.js' || true); for p in $pids; do [ \"$p\" = \"$$\" ] && continue; [ \"$p\" = \"$PPID\" ] && continue; kill \"$p\" 2>/dev/null || true; done",
     "services": "cd vendor/systutor-core && python3 -m uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload",
     "services:no-reload": "cd vendor/systutor-core && python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --workers 2",
+    "services-host:0.0.0.0": "cd vendor/systutor-core && python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload",
     "services:stop": "pids=$(pgrep -f 'uvicorn app.main:app.*8001' || true); for p in $pids; do [ \"$p\" = \"$$\" ] && continue; [ \"$p\" = \"$PPID\" ] && continue; kill \"$p\" 2>/dev/null || true; done"
   }
 }
