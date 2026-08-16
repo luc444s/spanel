@@ -128,6 +128,35 @@ export function SiteDetailView() {
           </CardContent>
         </Card>
       </div>
+
+      {site.stack === 'wordpress' && site.domains.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Archivos</CardTitle>
+            <CardDescription>Filebrowser sobre wp-content, protegido por auth Spanel</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Button
+              onClick={async () => {
+                try {
+                  await apiRequest(`/api/v1/plugins/hosting/sites/${site.id}/files/ensure`, {
+                    method: 'POST',
+                  })
+                  window.open(`http://files.${site.domains[0]}/`, '_blank')
+                } catch (e) {
+                  setError(e instanceof Error ? e.message : String(e))
+                }
+              }}
+            >
+              Abrir archivos
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              El navegador debe enviar el header Authorization con el JWT de Spanel
+              (primer acceso: usar cliente que permita headers custom).
+            </p>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

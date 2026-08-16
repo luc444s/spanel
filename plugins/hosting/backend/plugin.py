@@ -536,6 +536,77 @@ def site_access_logs(
     return lines
 
 
+@router.post("/sites/{site_id}/files/ensure", status_code=201)
+def ensure_filebrowser(
+    site_id: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+):
+    site = _get_own_site(db, site_id, user)
+    if site.stack != "wordpress":
+        raise HTTPException(status_code=422, detail="filebrowser solo para wordpress")
+    domains = json.loads(site.domains_json or "[]")
+    if not domains:
+        raise HTTPException(status_code=409, detail="site sin dominio (SP-0011)")
+
+    fb_container = f"spanel-{site.name}-files"
+    docker = _docker_infra()
+    try:
+        try:
+            docker.inspect_container(fb_container)
+        except docker.ContainerNotFoundError:
+            docker.run_container(
+                fb_container,
+                "filebrowser/filebrowser:v2",
+                env={"FB_NOAUTH": "1"},
+                volumes=[f"spanel-{site.name}-wp:/srv"],
+                network=f"spanel-{site.name}",
+            )
+        try:
+            docker.network_connect("spanel-traefik", f"spanel-{site.name}")
+        except docker.DockerAdapterError as exc:
+            if "already exists" not in str(exc):
+                raise
+
+        fqdn = domains[0]
+        yaml = (
+            "http:\n"
+            "  middlewares:\n"
+            f"    {site.name}-files-auth:\n"
+            "      forwardAuth:\n"
+            "        address: http://100.100.26.58:8001/api/v1/auth/me\n"
+            "        trustForwardHeader: true\n"
+            "  routers:\n"
+            f"    {site.name}-files:\n"
+            f'      rule: Host("files.{fqdn}")\n'
+            f"      service: {site.name}-files\n"
+            f"      middlewares: [{site.name}-files-auth]\n"
+            "      entryPoints: [web]\n"
+            "  services:\n"
+            f"    {site.name}-files:\n"
+            "      loadBalancer:\n"
+            "        servers:\n"
+            f"          - url: http://{fb_container}:80\n"
+        )
+        yaml_b64 = base64.b64encode(yaml.encode()).decode()
+        docker.run_once_container(
+            "alpine:3.20",
+            (
+                f"printf '%s' '{yaml_b64}' | base64 -d > "
+                f"/c/{site.name}-files.yml && ls /c/"
+            ),
+            volumes=["spanel-traefik-conf:/c"],
+        )
+    except docker.DockerAdapterError as exc:
+        raise HTTPException(status_code=502, detail=f"filebrowser: {exc}") from exc
+
+    return {
+        "container": fb_container,
+        "url": f"http://files.{fqdn}/",
+        "auth": "forwardAuth: JWT de Spanel (header Authorization)",
+    }
+
+
 def register(context: PluginContext) -> None:
     context.register_router(router)
     context.register_permissions(

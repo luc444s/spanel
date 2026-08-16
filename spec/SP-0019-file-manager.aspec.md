@@ -72,9 +72,9 @@ change_surface:
     - plugins/hosting/**
     - plugins/proxy/**
     - apps/web/src/**
+    - package.json  # API bind 0.0.0.0 para forwardAuth desde remoto
   prohibited:
     - vendor/**
-    - apps/web/package.json
 ```
 
 ## Blast Radius
@@ -95,7 +95,7 @@ blast_radius:
 ## Traceability
 
 - Requirement: arquitectura-base.md §6 (pedido explícito del usuario).
-- Commit:
+- Commit: root (pendiente)
 - Deployment: `npm run services:no-reload`.
 
 ## Definition of Done
