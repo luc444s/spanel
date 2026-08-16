@@ -42,6 +42,11 @@ inferido, dominios desde labels traefik/caddy) y el container pasa de
 ```yaml
 invariants:
   - Containers remotos MUST NOT ser modificados por adopt.
+  - orquestador_ardi_postgres (DB OPERATIVA de gases industriales) MUST
+    NOT tocarse: prohibido stop/rm/restart/exec destructivo. Su adopcion
+    requiere aprobacion explicita del usuario.
+  - Migraciones del plugin MUST solo crear tablas propias en spanel;
+    MUST NOT alterar systutor, systutor_test ni schemas ajenos.
   - Tenant isolation MUST permanecer intacta.
   - Kernel MUST NOT ser modificado.
   - Adopt de container inexistente MUST fallar sin efectos parciales.
