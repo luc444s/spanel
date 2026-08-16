@@ -92,7 +92,7 @@ blast_radius:
 ## Traceability
 
 - Requirement: "gestor de plugins" (primera iteración de consola).
-- Commit: shell 5563fa4 / root (pendiente)
+- Commit: shell 5563fa4 / root 5e23340
 - Deployment: `npm run frontend`.
 
 ## Definition of Done
