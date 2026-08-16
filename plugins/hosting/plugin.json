@@ -1,0 +1,12 @@
+{
+  "id": "hosting",
+  "name": "Hosting",
+  "version": "0.1.0",
+  "api_version": "1",
+  "requires": [],
+  "backend_entrypoint": "backend.plugin:register",
+  "frontend_entrypoint": "frontend/register.ts",
+  "permissions": ["hosting.containers.read", "hosting.containers.manage"],
+  "events": [],
+  "description": "Gestor de sitios web sobre Docker remoto"
+}
