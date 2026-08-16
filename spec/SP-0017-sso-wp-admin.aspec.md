@@ -88,7 +88,7 @@ blast_radius:
 ## Traceability
 
 - Requirement: arquitectura-base.md §6 (pedido explícito del usuario).
-- Commit: root (pendiente)
+- Commit: root dbdafa6
 - Deployment: `npm run services:no-reload` + wp-cli plugin install.
 
 ## Definition of Done
