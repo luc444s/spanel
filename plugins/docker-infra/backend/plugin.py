@@ -86,7 +86,7 @@ def inspect_container(name: str) -> dict:
     try:
         out = _run_remote_docker(["inspect", name])
     except DockerAdapterError as exc:
-        if "No such" in str(exc):
+        if "no such" in str(exc).lower():
             raise ContainerNotFoundError(name) from exc
         raise
     rows = json.loads(out)
@@ -119,6 +119,7 @@ def run_container(
     volumes: list[str] | None = None,
     network: str | None = None,
     ports: list[str] | None = None,
+    command: list[str] | None = None,
 ) -> None:
     args = ["run", "-d", "--name", name, "--restart", "unless-stopped"]
     for key, value in (env or {}).items():
@@ -130,7 +131,12 @@ def run_container(
     for port in ports or []:
         args += ["-p", port]
     args.append(image)
+    args += command or []
     _run_remote_docker(args, timeout=180)
+
+
+def network_connect(container: str, network: str) -> None:
+    _run_remote_docker(["network", "connect", network, container])
 
 
 def run_once_container(
