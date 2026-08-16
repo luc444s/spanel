@@ -1,21 +1,65 @@
 @import "tailwindcss";
 
-@theme {
-  --color-primary: hsl(222 47% 45%);
-  --color-primary-foreground: hsl(210 40% 98%);
-  --color-secondary: hsl(210 40% 96%);
-  --color-secondary-foreground: hsl(222 47% 11%);
-  --color-accent: hsl(210 40% 94%);
-  --color-card: hsl(0 0% 100%);
-  --color-card-foreground: hsl(222 47% 11%);
-  --color-muted-foreground: hsl(215 16% 47%);
-  --color-border: hsl(214 32% 91%);
-  --shadow-card: 0 1px 3px hsl(222 47% 11% / 0.08), 0 1px 2px hsl(222 47% 11% / 0.06);
-}
+@source "../../../vendor/systutor-shell/src";
 
 :root {
+  --bg: hsl(0 0% 100%);
+  --fg: hsl(222 47% 11%);
+  --card: hsl(0 0% 100%);
+  --card-fg: hsl(222 47% 11%);
+  --primary: hsl(222 47% 45%);
+  --primary-fg: hsl(210 40% 98%);
+  --secondary: hsl(210 40% 96%);
+  --secondary-fg: hsl(222 47% 11%);
+  --accent: hsl(210 40% 94%);
+  --accent-fg: hsl(222 47% 11%);
+  --muted: hsl(210 40% 96%);
+  --muted-fg: hsl(215 16% 47%);
+  --border: hsl(214 32% 91%);
+  --card-shadow: 0 1px 3px hsl(222 47% 11% / 0.08), 0 1px 2px hsl(222 47% 11% / 0.06);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: hsl(222 47% 7%);
+    --fg: hsl(210 40% 98%);
+    --card: hsl(222 47% 10%);
+    --card-fg: hsl(210 40% 98%);
+    --primary: hsl(217 91% 60%);
+    --primary-fg: hsl(222 47% 11%);
+    --secondary: hsl(217 33% 17%);
+    --secondary-fg: hsl(210 40% 98%);
+    --accent: hsl(217 33% 22%);
+    --accent-fg: hsl(210 40% 98%);
+    --muted: hsl(217 33% 17%);
+    --muted-fg: hsl(215 20% 65%);
+    --border: hsl(217 33% 22%);
+    --card-shadow: 0 1px 3px hsl(0 0% 0% / 0.4), 0 1px 2px hsl(0 0% 0% / 0.3);
+  }
+}
+
+@theme inline {
+  --color-background: var(--bg);
+  --color-foreground: var(--fg);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-fg);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-fg);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-fg);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-fg);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-fg);
+  --color-border: var(--border);
+  --color-ring: var(--primary);
+  --shadow-card: var(--card-shadow);
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
   font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
-  color-scheme: light dark;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
