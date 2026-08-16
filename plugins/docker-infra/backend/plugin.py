@@ -120,8 +120,11 @@ def run_container(
     network: str | None = None,
     ports: list[str] | None = None,
     command: list[str] | None = None,
+    hostname: str | None = None,
 ) -> None:
     args = ["run", "-d", "--name", name, "--restart", "unless-stopped"]
+    if hostname:
+        args += ["--hostname", hostname]
     for key, value in (env or {}).items():
         args += ["-e", f"{key}={value}"]
     for volume in volumes or []:

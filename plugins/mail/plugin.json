@@ -1,0 +1,12 @@
+{
+  "id": "mail",
+  "name": "Mail",
+  "version": "0.1.0",
+  "api_version": "1",
+  "requires": ["docker_infra"],
+  "backend_entrypoint": "backend.plugin:register",
+  "frontend_entrypoint": "frontend/register.ts",
+  "permissions": ["mail.domains.read", "mail.domains.manage"],
+  "events": ["mail.smtp.provisioned"],
+  "description": "docker-mailserver: dominios, buzones y aliases"
+}
