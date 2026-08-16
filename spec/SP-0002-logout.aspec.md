@@ -14,7 +14,8 @@ petición posterior deja de enviarlo.
 
 ## SCOPE
 
-- Botón de logout en el shell principal (componente `Button` del shell).
+- `LogoutButton` genérico en `vendor/systutor-shell/src/admin/logout.tsx`.
+- Composición en `apps/web` (App.tsx): botón en el shell principal.
 - Eliminación del token de localStorage + `setTokenProvider(() => null)`.
 - Vuelta inmediata al render de login.
 
@@ -57,9 +58,10 @@ cd apps/web && npm run build
 ```yaml
 change_surface:
   allowed:
+    - vendor/systutor-shell/src/**
     - apps/web/src/**
   prohibited:
-    - vendor/**
+    - vendor/systutor-core/**
     - apps/web/vite.config.ts
     - apps/web/package.json
 ```
@@ -81,7 +83,7 @@ blast_radius:
 ## Traceability
 
 - Requirement: sesión de usuario completa (SP-0001 + logout).
-- Commit:
+- Commit: shell 469e781 / root (pendiente)
 - Deployment: `npm run frontend`.
 
 ## Definition of Done

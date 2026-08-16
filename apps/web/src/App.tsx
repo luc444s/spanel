@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   Login,
+  LogoutButton,
   apiRequest,
   clearToken,
   getToken,
@@ -53,6 +54,9 @@ function App() {
             {user.full_name} · {user.tenant_name}
             {user.branch_name ? ` · ${user.branch_name}` : ''}
           </p>
+          <div className="flex justify-end">
+            <LogoutButton onLogout={() => setUser(null)} />
+          </div>
         </CardContent>
       </Card>
     </main>
