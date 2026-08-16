@@ -112,18 +112,8 @@ function Layout() {
   )
 }
 
-function PluginRoutes() {
-  const { routes } = usePluginRegistry()
-  return (
-    <>
-      {routes.map((route) => (
-        <Route key={route.path} path={route.path} element={route.element} />
-      ))}
-    </>
-  )
-}
-
 function App() {
+  const pluginRegistry = usePluginRegistry()
   const [auth, setAuth] = useState<AuthState>({
     user: null,
     loading: true,
@@ -161,7 +151,9 @@ function App() {
             <Route path="/roles" element={<RolesView />} />
             <Route path="/users" element={<UsersView />} />
             <Route path="/branches" element={<BranchesView />} />
-            <PluginRoutes />
+            {pluginRegistry.routes.map((route) => (
+              <Route key={route.path} path={route.path} element={route.element} />
+            ))}
           </Route>
         </Routes>
       </Router>

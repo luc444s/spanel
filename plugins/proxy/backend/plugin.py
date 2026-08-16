@@ -82,7 +82,7 @@ def _ensure_traefik(docker) -> None:
     )
 
 
-def _write_route(docker, site_name: str, fqdn: str, backend: str) -> None:
+def _write_route(docker, site_name: str, fqdn: str, backend: str, net_name: str | None = None) -> None:
     yaml = (
         "http:\n"
         "  routers:\n"
@@ -154,12 +154,13 @@ def create_domain(
     docker = _docker()
     try:
         _ensure_traefik(docker)
+        net_name = f"spanel-{site.container_name.replace('spanel-', '', 1).rsplit('-wp', 1)[0]}"
         try:
-            docker.network_connect(TRAEFIK_CONTAINER, f"spanel-{site.name}")
+            docker.network_connect(TRAEFIK_CONTAINER, net_name)
         except docker.DockerAdapterError as exc:
             if "already exists" not in str(exc):
                 raise
-        _write_route(docker, site.name, fqdn, site.container_name)
+        _write_route(docker, site.name, fqdn, site.container_name, net_name)
     except docker.DockerAdapterError as exc:
         raise HTTPException(status_code=502, detail=f"traefik: {exc}") from exc
 

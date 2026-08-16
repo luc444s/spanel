@@ -57,6 +57,10 @@ class AdoptRequest(BaseModel):
     name: str | None = None
 
 
+class PatchSiteRequest(BaseModel):
+    admin_email: str | None = None
+
+
 class ProvisionWordpressRequest(BaseModel):
     name: str
     admin_email: str
@@ -436,6 +440,8 @@ def _install_sso_plugin(docker, site) -> None:
     plugin_php = plugin_source.read_text(encoding="utf-8")
     plugin_b64 = base64.b64encode(plugin_php.encode()).decode()
     secret_b64 = base64.b64encode(SSO_SECRET.encode()).decode()
+    wp_vol = f"{site.container_name.replace('-wp', '')}-wp"
+    net = f"{site.container_name.replace('-wp', '').replace('spanel-', 'spanel-', 1)}"
     script = (
         "mkdir -p /wp/wp-content/plugins/spanel-sso\n"
         f"printf '%s' '{plugin_b64}' | base64 -d > "
@@ -446,8 +452,19 @@ def _install_sso_plugin(docker, site) -> None:
     docker.run_once_container(
         "alpine:3.20",
         script,
-        volumes=[f"spanel-{site.name}-wp:/wp"],
+        volumes=[f"{wp_vol}:/wp"],
     )
+    db_container = site.db_container_name
+    db_password = site.db_password
+    if not db_container or not db_password:
+        try:
+            wp_info = docker.inspect_container(site.container_name)
+            env_vars = (wp_info.get("Config") or {}).get("Env") or []
+            env_map = dict(e.split("=", 1) for e in env_vars if "=" in e)
+            db_container = db_container or env_map.get("WORDPRESS_DB_HOST", "")
+            db_password = db_password or env_map.get("WORDPRESS_DB_PASSWORD", "")
+        except docker.DockerAdapterError:
+            pass
     docker.run_once_container(
         "wordpress:cli",
         (
@@ -455,13 +472,13 @@ def _install_sso_plugin(docker, site) -> None:
             "wp rewrite structure '/%postname%/' --allow-root"
         ),
         env={
-            "WORDPRESS_DB_HOST": site.db_container_name,
+            "WORDPRESS_DB_HOST": db_container or "localhost",
             "WORDPRESS_DB_USER": "wp",
-            "WORDPRESS_DB_PASSWORD": site.db_password,
+            "WORDPRESS_DB_PASSWORD": db_password or "",
             "WORDPRESS_DB_NAME": "wordpress",
         },
-        volumes=[f"spanel-{site.name}-wp:/var/www/html"],
-        network=f"spanel-{site.name}",
+        volumes=[f"{wp_vol}:/var/www/html"],
+        network=net,
     )
 
 
@@ -613,6 +630,23 @@ def register(context: PluginContext) -> None:
         ["hosting.containers.read", "hosting.containers.manage"]
     )
     context.register_events(["hosting.site.adopted"])
+
+
+@router.patch("/sites/{site_id}")
+def patch_site(
+    site_id: str,
+    payload: PatchSiteRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+):
+    site = _get_own_site(db, site_id, user)
+    if payload.admin_email is not None:
+        db.execute(
+            text("UPDATE hosting_site SET admin_email = :email WHERE id = :id"),
+            {"email": payload.admin_email, "id": site.id},
+        )
+        db.commit()
+    return {"updated": True}
 
 
 def _guard_protected(site) -> None:

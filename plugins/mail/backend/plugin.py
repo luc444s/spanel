@@ -181,8 +181,11 @@ def create_mailbox(
 
     db.execute(
         text(
-            "INSERT INTO mailbox (id, tenant_id, domain_id, email) "
-            "VALUES (:id, :tenant, :domain, :email)"
+            """
+            INSERT INTO mailbox (id, tenant_id, domain_id, email)
+            VALUES (:id, :tenant, :domain, :email)
+            ON CONFLICT (email) DO NOTHING
+            """
         ),
         {
             "id": str(uuid.uuid4()),
