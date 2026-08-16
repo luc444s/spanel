@@ -22,8 +22,8 @@ sesión WP → el usuario queda logueado en wp-admin.
 - Plugin WordPress `spanel-sso` (repo/paquete nuevo, instalable vía
   wp-cli): endpoint REST `spanel/v1/sso` — valida firma/exp, resuelve
   usuario wp por email, `wp_set_auth_cookie`, redirect wp-admin.
-- Instalación automática del plugin en adopt (si wp-cli disponible) y en
-  provision (SP-0012).
+- Instalación automática del plugin al generar SSO (base64 + wp-cli
+  activate + rewrite structure) — idempotente.
 - Site guarda `admin_email` (nunca password).
 
 ## OUT OF SCOPE
@@ -88,7 +88,7 @@ blast_radius:
 ## Traceability
 
 - Requirement: arquitectura-base.md §6 (pedido explícito del usuario).
-- Commit:
+- Commit: root (pendiente)
 - Deployment: `npm run services:no-reload` + wp-cli plugin install.
 
 ## Definition of Done

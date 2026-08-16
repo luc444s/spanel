@@ -1,8 +1,13 @@
+import base64
+import hashlib
+import hmac
 import importlib.util
 import json
+import os
 import re
 import secrets
 import sys
+import time
 import uuid
 from pathlib import Path
 
@@ -248,10 +253,10 @@ def provision_wordpress(
             """
             INSERT INTO hosting_site
                 (id, tenant_id, branch_id, stack, name, container_name,
-                 db_container_name, db_password, domains_json)
+                 db_container_name, db_password, admin_email, domains_json)
             VALUES
                 (:id, :tenant, :branch, 'wordpress', :name, :container,
-                 :db_container, :db_password, '[]')
+                 :db_container, :db_password, :admin_email, '[]')
             """
         ),
         {
@@ -262,6 +267,7 @@ def provision_wordpress(
             "container": wp_container,
             "db_container": db_container,
             "db_password": db_password,
+            "admin_email": payload.admin_email,
         },
     )
     db.commit()
@@ -404,6 +410,90 @@ def list_backups(
         }
         for row in rows
     ]
+
+
+SSO_SECRET = os.getenv("SPANEL_SSO_SECRET", "")
+
+
+def _b64url(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
+
+
+def _sign_sso_token(email: str) -> str:
+    header = _b64url(json.dumps({"alg": "HS256", "typ": "JWT"}, separators=(",", ":")).encode())
+    now = int(time.time())
+    payload = _b64url(
+        json.dumps({"sub": email, "iat": now, "exp": now + 60}, separators=(",", ":")).encode()
+    )
+    signature = hmac.new(
+        SSO_SECRET.encode(), f"{header}.{payload}".encode(), hashlib.sha256
+    ).digest()
+    return f"{header}.{payload}.{_b64url(signature)}"
+
+
+def _install_sso_plugin(docker, site) -> None:
+    plugin_source = PLUGINS_ROOT / "spanel-sso-wp" / "spanel-sso.php"
+    plugin_php = plugin_source.read_text(encoding="utf-8")
+    plugin_b64 = base64.b64encode(plugin_php.encode()).decode()
+    secret_b64 = base64.b64encode(SSO_SECRET.encode()).decode()
+    script = (
+        "mkdir -p /wp/wp-content/plugins/spanel-sso\n"
+        f"printf '%s' '{plugin_b64}' | base64 -d > "
+        "/wp/wp-content/plugins/spanel-sso/spanel-sso.php\n"
+        f"printf '%s' '{secret_b64}' | base64 -d > /wp/spanel-sso-secret.txt\n"
+        "ls /wp/wp-content/plugins/spanel-sso/"
+    )
+    docker.run_once_container(
+        "alpine:3.20",
+        script,
+        volumes=[f"spanel-{site.name}-wp:/wp"],
+    )
+    docker.run_once_container(
+        "wordpress:cli",
+        (
+            "wp plugin activate spanel-sso --allow-root && "
+            "wp rewrite structure '/%postname%/' --allow-root"
+        ),
+        env={
+            "WORDPRESS_DB_HOST": site.db_container_name,
+            "WORDPRESS_DB_USER": "wp",
+            "WORDPRESS_DB_PASSWORD": site.db_password,
+            "WORDPRESS_DB_NAME": "wordpress",
+        },
+        volumes=[f"spanel-{site.name}-wp:/var/www/html"],
+        network=f"spanel-{site.name}",
+    )
+
+
+@router.post("/sites/{site_id}/sso")
+def site_sso(
+    site_id: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+):
+    site = _get_own_site(db, site_id, user)
+    if site.stack != "wordpress":
+        raise HTTPException(status_code=422, detail="sso solo para wordpress")
+    if not site.admin_email:
+        raise HTTPException(status_code=409, detail="site sin admin_email")
+    domains = json.loads(site.domains_json or "[]")
+    if not domains:
+        raise HTTPException(status_code=409, detail="site sin dominio (SP-0011)")
+    if not SSO_SECRET:
+        raise HTTPException(status_code=500, detail="SPANEL_SSO_SECRET sin configurar")
+
+    docker = _docker_infra()
+    try:
+        _install_sso_plugin(docker, site)
+    except docker.DockerAdapterError as exc:
+        raise HTTPException(status_code=502, detail=f"instalacion sso fallo: {exc}") from exc
+
+    token = _sign_sso_token(site.admin_email)
+    fqdn = domains[0]
+    return {
+        "url": f"http://{fqdn}/wp-json/spanel/v1/sso?token={token}",
+        "expires_in": 60,
+    }
 
 
 def register(context: PluginContext) -> None:

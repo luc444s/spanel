@@ -165,15 +165,18 @@ def create_domain(
         ),
         {"id": domain_id, "site": site.id, "fqdn": fqdn},
     )
+    current_domains = json.loads(site.domains_json or "[]")
+    if fqdn not in current_domains:
+        current_domains.insert(0, fqdn)
     db.execute(
         text(
             """
             UPDATE hosting_site
-            SET domains_json = json_build_array(CAST(:fqdn AS TEXT)) || domains_json
+            SET domains_json = :domains
             WHERE id = :site
             """
         ),
-        {"site": site.id, "fqdn": fqdn},
+        {"site": site.id, "domains": json.dumps(current_domains)},
     )
     db.commit()
     return {
