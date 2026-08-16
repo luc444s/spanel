@@ -211,7 +211,79 @@ def list_mailboxes(
         text("SELECT * FROM mailbox WHERE tenant_id = :t ORDER BY email"),
         {"t": user.tenant_id},
     ).mappings()
-    return [{"email": row.email} for row in rows]
+    return [{"id": row.id, "email": row.email} for row in rows]
+
+
+@router.get("/domains")
+def list_domains(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+):
+    rows = db.execute(
+        text("SELECT * FROM mail_domain WHERE tenant_id = :t ORDER BY domain"),
+        {"t": user.tenant_id},
+    ).mappings()
+    return [{"id": row.id, "domain": row.domain} for row in rows]
+
+
+@router.delete("/domains/{domain_id}", status_code=204)
+def delete_domain(
+    domain_id: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+):
+    row = db.execute(
+        text("SELECT * FROM mail_domain WHERE id = :id AND tenant_id = :t"),
+        {"id": domain_id, "t": user.tenant_id},
+    ).mappings().first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="dominio no encontrado")
+
+    mailbox_count = db.execute(
+        text("SELECT COUNT(*) FROM mailbox WHERE domain_id = :id"),
+        {"id": domain_id},
+    ).scalar()
+    if mailbox_count and mailbox_count > 0:
+        raise HTTPException(
+            status_code=409,
+            detail=f"dominio tiene {mailbox_count} buzón(es) — elimínalos primero",
+        )
+
+    db.execute(text("DELETE FROM mail_domain WHERE id = :id"), {"id": domain_id})
+    db.commit()
+
+
+@router.delete("/mailboxes/{mailbox_id}", status_code=204)
+def delete_mailbox(
+    mailbox_id: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+):
+    row = db.execute(
+        text(
+            """
+            SELECT m.*, d.domain
+            FROM mailbox m
+            JOIN mail_domain d ON d.id = m.domain_id
+            WHERE m.id = :id AND m.tenant_id = :t
+            """
+        ),
+        {"id": mailbox_id, "t": user.tenant_id},
+    ).mappings().first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="buzón no encontrado")
+
+    docker = _docker()
+    try:
+        _ensure_mailserver(docker)
+        docker.exec_container(
+            MAIL_CONTAINER, ["setup", "email", "del", row.email, "--yes"]
+        )
+    except docker.DockerAdapterError:
+        pass
+
+    db.execute(text("DELETE FROM mailbox WHERE id = :id"), {"id": mailbox_id})
+    db.commit()
 
 
 def register(context: PluginContext) -> None:
