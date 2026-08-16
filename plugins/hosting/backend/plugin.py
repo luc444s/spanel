@@ -496,6 +496,46 @@ def site_sso(
     }
 
 
+@router.get("/sites/{site_id}/access-logs")
+def site_access_logs(
+    site_id: str,
+    since: str | None = None,
+    limit: int = 100,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+):
+    site = _get_own_site(db, site_id, user)
+    domains = json.loads(site.domains_json or "[]")
+    if not domains:
+        raise HTTPException(status_code=409, detail="site sin dominios")
+    fqdn = domains[0]
+    docker = _docker_infra()
+    try:
+        out = docker.run_once_container(
+            "alpine:3.20",
+            f"grep -F '{fqdn}' /l/access.log | tail -n {min(limit, 500)}",
+            volumes=["spanel-traefik-logs:/l"],
+        )
+    except docker.DockerAdapterError as exc:
+        raise HTTPException(status_code=502, detail=f"traefik logs: {exc}") from exc
+    lines = []
+    for line in out.splitlines():
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        lines.append(
+            {
+                "ip": row.get("ClientHost", ""),
+                "method": row.get("RequestMethod", ""),
+                "path": row.get("RequestPath", ""),
+                "status": row.get("DownstreamStatus", ""),
+                "ts": row.get("StartLocal", ""),
+            }
+        )
+    return lines
+
+
 def register(context: PluginContext) -> None:
     context.register_router(router)
     context.register_permissions(

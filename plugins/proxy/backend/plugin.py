@@ -34,6 +34,7 @@ def _docker():
 TRAEFIK_CONTAINER = "spanel-traefik"
 TRAEFIK_CONF_VOLUME = "spanel-traefik-conf"
 TRAEFIK_ACME_VOLUME = "spanel-traefik-acme"
+TRAEFIK_LOGS_VOLUME = "spanel-traefik-logs"
 
 router = APIRouter(tags=["proxy"])
 
@@ -46,8 +47,10 @@ def _traefik_flags() -> list[str]:
     return [
         "--entrypoints.web.address=:80",
         "--entrypoints.websecure.address=:443",
-        f"--providers.file.directory=/etc/traefik/dynamic",
+        "--providers.file.directory=/etc/traefik/dynamic",
         "--providers.file.watch=true",
+        "--accesslog.filepath=/var/log/traefik/access.log",
+        "--accesslog.format=json",
         "--certificatesresolvers.letsencrypt.acme.email=admin@example.com",
         "--certificatesresolvers.letsencrypt.acme.storage=/acme.json",
         "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web",
@@ -57,9 +60,13 @@ def _traefik_flags() -> list[str]:
 def _ensure_traefik(docker) -> None:
     docker.volume_ensure(TRAEFIK_CONF_VOLUME)
     docker.volume_ensure(TRAEFIK_ACME_VOLUME)
+    docker.volume_ensure(TRAEFIK_LOGS_VOLUME)
     try:
-        docker.inspect_container(TRAEFIK_CONTAINER)
-        return
+        info = docker.inspect_container(TRAEFIK_CONTAINER)
+        args = (info.get("Args") or [])
+        if "--accesslog.filepath=/var/log/traefik/access.log" in args:
+            return
+        docker.rm_container(TRAEFIK_CONTAINER, force=True)
     except docker.ContainerNotFoundError:
         pass
     docker.run_container(
@@ -69,6 +76,7 @@ def _ensure_traefik(docker) -> None:
         volumes=[
             f"{TRAEFIK_CONF_VOLUME}:/etc/traefik/dynamic",
             f"{TRAEFIK_ACME_VOLUME}:/acme.json",
+            f"{TRAEFIK_LOGS_VOLUME}:/var/log/traefik",
         ],
         ports=["80:80", "443:443"],
     )
