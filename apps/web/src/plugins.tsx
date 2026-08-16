@@ -15,6 +15,13 @@ type Registry = {
   routes: PluginRoute[]
 }
 
+const pluginModules: Record<string, () => Promise<Record<string, unknown>>> = {
+  hosting: () => import('@spanel-plugin/hosting'),
+  docker_infra: () => import('@spanel-plugin/docker_infra'),
+  proxy: () => import('@spanel-plugin/proxy'),
+  mail: () => import('@spanel-plugin/mail'),
+}
+
 export function usePluginRegistry(): Registry {
   const [registry, setRegistry] = useState<Registry>({ navigation: [], routes: [] })
 
@@ -26,10 +33,12 @@ export function usePluginRegistry(): Registry {
         const enabled = plugins.filter((p) => p.is_enabled && p.frontend_entrypoint)
         const modules = await Promise.all(
           enabled.map(async (plugin) => {
+            const loader = pluginModules[plugin.plugin_id]
+            if (!loader) return null
             try {
-              const mod = await import(`@spanel-plugin/${plugin.plugin_id}`)
-              const reg = mod.registerPlugin ? mod.registerPlugin() : null
-              return reg && reg.pluginId === plugin.plugin_id ? (reg as PluginFrontend) : null
+              const mod = await loader()
+              const reg = mod.registerPlugin ? (mod.registerPlugin as () => PluginFrontend)() : null
+              return reg && reg.pluginId === plugin.plugin_id ? reg : null
             } catch {
               return null
             }
