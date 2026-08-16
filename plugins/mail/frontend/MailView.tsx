@@ -10,7 +10,28 @@ import { Input } from '@systutor/shell/ui/input'
 
 type ServerStatus = { provisioned: boolean; status: string }
 type MailDomain = { id: string; domain: string }
-type Mailbox = { id: string; email: string }
+type Mailbox = {
+  id: string
+  email: string
+  email_count: number
+  size_mb: number
+  quota_mb: number
+}
+
+function StorageBar({ used, quota }: { used: number; quota: number }) {
+  const pct = quota > 0 ? Math.min((used / quota) * 100, 100) : 0
+  const color = pct > 90 ? 'bg-destructive' : pct > 70 ? 'bg-yellow-500' : 'bg-primary'
+  return (
+    <div className="flex items-center gap-2 min-w-[160px]">
+      <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
+        <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${pct}%` }} />
+      </div>
+      <span className="text-xs text-muted-foreground whitespace-nowrap">
+        {used} MB / {quota} MB
+      </span>
+    </div>
+  )
+}
 
 export function MailView() {
   const [server, setServer] = useState<ServerStatus | null>(null)
@@ -34,9 +55,6 @@ export function MailView() {
 
   const [deleteDomain, setDeleteDomain] = useState<MailDomain | null>(null)
   const [deleteDomainLoading, setDeleteDomainLoading] = useState(false)
-
-  const [deleteMailbox, setDeleteMailbox] = useState<Mailbox | null>(null)
-  const [deleteMailboxLoading, setDeleteMailboxLoading] = useState(false)
 
   const fetchAll = async () => {
     try {
@@ -133,20 +151,6 @@ export function MailView() {
     }
   }
 
-  const handleDeleteMailbox = async () => {
-    if (!deleteMailbox) return
-    setDeleteMailboxLoading(true)
-    try {
-      await apiRequest(`/api/v1/plugins/mail/mailboxes/${deleteMailbox.id}`, { method: 'DELETE' })
-      setDeleteMailbox(null)
-      await fetchAll()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setDeleteMailboxLoading(false)
-    }
-  }
-
   if (loading) {
     return (
       <Card>
@@ -194,27 +198,33 @@ export function MailView() {
               <p className="text-sm text-muted-foreground">Sin dominios de correo.</p>
             ) : (
               <ul className="space-y-1">
-                {domains.map((d) => (
-                  <li
-                    key={d.id}
-                    className={`flex items-center justify-between rounded-md px-3 py-2 text-sm cursor-pointer transition-colors ${
-                      selectedDomain === d.domain
-                        ? 'bg-primary/10 text-primary font-medium'
-                        : 'hover:bg-muted'
-                    }`}
-                    onClick={() => setSelectedDomain(d.domain)}
-                  >
-                    <span className="truncate">{d.domain}</span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive shrink-0 ml-2"
-                      onClick={(e) => { e.stopPropagation(); setDeleteDomain(d) }}
+                {domains.map((d) => {
+                  const count = mailboxes.filter((m) => m.email.endsWith(`@${d.domain}`)).length
+                  return (
+                    <li
+                      key={d.id}
+                      className={`flex items-center justify-between rounded-md px-3 py-2 text-sm cursor-pointer transition-colors ${
+                        selectedDomain === d.domain
+                          ? 'bg-primary/10 text-primary font-medium'
+                          : 'hover:bg-muted'
+                      }`}
+                      onClick={() => setSelectedDomain(d.domain)}
                     >
-                      ×
-                    </Button>
-                  </li>
-                ))}
+                      <div className="flex items-center gap-2 truncate">
+                        <span className="truncate">{d.domain}</span>
+                        <Badge variant="secondary" className="text-xs shrink-0">{count}</Badge>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive shrink-0 ml-2"
+                        onClick={(e) => { e.stopPropagation(); setDeleteDomain(d) }}
+                      >
+                        ×
+                      </Button>
+                    </li>
+                  )
+                })}
               </ul>
             )}
           </CardContent>
@@ -248,22 +258,19 @@ export function MailView() {
                   <thead>
                     <tr className="border-b border-border text-left text-muted-foreground">
                       <th className="py-2 pr-4 font-medium">Email</th>
-                      <th className="py-2 font-medium">Acciones</th>
+                      <th className="py-2 pr-4 font-medium text-right">Correos</th>
+                      <th className="py-2 font-medium">Almacenamiento</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredMailboxes.map((m) => (
                       <tr key={m.id} className="border-b border-border/50">
                         <td className="py-2 pr-4 font-medium">{m.email}</td>
+                        <td className="py-2 pr-4 text-right text-muted-foreground">
+                          {m.email_count}
+                        </td>
                         <td className="py-2">
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            className="text-destructive"
-                            onClick={() => setDeleteMailbox(m)}
-                          >
-                            Eliminar
-                          </Button>
+                          <StorageBar used={m.size_mb} quota={m.quota_mb} />
                         </td>
                       </tr>
                     ))}
@@ -379,18 +386,6 @@ export function MailView() {
         loading={deleteDomainLoading}
         onClose={() => setDeleteDomain(null)}
         onConfirm={handleDeleteDomain}
-      />
-
-      {/* Delete mailbox confirmation */}
-      <ConfirmDialog
-        open={!!deleteMailbox}
-        title="Eliminar buzón"
-        description={`¿Eliminar "${deleteMailbox?.email}"? Se perderán los correos de este buzón.`}
-        confirmLabel="Eliminar"
-        destructive
-        loading={deleteMailboxLoading}
-        onClose={() => setDeleteMailbox(null)}
-        onConfirm={handleDeleteMailbox}
       />
     </div>
   )
