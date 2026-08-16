@@ -19,8 +19,9 @@ instala WP con wp-cli, registra el Site y entrega admin listo.
 - Crea: red `spanel-<site>`, container mariadb (volumen persistente),
   container wordpress (imagen oficial, volumen wp-content), secrets
   generados (db password aleatorio, no reusado).
-- wp-cli: `core install` + hardening (salt keys, plugins básicos,
-  instala `spanel-sso` de SP-0017 si ya existe).
+- Instalacion WP: entrypoint de la imagen oficial auto-instala (core
+  install + config). wp-cli disponible via imagen `wordpress:cli`
+  one-shot (para SP-0017/SSO plugin).
 - Site persistido con stack=wordpress, container_id, db_container_id,
   dominios vacíos (SP-0011 después).
 - Audit + evento `site.provisioned`.
@@ -94,7 +95,7 @@ blast_radius:
 ## Traceability
 
 - Requirement: arquitectura-base.md §6.
-- Commit:
+- Commit: root (pendiente)
 - Deployment: `npm run services:no-reload`.
 
 ## Definition of Done

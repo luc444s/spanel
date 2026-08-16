@@ -1,5 +1,7 @@
 import importlib.util
 import json
+import re
+import secrets
 import sys
 import uuid
 from pathlib import Path
@@ -48,6 +50,12 @@ PROTECTED_CONTAINERS = {"orquestador_ardi_postgres"}
 class AdoptRequest(BaseModel):
     container_name: str
     name: str | None = None
+
+
+class ProvisionWordpressRequest(BaseModel):
+    name: str
+    admin_email: str
+    admin_user: str | None = None
 
 
 router = APIRouter(tags=["hosting"])
@@ -156,6 +164,132 @@ def adopt_site(
         "container_name": payload.container_name,
         "domains": domains,
     }
+
+
+@router.post("/sites/provision/wordpress", status_code=201)
+def provision_wordpress(
+    payload: ProvisionWordpressRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+):
+    name = payload.name.strip().lower()
+    if not re.fullmatch(r"[a-z0-9-]{3,32}", name):
+        raise HTTPException(
+            status_code=422,
+            detail="name invalido: 3-32 chars, solo a-z 0-9 guiones",
+        )
+    if "@" not in payload.admin_email:
+        raise HTTPException(status_code=422, detail="admin_email invalido")
+
+    wp_container = f"spanel-{name}-wp"
+    db_container = f"spanel-{name}-db"
+    network = f"spanel-{name}"
+    db_volume = f"spanel-{name}-db"
+    wp_volume = f"spanel-{name}-wp"
+
+    existing = db.execute(
+        text("SELECT 1 FROM hosting_site WHERE container_name = :name"),
+        {"name": wp_container},
+    ).first()
+    if existing is not None:
+        raise HTTPException(status_code=409, detail="site con ese nombre ya existe")
+
+    docker = _docker_infra()
+    db_name = "wordpress"
+    db_user = "wp"
+    db_password = secrets.token_urlsafe(18)
+    admin_user = payload.admin_user or "admin"
+    admin_password = secrets.token_urlsafe(18)
+
+    created: list[tuple[str, str]] = []
+    try:
+        docker.network_create(network)
+        created.append(("network", network))
+        docker.volume_create(db_volume)
+        created.append(("volume", db_volume))
+        docker.volume_create(wp_volume)
+        created.append(("volume", wp_volume))
+        docker.run_container(
+            db_container,
+            "mariadb:11",
+            env={
+                "MARIADB_DATABASE": db_name,
+                "MARIADB_USER": db_user,
+                "MARIADB_PASSWORD": db_password,
+                "MARIADB_ROOT_PASSWORD": secrets.token_urlsafe(18),
+            },
+            volumes=[f"{db_volume}:/var/lib/mysql"],
+            network=network,
+        )
+        created.append(("container", db_container))
+        docker.run_container(
+            wp_container,
+            "wordpress:php8.3-apache",
+            env={
+                "WORDPRESS_DB_HOST": db_container,
+                "WORDPRESS_DB_NAME": db_name,
+                "WORDPRESS_DB_USER": db_user,
+                "WORDPRESS_DB_PASSWORD": db_password,
+            },
+            volumes=[f"{wp_volume}:/var/www/html"],
+            network=network,
+        )
+        created.append(("container", wp_container))
+    except docker.DockerAdapterError as exc:
+        _cleanup_provision(docker, created)
+        raise HTTPException(
+            status_code=502,
+            detail=f"provision fallo, rollback ejecutado: {exc}",
+        ) from exc
+
+    site_id = str(uuid.uuid4())
+    db.execute(
+        text(
+            """
+            INSERT INTO hosting_site
+                (id, tenant_id, branch_id, stack, name, container_name,
+                 db_container_name, domains_json)
+            VALUES
+                (:id, :tenant, :branch, 'wordpress', :name, :container,
+                 :db_container, '[]')
+            """
+        ),
+        {
+            "id": site_id,
+            "tenant": user.tenant_id,
+            "branch": user.branch_id,
+            "name": name,
+            "container": wp_container,
+            "db_container": db_container,
+        },
+    )
+    db.commit()
+
+    return {
+        "id": site_id,
+        "name": name,
+        "stack": "wordpress",
+        "container_name": wp_container,
+        "db_container_name": db_container,
+        "network": network,
+        "admin_email": payload.admin_email,
+        "admin_user": admin_user,
+        "admin_password": admin_password,
+        "note": "credenciales admin entregadas una sola vez",
+    }
+
+
+def _cleanup_provision(docker, created: list[tuple[str, str]]) -> None:
+    for kind, resource in reversed(created):
+        try:
+            if kind == "container":
+                docker.rm_container(resource, force=True)
+            elif kind == "network":
+                docker.network_remove(resource)
+            elif kind == "volume":
+                docker.volume_remove(resource)
+        except docker.DockerAdapterError:
+            pass
 
 
 def register(context: PluginContext) -> None:
