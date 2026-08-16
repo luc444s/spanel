@@ -65,6 +65,7 @@ class ProvisionWordpressRequest(BaseModel):
     name: str
     admin_email: str
     admin_user: str | None = None
+    domain: str | None = None
 
 
 router = APIRouter(tags=["hosting"])
@@ -252,6 +253,9 @@ def provision_wordpress(
         ) from exc
 
     site_id = str(uuid.uuid4())
+    domain_list: list[str] = []
+    if payload.domain:
+        domain_list.append(payload.domain.strip().lower())
     db.execute(
         text(
             """
@@ -260,7 +264,7 @@ def provision_wordpress(
                  db_container_name, db_password, admin_email, domains_json)
             VALUES
                 (:id, :tenant, :branch, 'wordpress', :name, :container,
-                 :db_container, :db_password, :admin_email, '[]')
+                 :db_container, :db_password, :admin_email, :domains)
             """
         ),
         {
@@ -272,9 +276,35 @@ def provision_wordpress(
             "db_container": db_container,
             "db_password": db_password,
             "admin_email": payload.admin_email,
+            "domains": json.dumps(domain_list),
         },
     )
     db.commit()
+
+    if payload.domain:
+        import time as _time
+        _time.sleep(5)
+        fqdn = payload.domain.strip().lower()
+        try:
+            docker.exec_container(
+                db_container,
+                ["sh", "-c",
+                 f"mariadb -u {db_user} -p{db_password} {db_name} "
+                 f"-e \"UPDATE wp_options SET option_value='http://{fqdn}' "
+                 f"WHERE option_name IN ('siteurl','home')\""],
+            )
+        except docker.DockerAdapterError:
+            pass
+        db.execute(
+            text(
+                """
+                INSERT INTO hosting_domain (id, site_id, fqdn, ssl_status)
+                VALUES (:id, :site, :fqdn, 'pending')
+                """
+            ),
+            {"id": str(uuid.uuid4()), "site": site_id, "fqdn": fqdn},
+        )
+        db.commit()
 
     return {
         "id": site_id,
@@ -286,6 +316,7 @@ def provision_wordpress(
         "admin_email": payload.admin_email,
         "admin_user": admin_user,
         "admin_password": admin_password,
+        "domains": domain_list,
         "note": "credenciales admin entregadas una sola vez",
     }
 
@@ -587,12 +618,13 @@ def ensure_filebrowser(
                 raise
 
         fqdn = domains[0]
+        spanel_api_url = os.getenv("SPANEL_API_URL", "http://host.docker.internal:8001")
         yaml = (
             "http:\n"
             "  middlewares:\n"
             f"    {slug}-files-auth:\n"
             "      forwardAuth:\n"
-            "        address: http://100.100.26.58:8001/api/v1/auth/me\n"
+            f"        address: {spanel_api_url}/api/v1/auth/me\n"
             "        trustForwardHeader: true\n"
             "  routers:\n"
             f"    {slug}-files:\n"

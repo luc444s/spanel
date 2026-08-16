@@ -222,6 +222,19 @@ def create_domain(
         {"site": site.id, "domains": json.dumps(current_domains)},
     )
     db.commit()
+
+    if site.stack == "wordpress" and site.db_container_name and site.db_password:
+        try:
+            docker.exec_container(
+                site.db_container_name,
+                ["sh", "-c",
+                 f"mariadb -u wp -p{site.db_password} wordpress "
+                 f"-e \"UPDATE wp_options SET option_value='http://{fqdn}' "
+                 f"WHERE option_name IN ('siteurl','home')\""],
+            )
+        except docker.DockerAdapterError:
+            pass
+
     return {
         "id": domain_id,
         "site_id": site.id,
