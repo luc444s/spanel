@@ -1,0 +1,6 @@
+[submodule "vendor/systutor-core"]
+	path = vendor/systutor-core
+	url = https://github.com/luc444s/systutor-core.git
+[submodule "vendor/systutor-shell"]
+	path = vendor/systutor-shell
+	url = https://github.com/luc444s/systutor-shell.git
