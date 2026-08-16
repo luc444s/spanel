@@ -5,7 +5,7 @@
   "api_version": "1",
   "requires": ["docker_infra"],
   "backend_entrypoint": "backend.plugin:register",
-  "frontend_entrypoint": "frontend/register.ts",
+  "frontend_entrypoint": "frontend/register.tsx",
   "permissions": ["proxy.routes.read", "proxy.routes.manage"],
   "events": ["proxy.route.created", "proxy.route.removed"],
   "description": "Traefik: rutas, dominios y TLS"
