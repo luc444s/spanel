@@ -89,7 +89,7 @@ blast_radius:
 ## Traceability
 
 - Requirement: arquitectura-base.md §9.
-- Commit:
+- Commit: root 010d02d
 - Deployment: `npm run frontend`.
 
 ## Definition of Done
