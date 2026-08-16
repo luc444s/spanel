@@ -101,7 +101,7 @@ blast_radius:
 
 - Requirement: "frontend shell mínimo con autenticación" (pedido del
   usuario 2026-08-16).
-- Commit:
+- Commit: shell 220fedb / root 4715e66
 - Deployment: `npm run frontend` (5175) + `npm run services` (8001).
 
 ## Definition of Done
