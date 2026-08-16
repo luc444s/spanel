@@ -83,7 +83,7 @@ blast_radius:
 
 - Requirement: arquitectura-base.md §4, §9 (detalle de origen, pedido
   explícito del usuario).
-- Commit: root (pendiente)
+- Commit: root c618500
 - Deployment: `npm run frontend` + `npm run services:no-reload`.
 
 ## Definition of Done
