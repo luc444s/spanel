@@ -15,7 +15,7 @@ from systutor.kernel.auth.models import User
 from systutor.sdk import PluginContext
 
 PLUGINS_ROOT = Path(__file__).resolve().parents[2]
-DOCKER_INFRA_MODULE = PLUGINS_ROOT / "docker-infra" / "backend" / "plugin.py"
+DOCKER_INFRA_MODULE = PLUGINS_ROOT / "docker_infra" / "backend" / "plugin.py"
 DOCKER_INFRA_SYNTH = "_spanel_docker_infra_proxy"
 
 
