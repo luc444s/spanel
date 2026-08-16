@@ -27,9 +27,14 @@ import { Badge } from '@systutor/shell/ui/badge'
 type AuthState = {
   user: UserProfile | null
   loading: boolean
+  setUser: (user: UserProfile | null) => void
 }
 
-const AuthContext = createContext<AuthState>({ user: null, loading: true })
+const AuthContext = createContext<AuthState>({
+  user: null,
+  loading: true,
+  setUser: () => {},
+})
 
 function useAuth() {
   return useContext(AuthContext)
@@ -37,9 +42,17 @@ function useAuth() {
 
 function LoginScreen() {
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, setUser } = useAuth()
   if (user) return <Navigate to="/plugins" replace />
-  return <Login title="Spanel" onLogin={() => navigate('/plugins', { replace: true })} />
+  return (
+    <Login
+      title="Spanel"
+      onLogin={(loggedUser) => {
+        setUser(loggedUser)
+        navigate('/plugins', { replace: true })
+      }}
+    />
+  )
 }
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -51,7 +64,7 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 }
 
 function Layout() {
-  const { user } = useAuth()
+  const { user, setUser } = useAuth()
   const navigate = useNavigate()
   if (!user) return null
 
@@ -73,7 +86,12 @@ function Layout() {
           <div className="flex items-center gap-3">
             <Badge>{user.tenant_name}</Badge>
             <span className="text-sm text-muted-foreground">{user.email}</span>
-            <LogoutButton onLogout={() => navigate('/login', { replace: true })} />
+            <LogoutButton
+              onLogout={() => {
+                setUser(null)
+                navigate('/login', { replace: true })
+              }}
+            />
           </div>
         </div>
       </header>
@@ -85,19 +103,23 @@ function Layout() {
 }
 
 function App() {
-  const [auth, setAuth] = useState<AuthState>({ user: null, loading: true })
+  const [auth, setAuth] = useState<AuthState>({
+    user: null,
+    loading: true,
+    setUser: (user) => setAuth((prev) => ({ ...prev, user })),
+  })
 
   useEffect(() => {
     initAuth()
     if (!getToken()) {
-      setAuth({ user: null, loading: false })
+      setAuth((prev) => ({ ...prev, loading: false }))
       return
     }
     apiRequest<UserProfile>('/api/v1/auth/me')
-      .then((user) => setAuth({ user, loading: false }))
+      .then((user) => setAuth((prev) => ({ ...prev, user, loading: false })))
       .catch(() => {
         clearToken()
-        setAuth({ user: null, loading: false })
+        setAuth((prev) => ({ ...prev, user: null, loading: false }))
       })
   }, [])
 
