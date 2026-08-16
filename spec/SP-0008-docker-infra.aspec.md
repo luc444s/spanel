@@ -89,7 +89,7 @@ blast_radius:
 ## Traceability
 
 - Requirement: arquitectura-base.md §3 (docker_infra) y §5 (discovery).
-- Commit: root (pendiente)
+- Commit: root 14e0db0
 - Deployment: `npm run services:no-reload`.
 
 ## Definition of Done
