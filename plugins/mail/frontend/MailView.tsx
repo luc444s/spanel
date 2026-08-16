@@ -18,6 +18,7 @@ export function MailView() {
   const [mailboxes, setMailboxes] = useState<Mailbox[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [selectedDomain, setSelectedDomain] = useState<string | null>(null)
 
   const [provisioning, setProvisioning] = useState(false)
 
@@ -27,7 +28,6 @@ export function MailView() {
 
   const [showCreateMailbox, setShowCreateMailbox] = useState(false)
   const [mbUser, setMbUser] = useState('')
-  const [mbDomain, setMbDomain] = useState('')
   const [mbPassword, setMbPassword] = useState('')
   const [mbLoading, setMbLoading] = useState(false)
   const [createdMailbox, setCreatedMailbox] = useState<{ email: string; password: string } | null>(null)
@@ -56,6 +56,10 @@ export function MailView() {
   }
 
   useEffect(() => { void fetchAll() }, [])
+
+  const filteredMailboxes = selectedDomain
+    ? mailboxes.filter((m) => m.email.endsWith(`@${selectedDomain}`))
+    : []
 
   const handleProvision = async () => {
     setProvisioning(true)
@@ -92,6 +96,7 @@ export function MailView() {
     setDeleteDomainLoading(true)
     try {
       await apiRequest(`/api/v1/plugins/mail/domains/${deleteDomain.id}`, { method: 'DELETE' })
+      if (selectedDomain === deleteDomain.domain) setSelectedDomain(null)
       setDeleteDomain(null)
       await fetchAll()
     } catch (e) {
@@ -102,7 +107,7 @@ export function MailView() {
   }
 
   const handleCreateMailbox = async () => {
-    if (!mbUser.trim() || !mbDomain) return
+    if (!mbUser.trim() || !selectedDomain) return
     setMbLoading(true)
     try {
       const res = await apiRequest<{ email: string; password: string }>(
@@ -110,7 +115,7 @@ export function MailView() {
         {
           method: 'POST',
           body: JSON.stringify({
-            domain: mbDomain,
+            domain: selectedDomain,
             user: mbUser.trim(),
             password: mbPassword.trim() || undefined,
           }),
@@ -118,7 +123,6 @@ export function MailView() {
       )
       setShowCreateMailbox(false)
       setMbUser('')
-      setMbDomain('')
       setMbPassword('')
       setCreatedMailbox(res)
       await fetchAll()
@@ -157,118 +161,119 @@ export function MailView() {
     <div className="space-y-6">
       {error && <Alert title="Error">{error}</Alert>}
 
-      {/* Server status */}
+      {/* Header */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <CardTitle>Mail</CardTitle>
             <CardDescription>docker-mailserver en el docker remoto</CardDescription>
           </div>
-          {!server?.provisioned && (
-            <Button onClick={handleProvision} disabled={provisioning}>
-              {provisioning ? 'Provisionando…' : 'Provisionar'}
-            </Button>
-          )}
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-2">
-            <span className="text-sm">Estado:</span>
+          <div className="flex items-center gap-3">
             <Badge variant={server?.status === 'running' ? 'default' : 'secondary'}>
               {server?.provisioned ? server.status : 'no provisionado'}
             </Badge>
+            {!server?.provisioned && (
+              <Button onClick={handleProvision} disabled={provisioning} size="sm">
+                {provisioning ? 'Provisionando…' : 'Provisionar'}
+              </Button>
+            )}
           </div>
-        </CardContent>
+        </CardHeader>
       </Card>
 
-      {/* Domains */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle>Dominios de correo</CardTitle>
-            <CardDescription>Dominios habilitados para recibir correo</CardDescription>
-          </div>
-          <Button variant="secondary" onClick={() => setShowAddDomain(true)}>+ Agregar</Button>
-        </CardHeader>
-        <CardContent>
-          {domains.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Sin dominios de correo.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left text-muted-foreground">
-                    <th className="py-2 pr-4 font-medium">Dominio</th>
-                    <th className="py-2 font-medium">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {domains.map((d) => (
-                    <tr key={d.id} className="border-b border-border/50">
-                      <td className="py-2 pr-4 font-medium">{d.domain}</td>
-                      <td className="py-2">
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          className="text-destructive"
-                          onClick={() => setDeleteDomain(d)}
-                        >
-                          Eliminar
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {/* Two-panel layout */}
+      <div className="grid grid-cols-1 md:grid-cols-[300px_1fr] gap-6">
+        {/* Left panel: Domains */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <CardTitle className="text-base">Dominios</CardTitle>
+            <Button variant="secondary" size="sm" onClick={() => setShowAddDomain(true)}>+ Agregar</Button>
+          </CardHeader>
+          <CardContent>
+            {domains.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Sin dominios de correo.</p>
+            ) : (
+              <ul className="space-y-1">
+                {domains.map((d) => (
+                  <li
+                    key={d.id}
+                    className={`flex items-center justify-between rounded-md px-3 py-2 text-sm cursor-pointer transition-colors ${
+                      selectedDomain === d.domain
+                        ? 'bg-primary/10 text-primary font-medium'
+                        : 'hover:bg-muted'
+                    }`}
+                    onClick={() => setSelectedDomain(d.domain)}
+                  >
+                    <span className="truncate">{d.domain}</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive shrink-0 ml-2"
+                      onClick={(e) => { e.stopPropagation(); setDeleteDomain(d) }}
+                    >
+                      ×
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
 
-      {/* Mailboxes */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle>Buzones</CardTitle>
-            <CardDescription>Cuentas de correo configuradas</CardDescription>
-          </div>
-          <Button variant="secondary" onClick={() => { setMbDomain(domains[0]?.domain ?? ''); setShowCreateMailbox(true) }}>
-            + Crear buzón
-          </Button>
-        </CardHeader>
-        <CardContent>
-          {mailboxes.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Sin buzones.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left text-muted-foreground">
-                    <th className="py-2 pr-4 font-medium">Email</th>
-                    <th className="py-2 font-medium">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {mailboxes.map((m) => (
-                    <tr key={m.id} className="border-b border-border/50">
-                      <td className="py-2 pr-4 font-medium">{m.email}</td>
-                      <td className="py-2">
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          className="text-destructive"
-                          onClick={() => setDeleteMailbox(m)}
-                        >
-                          Eliminar
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+        {/* Right panel: Mailboxes */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <div>
+              <CardTitle className="text-base">
+                {selectedDomain ? `Buzones de ${selectedDomain}` : 'Buzones'}
+              </CardTitle>
+              {selectedDomain && (
+                <CardDescription>{filteredMailboxes.length} buzón(es)</CardDescription>
+              )}
             </div>
-          )}
-        </CardContent>
-      </Card>
+            {selectedDomain && (
+              <Button variant="secondary" size="sm" onClick={() => setShowCreateMailbox(true)}>
+                + Crear buzón
+              </Button>
+            )}
+          </CardHeader>
+          <CardContent>
+            {!selectedDomain ? (
+              <p className="text-sm text-muted-foreground">Seleccioná un dominio para ver sus buzones.</p>
+            ) : filteredMailboxes.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Sin buzones en este dominio.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-left text-muted-foreground">
+                      <th className="py-2 pr-4 font-medium">Email</th>
+                      <th className="py-2 font-medium">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredMailboxes.map((m) => (
+                      <tr key={m.id} className="border-b border-border/50">
+                        <td className="py-2 pr-4 font-medium">{m.email}</td>
+                        <td className="py-2">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            className="text-destructive"
+                            onClick={() => setDeleteMailbox(m)}
+                          >
+                            Eliminar
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Add domain dialog */}
       <Dialog
@@ -304,7 +309,7 @@ export function MailView() {
         actions={
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setShowCreateMailbox(false)}>Cancelar</Button>
-            <Button onClick={handleCreateMailbox} disabled={mbLoading || !mbUser.trim() || !mbDomain}>
+            <Button onClick={handleCreateMailbox} disabled={mbLoading || !mbUser.trim()}>
               {mbLoading ? 'Creando…' : 'Crear buzón'}
             </Button>
           </div>
@@ -312,25 +317,16 @@ export function MailView() {
       >
         <div className="space-y-3">
           <div>
+            <label className="text-sm font-medium">Dominio</label>
+            <Input value={selectedDomain ?? ''} disabled />
+          </div>
+          <div>
             <label className="text-sm font-medium">Usuario</label>
             <Input
               placeholder="admin"
               value={mbUser}
               onChange={(e) => setMbUser(e.target.value)}
             />
-          </div>
-          <div>
-            <label className="text-sm font-medium">Dominio</label>
-            <select
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              value={mbDomain}
-              onChange={(e) => setMbDomain(e.target.value)}
-            >
-              {domains.length === 0 && <option value="">Sin dominios</option>}
-              {domains.map((d) => (
-                <option key={d.id} value={d.domain}>{d.domain}</option>
-              ))}
-            </select>
           </div>
           <div>
             <label className="text-sm font-medium">Contraseña (auto si vacío)</label>
