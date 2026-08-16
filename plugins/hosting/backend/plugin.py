@@ -581,7 +581,7 @@ def ensure_filebrowser(
                 network=f"spanel-{slug}",
             )
         try:
-            docker.network_connect("spanel-traefik", f"spanel-{site.name}")
+            docker.network_connect("spanel-traefik", f"spanel-{slug}")
         except docker.DockerAdapterError as exc:
             if "already exists" not in str(exc):
                 raise
