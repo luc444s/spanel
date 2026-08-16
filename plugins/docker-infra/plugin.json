@@ -1,0 +1,18 @@
+{
+  "id": "docker_infra",
+  "name": "Docker Infra",
+  "version": "0.1.0",
+  "api_version": "1",
+  "requires": [],
+  "backend_entrypoint": "backend.plugin:register",
+  "frontend_entrypoint": "frontend/register.ts",
+  "permissions": [
+    "docker_infra.containers.read",
+    "docker_infra.containers.manage"
+  ],
+  "events": [
+    "docker_infra.container.discovered",
+    "docker_infra.container.state_changed"
+  ],
+  "description": "Adapter compartido al docker remoto via SSH"
+}

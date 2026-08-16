@@ -9,21 +9,21 @@ código o se colgarían de un dominio ajeno.
 
 ## WHAT
 
-Una transición observable: el plugin `docker-infra` queda registrado y
+Una transición observable: el plugin `docker_infra` queda registrado y
 habilitado, expone servicio de containers (list/ps/inspect/exec) y eventos
 `container.discovered` / `container.state_changed`; `hosting` deja de
-tener adapter propio y consume el de `docker-infra`.
+tener adapter propio y consume el de `docker_infra`.
 
 ## SCOPE
 
-- Plugin `docker-infra` en `plugins/docker-infra/` (manifest + backend).
+- Plugin `docker_infra` en `plugins/docker_infra/` (manifest + backend).
 - `backend/adapter.py`: ssh→docker CLI (mover desde hosting + ampliar:
   `ps`, `inspect`, `exec`, `run`, `start`, `stop`, `restart`, `logs`,
   `stats`).
 - `backend/service.py`: capa operaciones con timeouts y errores tipados.
 - Registro de eventos `container.discovered`, `container.state_changed`.
 - Router mínimo `GET /containers` (migra SP-0007) y `GET /containers/{id}/inspect`.
-- Migración: plugin hosting pasa a consumir docker-infra (sin endpoints
+- Migración: plugin hosting pasa a consumir docker_infra (sin endpoints
   duplicados).
 
 ## OUT OF SCOPE
@@ -35,8 +35,8 @@ tener adapter propio y consume el de `docker-infra`.
 ## CONTRACT
 
 - PRE: plugin hosting instalado; API kernel con plugin runtime.
-- POST: `docker-infra` instalado+habilitado; `GET /api/v1/plugins/
-  docker-infra/containers` devuelve misma lista que SP-0007; credenciales
+- POST: `docker_infra` instalado+habilitado; `GET /api/v1/plugins/
+  docker_infra/containers` devuelve misma lista que SP-0007; credenciales
   por env; errores ssh/docker → 502 tipado.
 
 ## INVARIANTS
@@ -53,7 +53,7 @@ invariants:
 
 ```bash
 TOKEN=$(curl -s -X POST http://127.0.0.1:8001/api/v1/auth/login -H "Content-Type: application/json" -d '{"email":"admin@example.com","password":"ChangeMe123!"}' | python3 -c "import json,sys; print(json.load(sys.stdin)['access_token'])")
-curl -s http://127.0.0.1:8001/api/v1/plugins/docker-infra/containers -H "Authorization: Bearer $TOKEN" | jq
+curl -s http://127.0.0.1:8001/api/v1/plugins/docker_infra/containers -H "Authorization: Bearer $TOKEN" | jq
 # hosting sin endpoints docker propios tras migración
 ```
 
@@ -66,7 +66,7 @@ curl -s http://127.0.0.1:8001/api/v1/plugins/docker-infra/containers -H "Authori
 ```yaml
 change_surface:
   allowed:
-    - plugins/docker-infra/**
+    - plugins/docker_infra/**
     - plugins/hosting/backend/**
   prohibited:
     - vendor/**
@@ -78,7 +78,7 @@ change_surface:
 ```yaml
 blast_radius:
   direct:
-    - docker-infra.containers
+    - docker_infra.containers
   indirect:
     - hosting.containers (migración de endpoint)
   must_not_affect:
@@ -88,8 +88,8 @@ blast_radius:
 
 ## Traceability
 
-- Requirement: arquitectura-base.md §3 (docker-infra) y §5 (discovery).
-- Commit:
+- Requirement: arquitectura-base.md §3 (docker_infra) y §5 (discovery).
+- Commit: root (pendiente)
 - Deployment: `npm run services:no-reload`.
 
 ## Definition of Done
