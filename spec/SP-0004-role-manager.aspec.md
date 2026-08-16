@@ -15,10 +15,11 @@ de roles del tenant activo y puede crear roles nuevos, editarlos
 
 ## SCOPE
 
-- Ruta `/roles` con menú ya existente (SP-0003).
-- Tabla de roles: nombre, descripción, estado, nº de permisos, acciones.
-- Formulario crear/editar: nombre, descripción, permisos (multi-select
-  desde `GET /api/v1/core/permissions`).
+- `RolesView` genérica en `vendor/systutor-shell/src/admin/roles.tsx`.
+- Ruta `/roles` en el host (menú existente de SP-0003).
+- Tabla de roles: nombre, nº de permisos, estado, acciones.
+- Formulario crear/editar (Dialog): nombre, permisos (multi-select desde
+  `GET /api/v1/core/permissions`).
 - Acciones: crear (`POST /api/v1/core/roles`), editar (`PATCH`),
   disable/enable (`POST /{id}/disable|enable`).
 - Error visible por operación fallida; refresco tras cada cambio.
@@ -63,9 +64,10 @@ manualmente (o se dejan — idempotencia del kernel).
 ```yaml
 change_surface:
   allowed:
+    - vendor/systutor-shell/src/**
     - apps/web/src/**
   prohibited:
-    - vendor/**
+    - vendor/systutor-core/**
     - apps/web/vite.config.ts
     - apps/web/package.json
 ```
@@ -88,7 +90,7 @@ blast_radius:
 ## Traceability
 
 - Requirement: "gestor de roles" (consola de administración).
-- Commit:
+- Commit: shell 4cd7a2f / root (pendiente)
 - Deployment: `npm run frontend`.
 
 ## Definition of Done

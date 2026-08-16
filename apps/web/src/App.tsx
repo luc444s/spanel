@@ -13,6 +13,7 @@ import {
   Login,
   LogoutButton,
   PluginsView,
+  RolesView,
   apiRequest,
   clearToken,
   getToken,
@@ -127,7 +128,7 @@ function App() {
           >
             <Route path="/" element={<Navigate to="/plugins" replace />} />
             <Route path="/plugins" element={<PluginsView />} />
-            <Route path="/roles" element={<ComingSoon spec="SP-0004" />} />
+            <Route path="/roles" element={<RolesView />} />
             <Route path="/users" element={<ComingSoon spec="SP-0005" />} />
             <Route path="/branches" element={<ComingSoon spec="SP-0006" />} />
           </Route>
