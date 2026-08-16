@@ -94,7 +94,7 @@ blast_radius:
 ## Traceability
 
 - Requirement: "branch/tenant" (consola de administración).
-- Commit: shell 5cb0f92 / root d53f1d0
+- Commit: shell c251cc2 / root d53f1d0
 - Deployment: `npm run frontend`.
 
 ## Definition of Done

@@ -83,7 +83,7 @@ blast_radius:
 ## Traceability
 
 - Requirement: sesión de usuario completa (SP-0001 + logout).
-- Commit: shell 469e781 / root 818bffb
+- Commit: shell 987e72b / root 818bffb
 - Deployment: `npm run frontend`.
 
 ## Definition of Done
