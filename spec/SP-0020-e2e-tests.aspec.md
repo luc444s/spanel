@@ -112,7 +112,7 @@ blast_radius:
 
 - Requirement: arquitectura-base.md §1 (capacidades núcleo) — escenarios
   pedidos por el usuario.
-- Commit:
+- Commit: root d565c6f
 - Deployment: suite manual/cron sobre stack dev.
 
 ## Definition of Done
