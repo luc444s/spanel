@@ -23,6 +23,7 @@ import {
   type UserProfile,
 } from '@systutor/shell'
 import { Badge } from '@systutor/shell/ui/badge'
+import { usePluginRegistry } from './plugins'
 
 type AuthState = {
   user: UserProfile | null
@@ -66,6 +67,7 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 function Layout() {
   const { user, setUser } = useAuth()
   const navigate = useNavigate()
+  const { navigation } = usePluginRegistry()
   if (!user) return null
 
   return (
@@ -81,6 +83,14 @@ function Layout() {
               <Link to="/roles">Roles</Link>
               <Link to="/users">Usuarios</Link>
               <Link to="/branches">Branches</Link>
+              {navigation.length > 0 && (
+                <span className="h-4 w-px bg-border" aria-hidden />
+              )}
+              {navigation.map((item) => (
+                <Link key={item.to} to={item.to}>
+                  {item.label}
+                </Link>
+              ))}
             </nav>
           </div>
           <div className="flex items-center gap-3">
@@ -99,6 +109,17 @@ function Layout() {
         <Outlet />
       </main>
     </div>
+  )
+}
+
+function PluginRoutes() {
+  const { routes } = usePluginRegistry()
+  return (
+    <>
+      {routes.map((route) => (
+        <Route key={route.path} path={route.path} element={route.element} />
+      ))}
+    </>
   )
 }
 
@@ -140,6 +161,7 @@ function App() {
             <Route path="/roles" element={<RolesView />} />
             <Route path="/users" element={<UsersView />} />
             <Route path="/branches" element={<BranchesView />} />
+            <PluginRoutes />
           </Route>
         </Routes>
       </Router>

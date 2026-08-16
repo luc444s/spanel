@@ -16,7 +16,8 @@
     "jsx": "react-jsx",
     "paths": {
       "@systutor/shell": ["../../vendor/systutor-shell/src/index.ts"],
-      "@systutor/shell/*": ["../../vendor/systutor-shell/src/*"]
+      "@systutor/shell/*": ["../../vendor/systutor-shell/src/*"],
+      "@spanel-plugin/*": ["../../plugins/*/frontend/register.tsx", "../../plugins/*/frontend/register.ts"]
     },
 
     /* Linting */

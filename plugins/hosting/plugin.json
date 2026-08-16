@@ -7,7 +7,7 @@
     "docker_infra"
   ],
   "backend_entrypoint": "backend.plugin:register",
-  "frontend_entrypoint": "frontend/register.ts",
+  "frontend_entrypoint": "frontend/register.tsx",
   "permissions": [
     "hosting.containers.read",
     "hosting.containers.manage"

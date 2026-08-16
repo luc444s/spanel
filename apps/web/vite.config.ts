@@ -11,8 +11,15 @@ export default defineConfig({
     host: true,
   },
   resolve: {
-    alias: {
-      '@systutor/shell': fileURLToPath(new URL('../../vendor/systutor-shell/src/', import.meta.url)),
-    },
+    alias: [
+      {
+        find: /^@spanel-plugin\/([\w-]+)$/,
+        replacement: fileURLToPath(new URL('../../plugins/', import.meta.url)) + '$1/frontend/register',
+      },
+      {
+        find: '@systutor/shell',
+        replacement: fileURLToPath(new URL('../../vendor/systutor-shell/src/', import.meta.url)),
+      },
+    ],
   },
 })
