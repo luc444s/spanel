@@ -1,36 +1,64 @@
 # Spanel
 
-Host app del ecosistema SYSTUTOR. Compone el kernel (`systutor-core`) y el
-frontend core (`systutor-shell`) en una consola administrativa.
+Panel de gestión web sobre Docker remoto via Tailscale. Hosting, correo, proxy y plugins.
+
+## Qué es
+
+Spanel es un gestor de sitios web que opera sobre un servidor Docker remoto conectado via Tailscale. Permite adoptar containers existentes, provisionar WordPress, gestionar dominios con Traefik, y administrar correo con docker-mailserver — todo desde una UI web.
+
+## Arquitectura
+
+```
+┌─────────────┐    Tailscale SSH    ┌──────────────────────┐
+│   Spanel    │ ──────────────────► │   Docker remoto      │
+│  (Termux/   │                     │   (VPS x86)          │
+│   VPS)      │                     │                      │
+│             │                     │  ┌─ Traefik (:80/443)│
+│  API :8001  │                     │  ├─ WordPress sites   │
+│  Web :5175  │                     │  ├─ docker-mailserver │
+│  DB  :5432  │                     │  └─ containers...    │
+└─────────────┘                     └──────────────────────┘
+```
 
 ## Stack
 
 | Capa | Componente | Puerto |
 |------|-----------|--------|
-| Frontend | Vite + React (apps/web) | 5175 |
-| API | FastAPI kernel (vendor/systutor-core) | 8001 |
+| Frontend | Vite + React + Tailwind v4 | 5175 |
+| API | FastAPI + SQLAlchemy | 8001 |
 | DB | PostgreSQL `spanel` | 5432 |
-| Cache | Redis | 6379 |
+| Proxy | Traefik v3 (remoto) | 80, 443 |
+| Mail | docker-mailserver (remoto) | 25, 465, 587, 143, 993 |
 
-> Puerto 8000 es de otro trabajo — NO matar procesos ahi.
+## Plugins
 
-## Scripts npm (raiz)
-
-```bash
-npm run frontend            # vite dev en 5175
-npm run frontend:stop
-npm run services            # uvicorn --reload en 8001 (carga .env del core)
-npm run services:no-reload  # uvicorn --workers 2
-npm run services:stop
-```
+| Plugin | Función |
+|--------|---------|
+| `docker_infra` | Adapter SSH → Docker remoto (ps, inspect, start, stop, logs, exec) |
+| `hosting` | Sites: adoptar containers, provisionar WordPress, lifecycle, backups, SSO |
+| `proxy` | Dominios + Traefik: CRUD dominios, rutas dinámicas, TLS |
+| `mail` | Correo: dominios mail, buzones, estadísticas de almacenamiento |
 
 ## Setup
 
+### Requisitos
+
+- Python 3.11+
+- Node.js 18+
+- PostgreSQL 14+
+- Servidor Docker remoto accesible via Tailscale SSH
+
+### Instalación
+
 ```bash
-# 1. submodules + deps
+# 1. Clonar con submodules
+git clone --recurse-submodules https://github.com/luc444s/spanel.git
+cd spanel
+
+# 2. Dependencias
 bash install.sh
 
-# 2. DB
+# 3. DB
 psql -U postgres -c "CREATE DATABASE spanel"
 cd vendor/systutor-core && python3 -c "
 from systutor.core.database import Base, build_engine
@@ -38,7 +66,13 @@ from systutor.core.config import Settings
 Base.metadata.create_all(build_engine(Settings(database_url='postgresql+psycopg://postgres:postgres@localhost:5432/spanel')))
 "
 
-# 3. seed demo (requiere API booteada: npm run services)
+# 4. Variables de entorno (.env en vendor/systutor-core/)
+# SYSTUTOR_DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/spanel
+# SPANEL_DOCKER_SSH_USER=lucas
+# SPANEL_DOCKER_SSH_HOST=100.67.5.50
+# SPANEL_DOCKER_SSH_PASSWORD=<password>
+
+# 5. Seed datos demo
 cd vendor/systutor-core && python3 -c "
 from app.main import app
 from systutor.api.seed import seed_demo_data
@@ -49,20 +83,138 @@ with build_session_factory(settings)() as db:
 "
 ```
 
-Credenciales seed: `admin@example.com` / `ChangeMe123!` (cambiar en produccion).
+### Ejecutar
+
+```bash
+npm run services              # API en :8001 (reload)
+npm run frontend              # Frontend en :5175
+```
+
+Credenciales demo: `admin@example.com` / `ChangeMe123!`
+
+### Producción
+
+```bash
+npm run services:no-reload    # API con workers
+npm run services:stop         # Parar API
+npm run frontend:stop         # Parar frontend
+```
+
+## Scripts npm
+
+| Script | Descripción |
+|--------|-------------|
+| `npm run frontend` | Vite dev server en :5175 |
+| `npm run frontend:stop` | Parar frontend |
+| `npm run services` | uvicorn --reload en :8001 |
+| `npm run services:no-reload` | uvicorn --workers 2 en :8001 |
+| `npm run services:stop` | Parar API |
+| `npm run services-host:0.0.0.0` | uvicorn bind 0.0.0.0 (accesible via Tailscale) |
 
 ## Estructura
 
 ```text
-apps/web/                 host frontend: rutas, layout, branding, gate auth
-vendor/systutor-core/     kernel Python (submodule)
-vendor/systutor-shell/    frontend core: componentes UI + vistas admin (submodule)
-spec/                     A.SPECs (ADD) — contrato por cambio, con traceability
-ADD/                      metodologia: manifesto, spec, template
+apps/web/                 Frontend: React + Vite + Tailwind
+plugins/
+  docker_infra/           Adapter SSH → Docker remoto
+  hosting/                Sites WordPress, adopt, lifecycle, backups
+  proxy/                  Dominios, Traefik, rutas dinámicas
+  mail/                   Correo: dominios, buzones, stats
+vendor/
+  systutor-core/          Kernel Python (submodule)
+  systutor-shell/         UI components + vistas admin (submodule)
+spec/                     A.SPECs — contrato por cambio
 ```
 
-## Desarrollo (ADD)
+## API Endpoints
 
-Cada cambio = una A.SPEC en `spec/SP-XXXX-*.aspec.md`. Commit por spec, en
-ambos repos (shell para vistas genericas, root para composicion). Vistas
-admin viven en `vendor/systutor-shell/src/admin/`; Spanel solo compone.
+### Auth
+- `POST /api/v1/auth/login` — login, retorna JWT
+- `GET /api/v1/auth/me` — usuario actual
+
+### Hosting
+- `GET /api/v1/plugins/hosting/sites` — listar sites
+- `POST /api/v1/plugins/hosting/sites/provision/wordpress` — provisionar WP
+- `POST /api/v1/plugins/hosting/sites/{id}/sso` — SSO magic link wp-admin
+
+### Proxy (Dominios)
+- `GET /api/v1/plugins/proxy/domains` — listar dominios
+- `POST /api/v1/plugins/proxy/domains` — crear dominio
+- `PATCH /api/v1/plugins/proxy/domains/{id}` — editar FQDN
+- `DELETE /api/v1/plugins/proxy/domains/{id}` — eliminar dominio
+
+### Mail
+- `GET /api/v1/plugins/mail/server/status` — estado mail server
+- `POST /api/v1/plugins/mail/server/ensure` — provisionar mail server
+- `GET /api/v1/plugins/mail/domains` — listar dominios mail
+- `POST /api/v1/plugins/mail/domains` — agregar dominio mail
+- `DELETE /api/v1/plugins/mail/domains/{id}` — eliminar dominio mail
+- `GET /api/v1/plugins/mail/mailboxes` — listar buzones (con stats)
+- `POST /api/v1/plugins/mail/mailboxes` — crear buzón
+
+### Docker Infra
+- `GET /api/v1/plugins/docker_infra/containers` — listar containers
+- `GET /api/v1/plugins/docker_infra/containers/{name}/inspect` — inspeccionar
+
+## Plugins
+
+### Crear un plugin
+
+```text
+plugins/mi_plugin/
+  plugin.json           # Manifest (id, name, version, requires, permissions)
+  README.md
+  backend/
+    plugin.py           # def register(context: PluginContext)
+  frontend/
+    register.tsx        # export function registerPlugin()
+  migrations/
+    0001_initial.py     # def upgrade(db) / def downgrade(db)
+```
+
+### Manifest (plugin.json)
+
+```json
+{
+  "id": "mi_plugin",
+  "name": "Mi Plugin",
+  "version": "0.1.0",
+  "api_version": "1",
+  "requires": ["docker_infra"],
+  "backend_entrypoint": "backend.plugin:register",
+  "frontend_entrypoint": "frontend/register.tsx",
+  "permissions": ["mi_plugin.resource.action"],
+  "events": ["mi_plugin.resource.verb"],
+  "description": "Descripción del plugin"
+}
+```
+
+## Docker remoto
+
+Spanel se conecta al Docker remoto via SSH (Tailscale). Las credenciales se configuran en `.env`:
+
+```env
+SPANEL_DOCKER_SSH_USER=lucas
+SPANEL_DOCKER_SSH_HOST=100.67.5.50
+SPANEL_DOCKER_SSH_PASSWORD=<password>
+```
+
+**Reglas de seguridad:**
+- `orquestador_ardi_postgres` = DB operativa de gases industriales. **PROHIBIDO** stop/rm/restart/exec destructivo.
+- Puerto 8000 = otro trabajo. **NUNCA** matar procesos ahí.
+
+## Tailscale
+
+Para acceso remoto via Tailscale:
+
+```bash
+# En el servidor Docker
+tailscale serve reset                    # limpiar serve config
+npm run services-host:0.0.0.0            # API accesible via Tailscale
+```
+
+WordPress siteurl/home deben usar `http://` (no `https://`) cuando se accede via Tailscale directo.
+
+## Licencia
+
+[GNU AGPL-3.0](LICENSE)
