@@ -86,7 +86,7 @@ blast_radius:
 ## Traceability
 
 - Requirement: arquitectura-base.md §6.
-- Commit: root (pendiente)
+- Commit: root f9a3d26
 - Deployment: `npm run services:no-reload`.
 
 ## Definition of Done
