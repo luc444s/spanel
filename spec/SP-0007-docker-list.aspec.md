@@ -94,7 +94,7 @@ blast_radius:
 
 - Requirement: "gestor simple de webs con containers docker" (kickoff
   producto 2026-08-16).
-- Commit: root (pendiente)
+- Commit: root 3264496
 - Deployment: `npm run services:no-reload` (recarga de plugin al boot).
 
 ## Definition of Done
