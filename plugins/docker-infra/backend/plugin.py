@@ -111,6 +111,56 @@ def logs_container(name: str, tail: int = 100) -> str:
     return _run_remote_docker(["logs", "--tail", str(tail), name])
 
 
+def run_container(
+    name: str,
+    image: str,
+    *,
+    env: dict[str, str] | None = None,
+    volumes: list[str] | None = None,
+    network: str | None = None,
+    ports: list[str] | None = None,
+) -> None:
+    args = ["run", "-d", "--name", name, "--restart", "unless-stopped"]
+    for key, value in (env or {}).items():
+        args += ["-e", f"{key}={value}"]
+    for volume in volumes or []:
+        args += ["-v", volume]
+    if network:
+        args += ["--network", network]
+    for port in ports or []:
+        args += ["-p", port]
+    args.append(image)
+    _run_remote_docker(args, timeout=180)
+
+
+def exec_container(name: str, cmd: list[str], timeout: int = 120) -> str:
+    return _run_remote_docker(["exec", name, *cmd], timeout=timeout)
+
+
+def rm_container(name: str, force: bool = False) -> None:
+    args = ["rm"]
+    if force:
+        args.append("-f")
+    args.append(name)
+    _run_remote_docker(args)
+
+
+def network_create(name: str) -> None:
+    _run_remote_docker(["network", "create", name])
+
+
+def network_remove(name: str) -> None:
+    _run_remote_docker(["network", "rm", name])
+
+
+def volume_create(name: str) -> None:
+    _run_remote_docker(["volume", "create", name])
+
+
+def volume_remove(name: str) -> None:
+    _run_remote_docker(["volume", "rm", name])
+
+
 router = APIRouter(tags=["docker-infra"])
 
 
