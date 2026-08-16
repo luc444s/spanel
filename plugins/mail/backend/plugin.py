@@ -34,6 +34,35 @@ def _docker():
 
 MAIL_CONTAINER = "spanel-mail"
 MAIL_IMAGE = "ghcr.io/docker-mailserver/docker-mailserver:latest"
+MAIL_QUOTA_MB = 200
+
+
+def _get_mailbox_stats(docker) -> dict[str, dict]:
+    try:
+        result = docker.exec_container(
+            MAIL_CONTAINER,
+            ["sh", "-c",
+             "for dir in /var/mail/*/*; do "
+             "[ -d \"$dir\" ] || continue; "
+             "domain=$(basename \"$(dirname \"$dir\")\"); "
+             "user=$(basename \"$dir\"); "
+             "count=$(find \"$dir/new\" \"$dir/cur\" -type f 2>/dev/null | wc -l); "
+             "size=$(du -sb \"$dir\" 2>/dev/null | cut -f1); "
+             "echo \"$user@$domain $count $size\"; "
+             "done"],
+        )
+        stats: dict[str, dict] = {}
+        for line in (result.stdout or "").strip().splitlines():
+            parts = line.strip().split()
+            if len(parts) >= 3:
+                email = parts[0]
+                stats[email] = {
+                    "email_count": int(parts[1]),
+                    "size_bytes": int(parts[2]),
+                }
+        return stats
+    except docker.DockerAdapterError:
+        return {}
 
 router = APIRouter(tags=["mail"])
 
@@ -211,7 +240,26 @@ def list_mailboxes(
         text("SELECT * FROM mailbox WHERE tenant_id = :t ORDER BY email"),
         {"t": user.tenant_id},
     ).mappings()
-    return [{"id": row.id, "email": row.email} for row in rows]
+    docker = _docker()
+    stats: dict[str, dict] = {}
+    try:
+        _ensure_mailserver(docker)
+        stats = _get_mailbox_stats(docker)
+    except docker.DockerAdapterError:
+        pass
+    result = []
+    for row in rows:
+        s = stats.get(row.email, {})
+        size_bytes = s.get("size_bytes", 0)
+        size_mb = round(size_bytes / (1024 * 1024), 1)
+        result.append({
+            "id": row.id,
+            "email": row.email,
+            "email_count": s.get("email_count", 0),
+            "size_mb": size_mb,
+            "quota_mb": MAIL_QUOTA_MB,
+        })
+    return result
 
 
 @router.get("/domains")
