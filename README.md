@@ -1,24 +1,30 @@
 # Spanel
 
-Panel de gestión web sobre Docker remoto via Tailscale. Hosting, correo, proxy y plugins.
+Panel de gestión web sobre Docker remoto. Hosting, correo, proxy y plugins.
 
 ## Qué es
 
-Spanel es un gestor de sitios web que opera sobre un servidor Docker remoto conectado via Tailscale. Permite adoptar containers existentes, provisionar WordPress, gestionar dominios con Traefik, y administrar correo con docker-mailserver — todo desde una UI web.
+Spanel es un gestor de sitios web que opera sobre un servidor Docker remoto conectado via SSH (Tailscale o directo). Permite adoptar containers existentes, provisionar WordPress, gestionar dominios con Traefik, y administrar correo con docker-mailserver — todo desde una UI web.
 
 ## Arquitectura
 
 ```
-┌─────────────┐    Tailscale SSH    ┌──────────────────────┐
-│   Spanel    │ ──────────────────► │   Docker remoto      │
-│  (Termux/   │                     │   (VPS x86)          │
-│   VPS)      │                     │                      │
-│             │                     │  ┌─ Traefik (:80/443)│
-│  API :8001  │                     │  ├─ WordPress sites   │
-│  Web :5175  │                     │  ├─ docker-mailserver │
-│  DB  :5432  │                     │  └─ containers...    │
-└─────────────┘                     └──────────────────────┘
+┌─────────────┐    SSH (Tailscale)   ┌──────────────────────────┐
+│   Spanel    │ ──────────────────►  │   Docker remoto (VPS)    │
+│             │                      │                          │
+│  API :8001  │                      │  ┌─ Traefik (:80/443)    │
+│  Web :5175  │                      │  ├─ WordPress sites       │
+│  DB  :5432  │                      │  ├─ docker-mailserver     │
+│  Redis :6379│                      │  └─ containers...        │
+└─────────────┘                      └──────────────────────────┘
 ```
+
+## Modos de operación
+
+| Modo | Uso | Acceso |
+|------|-----|--------|
+| `SPANEL_MODE=tailscale` | Desarrollo | Solo dentro de la tailnet |
+| `SPANEL_MODE=production` | VPS público | Dominios públicos via internet |
 
 ## Stack
 
@@ -26,7 +32,8 @@ Spanel es un gestor de sitios web que opera sobre un servidor Docker remoto cone
 |------|-----------|--------|
 | Frontend | Vite + React + Tailwind v4 | 5175 |
 | API | FastAPI + SQLAlchemy | 8001 |
-| DB | PostgreSQL `spanel` | 5432 |
+| DB | PostgreSQL | 5432 |
+| Cache | Redis | 6379 |
 | Proxy | Traefik v3 (remoto) | 80, 443 |
 | Mail | docker-mailserver (remoto) | 25, 465, 587, 143, 993 |
 
@@ -36,17 +43,62 @@ Spanel es un gestor de sitios web que opera sobre un servidor Docker remoto cone
 |--------|---------|
 | `docker_infra` | Adapter SSH → Docker remoto (ps, inspect, start, stop, logs, exec) |
 | `hosting` | Sites: adoptar containers, provisionar WordPress, lifecycle, backups, SSO |
-| `proxy` | Dominios + Traefik: CRUD dominios, rutas dinámicas, TLS |
+| `proxy` | Dominios + Traefik: CRUD dominios, rutas dinámicas, sync WordPress siteurl |
 | `mail` | Correo: dominios mail, buzones, estadísticas de almacenamiento |
 
-## Setup
+## Deploy con Docker (producción)
+
+```bash
+git clone --recurse-submodules https://github.com/luc444s/spanel.git
+cd spanel
+
+# Crear .env
+cp .env.example .env
+# Editar: DB_PASSWORD, JWT_SECRET, DOCKER_SSH_*, SPANEL_API_URL
+
+# Desarrollo (vite hot-reload)
+docker compose up -d
+
+# Producción (nginx)
+docker compose --profile production up -d
+```
+
+### Services Docker
+
+| Service | Puerto | Modo |
+|---------|--------|------|
+| `db` | 5432 | siempre |
+| `redis` | 6379 | siempre |
+| `api` | 8001 | siempre |
+| `web` | 5175 | dev (default) |
+| `web-prod` | 80 | `--profile production` |
+
+### Variables de entorno (.env)
+
+Ver [`.env.example`](.env.example) para todas las variables.
+
+```env
+# Modo
+SPANEL_MODE=production
+SPANEL_API_URL=http://host.docker.internal:8001
+
+# Docker remoto
+SPANEL_DOCKER_SSH_USER=lucas
+SPANEL_DOCKER_SSH_HOST=100.67.5.50
+SPANEL_DOCKER_SSH_PASSWORD=<password>
+
+# DB
+SYSTUTOR_DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/spanel
+SYSTUTOR_JWT_SECRET_KEY=<secret>
+```
+
+## Setup local (sin Docker)
 
 ### Requisitos
 
-- Python 3.11+
+- Python 3.12+
 - Node.js 18+
 - PostgreSQL 14+
-- Servidor Docker remoto accesible via Tailscale SSH
 
 ### Instalación
 
@@ -60,19 +112,13 @@ bash install.sh
 
 # 3. DB
 psql -U postgres -c "CREATE DATABASE spanel"
-cd vendor/systutor-core && python3 -c "
-from systutor.core.database import Base, build_engine
-from systutor.core.config import Settings
-Base.metadata.create_all(build_engine(Settings(database_url='postgresql+psycopg://postgres:postgres@localhost:5432/spanel')))
-"
 
-# 4. Variables de entorno (.env en vendor/systutor-core/)
-# SYSTUTOR_DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/spanel
-# SPANEL_DOCKER_SSH_USER=lucas
-# SPANEL_DOCKER_SSH_HOST=100.67.5.50
-# SPANEL_DOCKER_SSH_PASSWORD=<password>
+# 4. Variables de entorno
+cp .env.example vendor/systutor-core/.env
+# Editar vendor/systutor-core/.env
 
 # 5. Seed datos demo
+npm run services  # en otra terminal
 cd vendor/systutor-core && python3 -c "
 from app.main import app
 from systutor.api.seed import seed_demo_data
@@ -83,21 +129,13 @@ with build_session_factory(settings)() as db:
 "
 ```
 
+Credenciales demo: `admin@example.com` / `ChangeMe123!`
+
 ### Ejecutar
 
 ```bash
 npm run services              # API en :8001 (reload)
 npm run frontend              # Frontend en :5175
-```
-
-Credenciales demo: `admin@example.com` / `ChangeMe123!`
-
-### Producción
-
-```bash
-npm run services:no-reload    # API con workers
-npm run services:stop         # Parar API
-npm run frontend:stop         # Parar frontend
 ```
 
 ## Scripts npm
@@ -109,21 +147,25 @@ npm run frontend:stop         # Parar frontend
 | `npm run services` | uvicorn --reload en :8001 |
 | `npm run services:no-reload` | uvicorn --workers 2 en :8001 |
 | `npm run services:stop` | Parar API |
-| `npm run services-host:0.0.0.0` | uvicorn bind 0.0.0.0 (accesible via Tailscale) |
+| `npm run services-host:0.0.0.0` | uvicorn bind 0.0.0.0 (accesible via red) |
 
 ## Estructura
 
 ```text
-apps/web/                 Frontend: React + Vite + Tailwind
+Dockerfile                  Build API
+docker-compose.yml          Deploy completo
+nginx.conf                  Frontend production
+.env.example                Variables documentadas
+apps/web/                   Frontend: React + Vite + Tailwind
 plugins/
-  docker_infra/           Adapter SSH → Docker remoto
-  hosting/                Sites WordPress, adopt, lifecycle, backups
-  proxy/                  Dominios, Traefik, rutas dinámicas
-  mail/                   Correo: dominios, buzones, stats
+  docker_infra/             Adapter SSH → Docker remoto
+  hosting/                  Sites WordPress, adopt, lifecycle, backups, SSO
+  proxy/                    Dominios, Traefik, rutas dinámicas
+  mail/                     Correo: dominios, buzones, stats
 vendor/
-  systutor-core/          Kernel Python (submodule)
-  systutor-shell/         UI components + vistas admin (submodule)
-spec/                     A.SPECs — contrato por cambio
+  systutor-core/            Kernel Python (submodule)
+  systutor-shell/           UI components + vistas admin (submodule)
+spec/                       A.SPECs — contrato por cambio
 ```
 
 ## API Endpoints
@@ -134,12 +176,12 @@ spec/                     A.SPECs — contrato por cambio
 
 ### Hosting
 - `GET /api/v1/plugins/hosting/sites` — listar sites
-- `POST /api/v1/plugins/hosting/sites/provision/wordpress` — provisionar WP
+- `POST /api/v1/plugins/hosting/sites/provision/wordpress` — provisionar WP (con dominio opcional)
 - `POST /api/v1/plugins/hosting/sites/{id}/sso` — SSO magic link wp-admin
 
 ### Proxy (Dominios)
 - `GET /api/v1/plugins/proxy/domains` — listar dominios
-- `POST /api/v1/plugins/proxy/domains` — crear dominio
+- `POST /api/v1/plugins/proxy/domains` — crear dominio (sync WordPress siteurl)
 - `PATCH /api/v1/plugins/proxy/domains/{id}` — editar FQDN
 - `DELETE /api/v1/plugins/proxy/domains/{id}` — eliminar dominio
 
@@ -149,7 +191,7 @@ spec/                     A.SPECs — contrato por cambio
 - `GET /api/v1/plugins/mail/domains` — listar dominios mail
 - `POST /api/v1/plugins/mail/domains` — agregar dominio mail
 - `DELETE /api/v1/plugins/mail/domains/{id}` — eliminar dominio mail
-- `GET /api/v1/plugins/mail/mailboxes` — listar buzones (con stats)
+- `GET /api/v1/plugins/mail/mailboxes` — listar buzones (con email count + storage)
 - `POST /api/v1/plugins/mail/mailboxes` — crear buzón
 
 ### Docker Infra
@@ -191,29 +233,13 @@ plugins/mi_plugin/
 
 ## Docker remoto
 
-Spanel se conecta al Docker remoto via SSH (Tailscale). Las credenciales se configuran en `.env`:
+Spanel se conecta al Docker remoto via SSH. Las credenciales se configuran en `.env`:
 
 ```env
 SPANEL_DOCKER_SSH_USER=lucas
 SPANEL_DOCKER_SSH_HOST=100.67.5.50
 SPANEL_DOCKER_SSH_PASSWORD=<password>
 ```
-
-**Reglas de seguridad:**
-- `orquestador_ardi_postgres` = DB operativa de gases industriales. **PROHIBIDO** stop/rm/restart/exec destructivo.
-- Puerto 8000 = otro trabajo. **NUNCA** matar procesos ahí.
-
-## Tailscale
-
-Para acceso remoto via Tailscale:
-
-```bash
-# En el servidor Docker
-tailscale serve reset                    # limpiar serve config
-npm run services-host:0.0.0.0            # API accesible via Tailscale
-```
-
-WordPress siteurl/home deben usar `http://` (no `https://`) cuando se accede via Tailscale directo.
 
 ## Licencia
 
