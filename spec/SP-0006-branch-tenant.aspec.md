@@ -16,10 +16,11 @@ habilitar/deshabilitar branches desde la UI.
 
 ## SCOPE
 
-- Ruta `/branches` con menú existente.
-- Cabecera con tenant actual (datos de `/auth/me`).
-- Tabla de branches: nombre, código/estado, acciones.
-- Formulario crear/editar branch según schema `CoreBranchRead`.
+- `BranchesView` genérica en `vendor/systutor-shell/src/admin/branches.tsx`.
+- Ruta `/branches` en el host (menú existente).
+- Cabecera del Layout host con tenant actual (datos de `/auth/me`).
+- Tabla de branches: nombre, código, estado, acciones.
+- Formulario crear/editar (Dialog) según schema `CoreBranchRead`.
 - Acciones: crear (`POST /api/v1/core/branches`), editar (`PATCH`),
   disable/enable (`POST /{id}/disable|enable`).
 - Error visible por operación fallida; refresco tras cambios.
@@ -67,9 +68,10 @@ estorbase.
 ```yaml
 change_surface:
   allowed:
+    - vendor/systutor-shell/src/**
     - apps/web/src/**
   prohibited:
-    - vendor/**
+    - vendor/systutor-core/**
     - apps/web/vite.config.ts
     - apps/web/package.json
 ```
@@ -92,7 +94,7 @@ blast_radius:
 ## Traceability
 
 - Requirement: "branch/tenant" (consola de administración).
-- Commit:
+- Commit: shell 5cb0f92 / root (pendiente)
 - Deployment: `npm run frontend`.
 
 ## Definition of Done

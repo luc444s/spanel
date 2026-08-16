@@ -10,6 +10,7 @@ import {
   useNavigate,
 } from 'react-router-dom'
 import {
+  BranchesView,
   Login,
   LogoutButton,
   PluginsView,
@@ -22,7 +23,6 @@ import {
   type UserProfile,
 } from '@systutor/shell'
 import { Badge } from '@systutor/shell/ui/badge'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@systutor/shell/ui/card'
 
 type AuthState = {
   user: UserProfile | null
@@ -48,20 +48,6 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   if (loading) return null
   if (!user) return <Navigate to="/login" state={{ from: location }} replace />
   return children
-}
-
-function ComingSoon({ spec }: { spec: string }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>En desarrollo</CardTitle>
-        <CardDescription>Vista pendiente — {spec}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <p className="text-sm text-muted-foreground">Se implementa en la spec correspondiente.</p>
-      </CardContent>
-    </Card>
-  )
 }
 
 function Layout() {
@@ -131,7 +117,7 @@ function App() {
             <Route path="/plugins" element={<PluginsView />} />
             <Route path="/roles" element={<RolesView />} />
             <Route path="/users" element={<UsersView />} />
-            <Route path="/branches" element={<ComingSoon spec="SP-0006" />} />
+            <Route path="/branches" element={<BranchesView />} />
           </Route>
         </Routes>
       </Router>
