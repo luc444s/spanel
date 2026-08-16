@@ -42,6 +42,9 @@ def _infer_stack(image: str) -> str:
     return "static"
 
 
+PROTECTED_CONTAINERS = {"orquestador_ardi_postgres"}
+
+
 class AdoptRequest(BaseModel):
     container_name: str
     name: str | None = None
@@ -61,6 +64,18 @@ def _site_row_to_dict(row) -> dict:
         "domains": json.loads(row.domains_json or "[]"),
         "created_at": row.created_at.isoformat() if row.created_at else None,
     }
+
+
+def _get_own_site(db: Session, site_id: str, user: User):
+    row = db.execute(
+        text(
+            "SELECT * FROM hosting_site WHERE id = :id AND tenant_id = :tenant"
+        ),
+        {"id": site_id, "tenant": user.tenant_id},
+    ).mappings().first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="site no encontrado")
+    return row
 
 
 @router.get("/sites")
@@ -149,3 +164,52 @@ def register(context: PluginContext) -> None:
         ["hosting.containers.read", "hosting.containers.manage"]
     )
     context.register_events(["hosting.site.adopted"])
+
+
+def _guard_protected(site) -> None:
+    if site.container_name in PROTECTED_CONTAINERS:
+        raise HTTPException(
+            status_code=403,
+            detail=f"container protegido (operativo): {site.container_name}",
+        )
+
+
+def _lifecycle_action(action: str):
+    def endpoint(
+        site_id: str,
+        user: User = Depends(get_current_user),
+        db: Session = Depends(get_db_session),
+    ):
+        site = _get_own_site(db, site_id, user)
+        _guard_protected(site)
+        docker = _docker_infra()
+        try:
+            getattr(docker, f"{action}_container")(site.container_name)
+        except docker.DockerAdapterError as exc:
+            raise HTTPException(status_code=502, detail=f"docker remoto: {exc}") from exc
+        return {"status": action, "container": site.container_name}
+
+    return endpoint
+
+
+for action in ("start", "stop", "restart"):
+    router.add_api_route(
+        f"/sites/{{site_id}}/{action}",
+        _lifecycle_action(action),
+        methods=["POST"],
+    )
+
+
+@router.get("/sites/{site_id}/logs")
+def site_logs(
+    site_id: str,
+    tail: int = 100,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+):
+    site = _get_own_site(db, site_id, user)
+    docker = _docker_infra()
+    try:
+        return {"lines": docker.logs_container(site.container_name, tail=tail)}
+    except docker.DockerAdapterError as exc:
+        raise HTTPException(status_code=502, detail=f"docker remoto: {exc}") from exc
