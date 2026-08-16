@@ -566,7 +566,8 @@ def ensure_filebrowser(
     if not domains:
         raise HTTPException(status_code=409, detail="site sin dominio (SP-0011)")
 
-    fb_container = f"spanel-{site.name}-files"
+    slug = site.container_name.replace("spanel-", "", 1).rsplit("-wp", 1)[0]
+    fb_container = f"spanel-{slug}-files"
     docker = _docker_infra()
     try:
         try:
@@ -576,8 +577,8 @@ def ensure_filebrowser(
                 fb_container,
                 "filebrowser/filebrowser:v2",
                 env={"FB_NOAUTH": "1"},
-                volumes=[f"spanel-{site.name}-wp:/srv"],
-                network=f"spanel-{site.name}",
+                volumes=[f"spanel-{slug}-wp:/srv"],
+                network=f"spanel-{slug}",
             )
         try:
             docker.network_connect("spanel-traefik", f"spanel-{site.name}")
