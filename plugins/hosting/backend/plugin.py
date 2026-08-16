@@ -590,18 +590,18 @@ def ensure_filebrowser(
         yaml = (
             "http:\n"
             "  middlewares:\n"
-            f"    {site.name}-files-auth:\n"
+            f"    {slug}-files-auth:\n"
             "      forwardAuth:\n"
             "        address: http://100.100.26.58:8001/api/v1/auth/me\n"
             "        trustForwardHeader: true\n"
             "  routers:\n"
-            f"    {site.name}-files:\n"
+            f"    {slug}-files:\n"
             f'      rule: Host("files.{fqdn}")\n'
-            f"      service: {site.name}-files\n"
-            f"      middlewares: [{site.name}-files-auth]\n"
+            f"      service: {slug}-files\n"
+            f"      middlewares: [{slug}-files-auth]\n"
             "      entryPoints: [web]\n"
             "  services:\n"
-            f"    {site.name}-files:\n"
+            f"    {slug}-files:\n"
             "      loadBalancer:\n"
             "        servers:\n"
             f"          - url: http://{fb_container}:80\n"
@@ -611,7 +611,7 @@ def ensure_filebrowser(
             "alpine:3.20",
             (
                 f"printf '%s' '{yaml_b64}' | base64 -d > "
-                f"/c/{site.name}-files.yml && ls /c/"
+                f"/c/{slug}-files.yml && ls /c/"
             ),
             volumes=["spanel-traefik-conf:/c"],
         )
