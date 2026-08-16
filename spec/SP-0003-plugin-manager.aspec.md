@@ -15,14 +15,13 @@ disable, uninstall, migrate) desde la UI, con estado visible por plugin.
 
 ## SCOPE
 
-- Ruta `/plugins` en el frontend (se introduce `react-router-dom`).
-- Tabla de plugins con columnas: id, nombre, versión, estado, acciones.
-- Acciones por estado: install (discovered), enable, disable, migrate,
-  uninstall — botones que disparan los endpoints kernel.
-- Refresco de lista tras cada acción.
-- Manejo de error visible (Alert) por acción fallida.
-- Navegación mínima: shell principal con menú (Plugins | Roles | Usuarios
-  | Branches) — el menú completo se completa en specs siguientes.
+- `PluginsView` genérica en `vendor/systutor-shell/src/admin/plugins.tsx`.
+- Ruta `/plugins` en el host (se introduce `react-router-dom` en apps/web).
+- Tabla de plugins: nombre, versión, estado, acciones por estado
+  (install, enable, disable, migrate, uninstall).
+- Refresco de lista tras cada acción; error visible (Alert).
+- Navegación: Layout host con menú (Plugins | Roles | Usuarios | Branches)
+  — vistas pendientes muestran placeholder hasta sus specs.
 
 ## OUT OF SCOPE
 
@@ -67,10 +66,11 @@ restaurar dependencias previas.
 ```yaml
 change_surface:
   allowed:
+    - vendor/systutor-shell/src/**
     - apps/web/src/**
     - apps/web/package.json   # react-router-dom
   prohibited:
-    - vendor/**
+    - vendor/systutor-core/**
     - apps/web/vite.config.ts
 ```
 
@@ -92,7 +92,7 @@ blast_radius:
 ## Traceability
 
 - Requirement: "gestor de plugins" (primera iteración de consola).
-- Commit:
+- Commit: shell 5563fa4 / root (pendiente)
 - Deployment: `npm run frontend`.
 
 ## Definition of Done
