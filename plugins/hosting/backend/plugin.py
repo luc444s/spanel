@@ -38,6 +38,19 @@ router.include_router(routes_runtime.router)
 def register(context: PluginContext) -> None:
     context.register_router(router)
     context.register_permissions(
-        ["hosting.containers.read", "hosting.containers.manage"]
+        [
+            "hosting.sites.read",
+            "hosting.sites.adopt",
+            "hosting.sites.provision",
+            "hosting.sites.update",
+            "hosting.sites.delete",
+            "hosting.runtime.read",
+            "hosting.runtime.manage",
+            "hosting.access.read",
+            "hosting.backups.read",
+            "hosting.backups.create",
+            "hosting.files.manage",
+            "hosting.sso.create",
+        ]
     )
     context.register_events(["hosting.site.adopted"])

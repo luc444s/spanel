@@ -5,18 +5,20 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from systutor.api.deps import get_db_session
-from systutor.kernel.auth.dependencies import get_current_user
+from systutor.kernel.auth.dependencies import require_permission
 from systutor.kernel.auth.models import User
 
 from spanel_hosting_shared import docker_infra, get_own_site
 
 router = APIRouter(tags=["hosting"])
+REQUIRE_BACKUPS_CREATE = Depends(require_permission("hosting.backups.create"))
+REQUIRE_BACKUPS_READ = Depends(require_permission("hosting.backups.read"))
 
 
 @router.post("/sites/{site_id}/backups", status_code=201)
 def create_backup(
     site_id: str,
-    user: User = Depends(get_current_user),
+    user: User = REQUIRE_BACKUPS_CREATE,
     db: Session = Depends(get_db_session),
 ):
     site = get_own_site(db, site_id, user)
@@ -103,7 +105,7 @@ def create_backup(
 @router.get("/sites/{site_id}/backups")
 def list_backups(
     site_id: str,
-    user: User = Depends(get_current_user),
+    user: User = REQUIRE_BACKUPS_READ,
     db: Session = Depends(get_db_session),
 ):
     site = get_own_site(db, site_id, user)

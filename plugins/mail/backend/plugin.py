@@ -11,7 +11,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from systutor.api.deps import get_db_session
-from systutor.kernel.auth.dependencies import get_current_user
+from systutor.kernel.auth.dependencies import require_permission
 from systutor.kernel.auth.models import User
 from systutor.sdk import PluginContext
 
@@ -65,6 +65,14 @@ def _get_mailbox_stats(docker) -> dict[str, dict]:
         return {}
 
 router = APIRouter(tags=["mail"])
+REQUIRE_SERVER_READ = Depends(require_permission("mail.server.read"))
+REQUIRE_SERVER_PROVISION = Depends(require_permission("mail.server.provision"))
+REQUIRE_DOMAINS_READ = Depends(require_permission("mail.domains.read"))
+REQUIRE_DOMAINS_CREATE = Depends(require_permission("mail.domains.create"))
+REQUIRE_DOMAINS_DELETE = Depends(require_permission("mail.domains.delete"))
+REQUIRE_MAILBOXES_READ = Depends(require_permission("mail.mailboxes.read"))
+REQUIRE_MAILBOXES_CREATE = Depends(require_permission("mail.mailboxes.create"))
+REQUIRE_MAILBOXES_DELETE = Depends(require_permission("mail.mailboxes.delete"))
 
 
 class MailboxRequest(BaseModel):
@@ -107,7 +115,7 @@ def _gen_password() -> str:
 
 
 @router.get("/server/status")
-def server_status(_=Depends(get_current_user)):
+def server_status(_: User = REQUIRE_SERVER_READ):
     docker = _docker()
     try:
         info = docker.inspect_container(MAIL_CONTAINER)
@@ -122,7 +130,7 @@ def server_status(_=Depends(get_current_user)):
 
 
 @router.post("/server/ensure", status_code=201)
-def ensure_mailserver(_=Depends(get_current_user)):
+def ensure_mailserver(_: User = REQUIRE_SERVER_PROVISION):
     docker = _docker()
     try:
         _ensure_mailserver(docker)
@@ -134,7 +142,7 @@ def ensure_mailserver(_=Depends(get_current_user)):
 @router.post("/domains", status_code=201)
 def create_domain(
     payload: MailboxRequest,
-    user: User = Depends(get_current_user),
+    user: User = REQUIRE_DOMAINS_CREATE,
     db: Session = Depends(get_db_session),
 ):
     domain = payload.domain.strip().lower()
@@ -164,7 +172,7 @@ def create_domain(
 @router.post("/mailboxes", status_code=201)
 def create_mailbox(
     payload: MailboxRequest,
-    user: User = Depends(get_current_user),
+    user: User = REQUIRE_MAILBOXES_CREATE,
     db: Session = Depends(get_db_session),
 ):
     domain = payload.domain.strip().lower()
@@ -233,7 +241,7 @@ def create_mailbox(
 
 @router.get("/mailboxes")
 def list_mailboxes(
-    user: User = Depends(get_current_user),
+    user: User = REQUIRE_MAILBOXES_READ,
     db: Session = Depends(get_db_session),
 ):
     rows = db.execute(
@@ -264,7 +272,7 @@ def list_mailboxes(
 
 @router.get("/domains")
 def list_domains(
-    user: User = Depends(get_current_user),
+    user: User = REQUIRE_DOMAINS_READ,
     db: Session = Depends(get_db_session),
 ):
     rows = db.execute(
@@ -277,7 +285,7 @@ def list_domains(
 @router.delete("/domains/{domain_id}", status_code=204)
 def delete_domain(
     domain_id: str,
-    user: User = Depends(get_current_user),
+    user: User = REQUIRE_DOMAINS_DELETE,
     db: Session = Depends(get_db_session),
 ):
     row = db.execute(
@@ -304,7 +312,7 @@ def delete_domain(
 @router.delete("/mailboxes/{mailbox_id}", status_code=204)
 def delete_mailbox(
     mailbox_id: str,
-    user: User = Depends(get_current_user),
+    user: User = REQUIRE_MAILBOXES_DELETE,
     db: Session = Depends(get_db_session),
 ):
     row = db.execute(
@@ -336,5 +344,14 @@ def delete_mailbox(
 
 def register(context: PluginContext) -> None:
     context.register_router(router)
-    context.register_permissions(["mail.domains.read", "mail.domains.manage"])
+    context.register_permissions([
+        "mail.server.read",
+        "mail.server.provision",
+        "mail.domains.read",
+        "mail.domains.create",
+        "mail.domains.delete",
+        "mail.mailboxes.read",
+        "mail.mailboxes.create",
+        "mail.mailboxes.delete",
+    ])
     context.register_events(["mail.smtp.provisioned"])

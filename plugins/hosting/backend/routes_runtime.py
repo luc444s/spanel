@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from systutor.api.deps import get_db_session
-from systutor.kernel.auth.dependencies import get_current_user
+from systutor.kernel.auth.dependencies import require_permission
 from systutor.kernel.auth.models import User
 
 from spanel_hosting_shared import (
@@ -15,12 +15,15 @@ from spanel_hosting_shared import (
 )
 
 router = APIRouter(tags=["hosting"])
+REQUIRE_SITES_READ = Depends(require_permission("hosting.sites.read"))
+REQUIRE_RUNTIME_READ = Depends(require_permission("hosting.runtime.read"))
+REQUIRE_RUNTIME_MANAGE = Depends(require_permission("hosting.runtime.manage"))
 
 
 def lifecycle_action(action: str):
     def endpoint(
         site_id: str,
-        user: User = Depends(get_current_user),
+        user: User = REQUIRE_RUNTIME_MANAGE,
         db: Session = Depends(get_db_session),
     ):
         site = get_own_site(db, site_id, user)
@@ -47,7 +50,7 @@ for action in ("start", "stop", "restart"):
 def site_logs(
     site_id: str,
     tail: int = 100,
-    user: User = Depends(get_current_user),
+    user: User = REQUIRE_RUNTIME_READ,
     db: Session = Depends(get_db_session),
 ):
     site = get_own_site(db, site_id, user)
@@ -61,7 +64,7 @@ def site_logs(
 @router.get("/sites/{site_id}")
 def site_detail(
     site_id: str,
-    user: User = Depends(get_current_user),
+    user: User = REQUIRE_SITES_READ,
     db: Session = Depends(get_db_session),
 ):
     site = get_own_site(db, site_id, user)

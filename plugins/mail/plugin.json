@@ -6,7 +6,16 @@
   "requires": ["docker_infra"],
   "backend_entrypoint": "backend.plugin:register",
   "frontend_entrypoint": "frontend/register.tsx",
-  "permissions": ["mail.domains.read", "mail.domains.manage"],
+  "permissions": [
+    "mail.server.read",
+    "mail.server.provision",
+    "mail.domains.read",
+    "mail.domains.create",
+    "mail.domains.delete",
+    "mail.mailboxes.read",
+    "mail.mailboxes.create",
+    "mail.mailboxes.delete"
+  ],
   "events": ["mail.smtp.provisioned"],
   "description": "docker-mailserver: dominios, buzones y aliases"
 }

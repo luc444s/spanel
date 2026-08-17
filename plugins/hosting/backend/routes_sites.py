@@ -8,7 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from systutor.api.deps import get_db_session
-from systutor.kernel.auth.dependencies import get_current_user
+from systutor.kernel.auth.dependencies import require_permission
 from systutor.kernel.auth.models import User
 
 from spanel_hosting_shared import (
@@ -23,11 +23,16 @@ from spanel_hosting_shared import (
 )
 
 router = APIRouter(tags=["hosting"])
+REQUIRE_SITES_READ = Depends(require_permission("hosting.sites.read"))
+REQUIRE_SITES_ADOPT = Depends(require_permission("hosting.sites.adopt"))
+REQUIRE_SITES_PROVISION = Depends(require_permission("hosting.sites.provision"))
+REQUIRE_SITES_UPDATE = Depends(require_permission("hosting.sites.update"))
+REQUIRE_SITES_DELETE = Depends(require_permission("hosting.sites.delete"))
 
 
 @router.get("/sites")
 def list_sites(
-    user: User = Depends(get_current_user),
+    user: User = REQUIRE_SITES_READ,
     db: Session = Depends(get_db_session),
 ):
     rows = list(
@@ -49,7 +54,7 @@ def list_sites(
 @router.post("/sites/adopt", status_code=201)
 def adopt_site(
     payload: AdoptRequest,
-    user: User = Depends(get_current_user),
+    user: User = REQUIRE_SITES_ADOPT,
     db: Session = Depends(get_db_session),
 ):
     if payload.container_name in PROTECTED_CONTAINERS:
@@ -133,7 +138,7 @@ def cleanup_provision(docker, created: list[tuple[str, str]]) -> None:
 @router.post("/sites/provision/wordpress", status_code=201)
 def provision_wordpress(
     payload: ProvisionWordpressRequest,
-    user: User = Depends(get_current_user),
+    user: User = REQUIRE_SITES_PROVISION,
     db: Session = Depends(get_db_session),
 ):
     name = payload.name.strip().lower()
@@ -283,7 +288,7 @@ def provision_wordpress(
 def patch_site(
     site_id: str,
     payload: PatchSiteRequest,
-    user: User = Depends(get_current_user),
+    user: User = REQUIRE_SITES_UPDATE,
     db: Session = Depends(get_db_session),
 ):
     site = get_own_site(db, site_id, user)
@@ -299,7 +304,7 @@ def patch_site(
 @router.delete("/sites/{site_id}")
 def delete_site(
     site_id: str,
-    user: User = Depends(get_current_user),
+    user: User = REQUIRE_SITES_DELETE,
     db: Session = Depends(get_db_session),
 ):
     site = get_own_site(db, site_id, user)

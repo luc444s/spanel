@@ -10,7 +10,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from systutor.api.deps import get_db_session
-from systutor.kernel.auth.dependencies import get_current_user
+from systutor.kernel.auth.dependencies import require_permission
 from systutor.kernel.auth.models import User
 from systutor.sdk import PluginContext
 
@@ -37,6 +37,11 @@ TRAEFIK_ACME_VOLUME = "spanel-traefik-acme"
 TRAEFIK_LOGS_VOLUME = "spanel-traefik-logs"
 
 router = APIRouter(tags=["proxy"])
+REQUIRE_TRAEFIK_READ = Depends(require_permission("proxy.traefik.read"))
+REQUIRE_DOMAINS_READ = Depends(require_permission("proxy.domains.read"))
+REQUIRE_DOMAINS_CREATE = Depends(require_permission("proxy.domains.create"))
+REQUIRE_DOMAINS_UPDATE = Depends(require_permission("proxy.domains.update"))
+REQUIRE_DOMAINS_DELETE = Depends(require_permission("proxy.domains.delete"))
 
 
 class DomainCreateRequest(BaseModel):
@@ -130,7 +135,7 @@ def _sync_site_route(docker, site) -> None:
 
 
 @router.get("/traefik/status")
-def traefik_status(_=Depends(get_current_user)):
+def traefik_status(_: User = REQUIRE_TRAEFIK_READ):
     docker = _docker()
     try:
         info = docker.inspect_container(TRAEFIK_CONTAINER)
@@ -147,7 +152,7 @@ def traefik_status(_=Depends(get_current_user)):
 @router.post("/domains", status_code=201)
 def create_domain(
     payload: DomainCreateRequest,
-    user: User = Depends(get_current_user),
+    user: User = REQUIRE_DOMAINS_CREATE,
     db: Session = Depends(get_db_session),
 ):
     fqdn = payload.fqdn.strip().lower()
@@ -245,7 +250,7 @@ def create_domain(
 
 @router.get("/domains")
 def list_domains(
-    user: User = Depends(get_current_user),
+    user: User = REQUIRE_DOMAINS_READ,
     db: Session = Depends(get_db_session),
 ):
     rows = db.execute(
@@ -274,7 +279,7 @@ def list_domains(
 def update_domain(
     domain_id: str,
     payload: DomainUpdateRequest,
-    user: User = Depends(get_current_user),
+    user: User = REQUIRE_DOMAINS_UPDATE,
     db: Session = Depends(get_db_session),
 ):
     row = db.execute(
@@ -335,7 +340,7 @@ def update_domain(
 @router.delete("/domains/{domain_id}", status_code=204)
 def delete_domain(
     domain_id: str,
-    user: User = Depends(get_current_user),
+    user: User = REQUIRE_DOMAINS_DELETE,
     db: Session = Depends(get_db_session),
 ):
     row = db.execute(
@@ -378,5 +383,11 @@ def delete_domain(
 
 def register(context: PluginContext) -> None:
     context.register_router(router)
-    context.register_permissions(["proxy.routes.read", "proxy.routes.manage"])
+    context.register_permissions([
+        "proxy.domains.read",
+        "proxy.domains.create",
+        "proxy.domains.update",
+        "proxy.domains.delete",
+        "proxy.traefik.read",
+    ])
     context.register_events(["proxy.route.created", "proxy.route.removed"])

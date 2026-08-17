@@ -9,13 +9,16 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from systutor.api.deps import get_db_session
-from systutor.kernel.auth.dependencies import get_current_user
+from systutor.kernel.auth.dependencies import require_permission
 from systutor.kernel.auth.models import User
 
 from spanel_hosting_shared import PLUGINS_ROOT, docker_infra, get_own_site
 
 router = APIRouter(tags=["hosting"])
 SSO_SECRET = os.getenv("SPANEL_SSO_SECRET", "")
+REQUIRE_SSO_CREATE = Depends(require_permission("hosting.sso.create"))
+REQUIRE_ACCESS_READ = Depends(require_permission("hosting.access.read"))
+REQUIRE_FILES_MANAGE = Depends(require_permission("hosting.files.manage"))
 
 
 def _b64url(data: bytes) -> str:
@@ -84,7 +87,7 @@ def _install_sso_plugin(docker, site) -> None:
 @router.post("/sites/{site_id}/sso")
 def site_sso(
     site_id: str,
-    user: User = Depends(get_current_user),
+    user: User = REQUIRE_SSO_CREATE,
     db: Session = Depends(get_db_session),
 ):
     site = get_own_site(db, site_id, user)
@@ -117,7 +120,7 @@ def site_access_logs(
     site_id: str,
     since: str | None = None,
     limit: int = 100,
-    user: User = Depends(get_current_user),
+    user: User = REQUIRE_ACCESS_READ,
     db: Session = Depends(get_db_session),
 ):
     site = get_own_site(db, site_id, user)
@@ -155,7 +158,7 @@ def site_access_logs(
 @router.post("/sites/{site_id}/files/ensure", status_code=201)
 def ensure_filebrowser(
     site_id: str,
-    user: User = Depends(get_current_user),
+    user: User = REQUIRE_FILES_MANAGE,
     db: Session = Depends(get_db_session),
 ):
     site = get_own_site(db, site_id, user)

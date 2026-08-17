@@ -9,8 +9,18 @@
   "backend_entrypoint": "backend.plugin:register",
   "frontend_entrypoint": "frontend/register.tsx",
   "permissions": [
-    "hosting.containers.read",
-    "hosting.containers.manage"
+    "hosting.sites.read",
+    "hosting.sites.adopt",
+    "hosting.sites.provision",
+    "hosting.sites.update",
+    "hosting.sites.delete",
+    "hosting.runtime.read",
+    "hosting.runtime.manage",
+    "hosting.access.read",
+    "hosting.backups.read",
+    "hosting.backups.create",
+    "hosting.files.manage",
+    "hosting.sso.create"
   ],
   "events": [
     "hosting.site.adopted"

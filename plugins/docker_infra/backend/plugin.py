@@ -4,7 +4,8 @@ import subprocess
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from systutor.kernel.auth.dependencies import get_current_user
+from systutor.kernel.auth.dependencies import require_permission
+from systutor.kernel.auth.models import User
 from systutor.sdk import PluginContext
 
 SSH_USER = os.getenv("SPANEL_DOCKER_SSH_USER", "")
@@ -218,12 +219,13 @@ def volume_remove(name: str) -> None:
 
 
 router = APIRouter(tags=["docker-infra"])
+REQUIRE_CONTAINERS_READ = Depends(require_permission("docker_infra.containers.read"))
 
 
 @router.get("/containers")
 def containers_list(
     all_containers: bool = Query(default=False),
-    _=Depends(get_current_user),
+    _: User = REQUIRE_CONTAINERS_READ,
 ):
     try:
         return list_containers(all_containers=all_containers)
@@ -232,7 +234,7 @@ def containers_list(
 
 
 @router.get("/containers/stats")
-def containers_stats(_=Depends(get_current_user)):
+def containers_stats(_: User = REQUIRE_CONTAINERS_READ):
     try:
         return list_container_stats()
     except DockerAdapterError as exc:
@@ -240,7 +242,7 @@ def containers_stats(_=Depends(get_current_user)):
 
 
 @router.get("/containers/{name}/inspect")
-def containers_inspect(name: str, _=Depends(get_current_user)):
+def containers_inspect(name: str, _: User = REQUIRE_CONTAINERS_READ):
     try:
         return inspect_container(name)
     except ContainerNotFoundError as exc:

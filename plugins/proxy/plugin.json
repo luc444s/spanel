@@ -6,7 +6,13 @@
   "requires": ["docker_infra"],
   "backend_entrypoint": "backend.plugin:register",
   "frontend_entrypoint": "frontend/register.tsx",
-  "permissions": ["proxy.routes.read", "proxy.routes.manage"],
+  "permissions": [
+    "proxy.domains.read",
+    "proxy.domains.create",
+    "proxy.domains.update",
+    "proxy.domains.delete",
+    "proxy.traefik.read"
+  ],
   "events": ["proxy.route.created", "proxy.route.removed"],
   "description": "Traefik: rutas, dominios y TLS"
 }
