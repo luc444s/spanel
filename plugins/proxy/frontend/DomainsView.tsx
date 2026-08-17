@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@syst
 import { ConfirmDialog } from '@systutor/shell/ui/confirm-dialog'
 import { Dialog } from '@systutor/shell/ui/dialog'
 import { Input } from '@systutor/shell/ui/input'
+import { useAuthz } from '@spanel-app/authz'
 
 type Domain = {
   id: string
@@ -16,6 +17,7 @@ type Domain = {
 }
 
 export function DomainsView() {
+  const { hasAnyPermission } = useAuthz()
   const [domains, setDomains] = useState<Domain[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -98,6 +100,10 @@ export function DomainsView() {
     }
   }
 
+  const canCreate = hasAnyPermission(['proxy.domains.create'])
+  const canUpdate = hasAnyPermission(['proxy.domains.update'])
+  const canDelete = hasAnyPermission(['proxy.domains.delete'])
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
@@ -105,7 +111,7 @@ export function DomainsView() {
           <CardTitle>Dominios</CardTitle>
           <CardDescription>Gestiona los dominios y su ruteo en Traefik</CardDescription>
         </div>
-        <Button onClick={() => setShowAdd(true)}>Agregar dominio</Button>
+        {canCreate && <Button onClick={() => setShowAdd(true)}>Agregar dominio</Button>}
       </CardHeader>
       <CardContent className="space-y-4">
         {error && <Alert title="Error">{error}</Alert>}
@@ -135,20 +141,24 @@ export function DomainsView() {
                       </Badge>
                     </td>
                     <td className="py-2 flex gap-2">
-                      <Button
-                        variant="secondary"
-                        className="px-3 py-1.5 text-xs"
-                        onClick={() => { setEditDomain(d); setEditFqdn(d.fqdn) }}
-                      >
-                        Editar
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        className="px-3 py-1.5 text-xs text-destructive"
-                        onClick={() => setDeleteDomain(d)}
-                      >
-                        Eliminar
-                      </Button>
+                      {canUpdate && (
+                        <Button
+                          variant="secondary"
+                          className="px-3 py-1.5 text-xs"
+                          onClick={() => { setEditDomain(d); setEditFqdn(d.fqdn) }}
+                        >
+                          Editar
+                        </Button>
+                      )}
+                      {canDelete && (
+                        <Button
+                          variant="secondary"
+                          className="px-3 py-1.5 text-xs text-destructive"
+                          onClick={() => setDeleteDomain(d)}
+                        >
+                          Eliminar
+                        </Button>
+                      )}
                     </td>
                   </tr>
                 ))}

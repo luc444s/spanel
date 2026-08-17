@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react'
-import { apiRequest } from '@systutor/shell'
-import type { PluginRuntimeRecord } from '@systutor/shell'
+import { hasPermissionMeta, type PermissionMeta } from './authz'
 
-export type PluginNav = { label: string; to: string }
-export type PluginRoute = { path: string; element: React.ReactNode }
+export type PluginNav = { label: string; to: string } & PermissionMeta
+export type PluginRoute = { path: string; element: React.ReactNode } & PermissionMeta
 export type PluginFrontend = {
   pluginId: string
   routes: PluginRoute[]
@@ -15,44 +14,44 @@ type Registry = {
   routes: PluginRoute[]
 }
 
-const pluginModules: Record<string, () => Promise<Record<string, unknown>>> = {
-  hosting: () => import('@spanel-plugin/hosting'),
-  docker_infra: () => import('@spanel-plugin/docker_infra'),
-  proxy: () => import('@spanel-plugin/proxy'),
-  mail: () => import('@spanel-plugin/mail'),
-}
+const pluginModules: Array<() => Promise<Record<string, unknown>>> = [
+  () => import('@spanel-plugin/hosting'),
+  () => import('@spanel-plugin/docker_infra'),
+  () => import('@spanel-plugin/proxy'),
+  () => import('@spanel-plugin/mail'),
+]
 
-export function usePluginRegistry(): Registry {
+export function usePluginRegistry(permissions: string[]): Registry {
   const [registry, setRegistry] = useState<Registry>({ navigation: [], routes: [] })
 
   useEffect(() => {
+    if (permissions.length === 0) {
+      setRegistry({ navigation: [], routes: [] })
+      return
+    }
+
     let cancelled = false
     void (async () => {
       try {
-        const plugins = await apiRequest<PluginRuntimeRecord[]>('/api/v1/core/plugins')
-        const enabled = plugins.filter((p) => p.is_enabled && p.frontend_entrypoint)
-        const modules = await Promise.all(
-          enabled.map(async (plugin) => {
-            const loader = pluginModules[plugin.plugin_id]
-            if (!loader) return null
-            try {
-              const mod = await loader()
-              const reg = mod.registerPlugin ? (mod.registerPlugin as () => PluginFrontend)() : null
-              return reg && reg.pluginId === plugin.plugin_id ? reg : null
-            } catch {
-              return null
-            }
-          }),
-        )
+        const modules = await Promise.all(pluginModules.map(async (loader) => {
+          try {
+            const mod = await loader()
+            return mod.registerPlugin ? (mod.registerPlugin as () => PluginFrontend)() : null
+          } catch {
+            return null
+          }
+        }))
         if (cancelled) return
         const loaded = modules.filter(Boolean) as PluginFrontend[]
         setRegistry({
-          navigation: loaded.flatMap((m) => m.navigation),
+          navigation: loaded.flatMap((m) => m.navigation.filter((item) => hasPermissionMeta(permissions, item))),
           routes: loaded.flatMap((m) =>
-            m.routes.map((route) => ({
-              path: `/p/${m.pluginId}/${route.path}`,
-              element: route.element,
-            })),
+            m.routes
+              .filter((route) => hasPermissionMeta(permissions, route))
+              .map((route) => ({
+                path: `/p/${m.pluginId}/${route.path}`,
+                element: route.element,
+              })),
           ),
         })
       } catch {
@@ -62,7 +61,7 @@ export function usePluginRegistry(): Registry {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [permissions.join('|')])
 
   return registry
 }

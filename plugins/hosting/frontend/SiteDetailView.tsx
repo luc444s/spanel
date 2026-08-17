@@ -6,6 +6,7 @@ import { Badge } from '@systutor/shell/ui/badge'
 import { Button } from '@systutor/shell/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@systutor/shell/ui/card'
 import { ConfirmDialog } from '@systutor/shell/ui/confirm-dialog'
+import { useAuthz } from '@spanel-app/authz'
 import type { Site } from './SitesView'
 
 export type SiteDetail = Site & {
@@ -30,6 +31,7 @@ function statusBadgeClass(status: string) {
 
 export function SiteDetailView() {
   const navigate = useNavigate()
+  const { hasAnyPermission } = useAuthz()
   const { id } = useParams<{ id: string }>()
   const [site, setSite] = useState<SiteDetail | null>(null)
   const [logs, setLogs] = useState<string | null>(null)
@@ -38,6 +40,10 @@ export function SiteDetailView() {
   const [logsLoading, setLogsLoading] = useState(false)
   const [busyAction, setBusyAction] = useState<string | null>(null)
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const canRuntimeRead = hasAnyPermission(['hosting.runtime.read'])
+  const canRuntimeManage = hasAnyPermission(['hosting.runtime.manage'])
+  const canFilesManage = hasAnyPermission(['hosting.files.manage'])
+  const canDelete = hasAnyPermission(['hosting.sites.delete'])
 
   const fetchSite = async (siteId: string) => {
     try {
@@ -139,21 +145,27 @@ export function SiteDetailView() {
           <Badge className={statusBadgeClass(site.container_status)}>{site.container_status}</Badge>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" onClick={() => void runAction('start')} disabled={!!busyAction}>
-            {busyAction === 'start' ? 'Iniciando...' : 'Start'}
-          </Button>
-          <Button variant="secondary" onClick={() => void runAction('stop')} disabled={!!busyAction}>
-            {busyAction === 'stop' ? 'Deteniendo...' : 'Stop'}
-          </Button>
-          <Button variant="secondary" onClick={() => void runAction('restart')} disabled={!!busyAction}>
-            {busyAction === 'restart' ? 'Reiniciando...' : 'Restart'}
-          </Button>
+          {canRuntimeManage && (
+            <>
+              <Button variant="secondary" onClick={() => void runAction('start')} disabled={!!busyAction}>
+                {busyAction === 'start' ? 'Iniciando...' : 'Start'}
+              </Button>
+              <Button variant="secondary" onClick={() => void runAction('stop')} disabled={!!busyAction}>
+                {busyAction === 'stop' ? 'Deteniendo...' : 'Stop'}
+              </Button>
+              <Button variant="secondary" onClick={() => void runAction('restart')} disabled={!!busyAction}>
+                {busyAction === 'restart' ? 'Reiniciando...' : 'Restart'}
+              </Button>
+            </>
+          )}
           <Button variant="secondary" onClick={() => void runAction('refresh')} disabled={!!busyAction}>
             {busyAction === 'refresh' ? 'Actualizando...' : 'Actualizar'}
           </Button>
-          <Button variant="secondary" className="text-destructive" onClick={() => setDeleteOpen(true)} disabled={!!busyAction}>
-            Eliminar de Spanel
-          </Button>
+          {canDelete && (
+            <Button variant="secondary" className="text-destructive" onClick={() => setDeleteOpen(true)} disabled={!!busyAction}>
+              Eliminar de Spanel
+            </Button>
+          )}
         </div>
       </div>
 
@@ -191,25 +203,27 @@ export function SiteDetailView() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Logs</CardTitle>
-            <CardDescription>Últimas 50 líneas del container</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Button variant="secondary" onClick={() => void loadLogs()} disabled={logsLoading}>
-              {logsLoading ? 'Cargando...' : 'Cargar logs'}
-            </Button>
-            {logs !== null && (
-              <pre className="max-h-72 overflow-auto rounded-md border border-border bg-secondary p-3 text-xs">
-                {logs || '(sin salida)'}
-              </pre>
-            )}
-          </CardContent>
-        </Card>
+        {canRuntimeRead && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Logs</CardTitle>
+              <CardDescription>Últimas 50 líneas del container</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Button variant="secondary" onClick={() => void loadLogs()} disabled={logsLoading}>
+                {logsLoading ? 'Cargando...' : 'Cargar logs'}
+              </Button>
+              {logs !== null && (
+                <pre className="max-h-72 overflow-auto rounded-md border border-border bg-secondary p-3 text-xs">
+                  {logs || '(sin salida)'}
+                </pre>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
 
-      {site.stack === 'wordpress' && site.domains.length > 0 && (
+      {site.stack === 'wordpress' && site.domains.length > 0 && canFilesManage && (
         <Card>
           <CardHeader>
             <CardTitle>Archivos</CardTitle>

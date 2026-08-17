@@ -15,6 +15,7 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "paths": {
+      "@spanel-app/*": ["./src/*"],
       "@systutor/shell": ["../../vendor/systutor-shell/src/index.ts"],
       "@systutor/shell/*": ["../../vendor/systutor-shell/src/*"],
       "@spanel-plugin/*": ["../../plugins/*/frontend/register.tsx", "../../plugins/*/frontend/register.ts"]

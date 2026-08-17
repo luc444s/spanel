@@ -7,6 +7,7 @@ import { Button } from '@systutor/shell/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@systutor/shell/ui/card'
 import { Dialog } from '@systutor/shell/ui/dialog'
 import { Input } from '@systutor/shell/ui/input'
+import { useAuthz } from '@spanel-app/authz'
 import type { Site } from './SitesView'
 
 type RemoteContainer = {
@@ -42,6 +43,7 @@ function statusBadgeClass(status: string) {
 
 export function SiteCreateView() {
   const navigate = useNavigate()
+  const { hasAnyPermission } = useAuthz()
   const [mode, setMode] = useState<'adopt' | 'provision'>('adopt')
   const [containers, setContainers] = useState<RemoteContainer[]>([])
   const [sites, setSites] = useState<Site[]>([])
@@ -55,13 +57,19 @@ export function SiteCreateView() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const canAdopt = hasAnyPermission(['hosting.sites.adopt'])
+  const canProvision = hasAnyPermission(['hosting.sites.provision'])
 
   useEffect(() => {
     void (async () => {
       try {
         const [remoteContainers, existingSites] = await Promise.all([
-          apiRequest<RemoteContainer[]>('/api/v1/plugins/docker_infra/containers?all_containers=true'),
-          apiRequest<Site[]>('/api/v1/plugins/hosting/sites'),
+          canAdopt
+            ? apiRequest<RemoteContainer[]>('/api/v1/plugins/docker_infra/containers?all_containers=true')
+            : Promise.resolve([]),
+          canAdopt
+            ? apiRequest<Site[]>('/api/v1/plugins/hosting/sites')
+            : Promise.resolve([]),
         ])
         setContainers(remoteContainers)
         setSites(existingSites)
@@ -71,7 +79,7 @@ export function SiteCreateView() {
         setLoading(false)
       }
     })()
-  }, [])
+  }, [canAdopt])
 
   const adoptedNames = new Set(sites.map((site) => site.container_name))
   const adoptableContainers = containers.filter((container) => !adoptedNames.has(container.name))
@@ -133,19 +141,23 @@ export function SiteCreateView() {
       {error && <Alert title="Error">{error}</Alert>}
 
       <div className="flex flex-wrap gap-2">
-        <Button variant={mode === 'adopt' ? 'primary' : 'secondary'} onClick={() => setMode('adopt')}>
-          Adoptar container
-        </Button>
-        <Button variant={mode === 'provision' ? 'primary' : 'secondary'} onClick={() => setMode('provision')}>
-          Provisionar WordPress
-        </Button>
+        {canAdopt && (
+          <Button variant={mode === 'adopt' ? 'primary' : 'secondary'} onClick={() => setMode('adopt')}>
+            Adoptar container
+          </Button>
+        )}
+        {canProvision && (
+          <Button variant={mode === 'provision' ? 'primary' : 'secondary'} onClick={() => setMode('provision')}>
+            Provisionar WordPress
+          </Button>
+        )}
       </div>
 
       {loading ? (
         <Card>
           <CardContent className="py-8 text-sm text-muted-foreground">Cargando…</CardContent>
         </Card>
-      ) : mode === 'adopt' ? (
+      ) : mode === 'adopt' && canAdopt ? (
         <div className="grid gap-6 lg:grid-cols-[1.4fr_0.9fr]">
           <Card>
             <CardHeader>
@@ -260,7 +272,7 @@ export function SiteCreateView() {
               </p>
             </div>
             <div className="md:col-span-2">
-              <Button onClick={() => void handleProvision()} disabled={submitting || !wpName.trim() || !adminEmail.trim()}>
+              <Button onClick={() => void handleProvision()} disabled={!canProvision || submitting || !wpName.trim() || !adminEmail.trim()}>
                 {submitting && mode === 'provision' ? 'Provisionando...' : 'Provisionar WordPress'}
               </Button>
             </div>

@@ -22,6 +22,10 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: [
         {
+          find: '@spanel-app',
+          replacement: fileURLToPath(new URL('./src/', import.meta.url)),
+        },
+        {
           find: /^@spanel-plugin\/([\w-]+)$/,
           replacement: fileURLToPath(new URL('../../plugins/', import.meta.url)) + '$1/frontend/register',
         },

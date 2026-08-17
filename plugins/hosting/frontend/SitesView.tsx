@@ -6,6 +6,7 @@ import { Badge } from '@systutor/shell/ui/badge'
 import { Button } from '@systutor/shell/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@systutor/shell/ui/card'
 import { ConfirmDialog } from '@systutor/shell/ui/confirm-dialog'
+import { useAuthz } from '@spanel-app/authz'
 
 export type Site = {
   id: string
@@ -31,6 +32,7 @@ function statusBadgeClass(status: string) {
 
 export function SitesView() {
   const navigate = useNavigate()
+  const { hasAnyPermission } = useAuthz()
   const [sites, setSites] = useState<Site[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -93,6 +95,10 @@ export function SitesView() {
     }
   }
 
+  const canProvision = hasAnyPermission(['hosting.sites.provision'])
+  const canRuntimeManage = hasAnyPermission(['hosting.runtime.manage'])
+  const canDelete = hasAnyPermission(['hosting.sites.delete'])
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-4">
@@ -104,7 +110,7 @@ export function SitesView() {
           <Button variant="secondary" onClick={() => void fetchSites()} disabled={refreshing || loading}>
             {refreshing ? 'Actualizando...' : 'Actualizar'}
           </Button>
-          <Button onClick={() => navigate('/p/hosting/sites/new')}>Nuevo sitio</Button>
+          {canProvision && <Button onClick={() => navigate('/p/hosting/sites/new')}>Nuevo sitio</Button>}
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -151,38 +157,44 @@ export function SitesView() {
                     </td>
                     <td className="py-2">
                       <div className="flex flex-wrap gap-2">
-                        <Button
-                          variant="secondary"
-                          onClick={() => void runLifecycle(site.id, 'start')}
-                          disabled={busySiteId === site.id}
-                        >
-                          {busySiteId === site.id && busyAction === 'start' ? 'Iniciando...' : 'Start'}
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          onClick={() => void runLifecycle(site.id, 'stop')}
-                          disabled={busySiteId === site.id}
-                        >
-                          {busySiteId === site.id && busyAction === 'stop' ? 'Deteniendo...' : 'Stop'}
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          onClick={() => void runLifecycle(site.id, 'restart')}
-                          disabled={busySiteId === site.id}
-                        >
-                          {busySiteId === site.id && busyAction === 'restart' ? 'Reiniciando...' : 'Restart'}
-                        </Button>
+                        {canRuntimeManage && (
+                          <>
+                            <Button
+                              variant="secondary"
+                              onClick={() => void runLifecycle(site.id, 'start')}
+                              disabled={busySiteId === site.id}
+                            >
+                              {busySiteId === site.id && busyAction === 'start' ? 'Iniciando...' : 'Start'}
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              onClick={() => void runLifecycle(site.id, 'stop')}
+                              disabled={busySiteId === site.id}
+                            >
+                              {busySiteId === site.id && busyAction === 'stop' ? 'Deteniendo...' : 'Stop'}
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              onClick={() => void runLifecycle(site.id, 'restart')}
+                              disabled={busySiteId === site.id}
+                            >
+                              {busySiteId === site.id && busyAction === 'restart' ? 'Reiniciando...' : 'Restart'}
+                            </Button>
+                          </>
+                        )}
                         <Button variant="secondary" onClick={() => navigate(`/p/hosting/sites/${site.id}`)}>
                           Detalle
                         </Button>
-                        <Button
-                          variant="secondary"
-                          className="text-destructive"
-                          onClick={() => setDeleteSite(site)}
-                          disabled={busySiteId === site.id}
-                        >
-                          Eliminar
-                        </Button>
+                        {canDelete && (
+                          <Button
+                            variant="secondary"
+                            className="text-destructive"
+                            onClick={() => setDeleteSite(site)}
+                            disabled={busySiteId === site.id}
+                          >
+                            Eliminar
+                          </Button>
+                        )}
                       </div>
                     </td>
                   </tr>

@@ -11,6 +11,7 @@ import {
 } from 'react-router-dom'
 import {
   BranchesView,
+  AUTH_UNAUTHORIZED_EVENT,
   Login,
   LogoutButton,
   PluginsView,
@@ -23,7 +24,21 @@ import {
   type UserProfile,
 } from '@systutor/shell'
 import { Badge } from '@systutor/shell/ui/badge'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@systutor/shell/ui/card'
+import { AuthzProvider, hasPermissionMeta, type PermissionMeta } from './authz'
 import { usePluginRegistry } from './plugins'
+
+type NavItem = {
+  label: string
+  to: string
+} & PermissionMeta
+
+const CORE_NAV_ITEMS: NavItem[] = [
+  { label: 'Plugins', to: '/plugins', requiredAnyPermissions: ['core.plugin.runtime.read', 'core.plugin.manage'] },
+  { label: 'Roles', to: '/roles', requiredAnyPermissions: ['core.roles.manage', 'core.permission.manage'] },
+  { label: 'Usuarios', to: '/users', requiredAllPermissions: ['core.users.read'], requiredAnyPermissions: ['core.roles.read', 'core.roles.manage'] },
+  { label: 'Branches', to: '/branches', requiredAnyPermissions: ['core.branches.read', 'core.branches.manage'] },
+]
 
 type AuthState = {
   user: UserProfile | null
@@ -44,13 +59,13 @@ function useAuth() {
 function LoginScreen() {
   const navigate = useNavigate()
   const { user, setUser } = useAuth()
-  if (user) return <Navigate to="/plugins" replace />
+  if (user) return <Navigate to="/" replace />
   return (
     <Login
       title="Spanel"
       onLogin={(loggedUser) => {
         setUser(loggedUser)
-        navigate('/plugins', { replace: true })
+        navigate('/', { replace: true })
       }}
     />
   )
@@ -64,10 +79,40 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   return children
 }
 
-function Layout() {
+function NoModulesState() {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Sin módulos habilitados</CardTitle>
+        <CardDescription>Este usuario no tiene acceso a ningún módulo visible.</CardDescription>
+      </CardHeader>
+    </Card>
+  )
+}
+
+function ForbiddenState({ defaultPath }: { defaultPath: string | null }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>No autorizado</CardTitle>
+        <CardDescription>No tenés permiso para acceder a este módulo.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {defaultPath ? (
+          <Link to={defaultPath} className="text-sm text-primary hover:underline">
+            Ir al primer destino permitido
+          </Link>
+        ) : (
+          <p className="text-sm text-muted-foreground">Sin destinos permitidos para este usuario.</p>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+function Layout({ coreNavigation, pluginNavigation }: { coreNavigation: NavItem[], pluginNavigation: NavItem[] }) {
   const { user, setUser } = useAuth()
   const navigate = useNavigate()
-  const { navigation } = usePluginRegistry()
   if (!user) return null
 
   return (
@@ -79,14 +124,15 @@ function Layout() {
               Spanel
             </Link>
             <nav className="flex items-center gap-4 text-sm text-muted-foreground">
-              <Link to="/plugins">Plugins</Link>
-              <Link to="/roles">Roles</Link>
-              <Link to="/users">Usuarios</Link>
-              <Link to="/branches">Branches</Link>
-              {navigation.length > 0 && (
+              {coreNavigation.map((item) => (
+                <Link key={item.to} to={item.to}>
+                  {item.label}
+                </Link>
+              ))}
+              {coreNavigation.length > 0 && pluginNavigation.length > 0 && (
                 <span className="h-4 w-px bg-border" aria-hidden />
               )}
-              {navigation.map((item) => (
+              {pluginNavigation.map((item) => (
                 <Link key={item.to} to={item.to}>
                   {item.label}
                 </Link>
@@ -113,12 +159,24 @@ function Layout() {
 }
 
 function App() {
-  const pluginRegistry = usePluginRegistry()
   const [auth, setAuth] = useState<AuthState>({
     user: null,
     loading: true,
     setUser: (user) => setAuth((prev) => ({ ...prev, user })),
   })
+  const userPermissions = auth.user?.permissions ?? []
+  const pluginRegistry = usePluginRegistry(userPermissions)
+  const coreNavigation = auth.user
+    ? CORE_NAV_ITEMS.filter((item) => hasPermissionMeta(userPermissions, item))
+    : []
+  const defaultPath = [...coreNavigation, ...pluginRegistry.navigation][0]?.to ?? null
+
+  const renderProtected = (meta: PermissionMeta, element: React.ReactNode) => {
+    if (auth.loading) return null
+    if (!auth.user) return <Navigate to="/login" replace />
+    if (!hasPermissionMeta(userPermissions, meta)) return <ForbiddenState defaultPath={defaultPath} />
+    return element
+  }
 
   useEffect(() => {
     initAuth()
@@ -134,29 +192,44 @@ function App() {
       })
   }, [])
 
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      clearToken()
+      setAuth((prev) => ({ ...prev, user: null, loading: false }))
+    }
+
+    window.addEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized)
+    return () => {
+      window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized)
+    }
+  }, [])
+
   return (
     <AuthContext.Provider value={auth}>
-      <Router>
-        <Routes>
-          <Route path="/login" element={<LoginScreen />} />
-          <Route
-            element={
-              <RequireAuth>
-                <Layout />
-              </RequireAuth>
-            }
-          >
-            <Route path="/" element={<Navigate to="/plugins" replace />} />
-            <Route path="/plugins" element={<PluginsView />} />
-            <Route path="/roles" element={<RolesView />} />
-            <Route path="/users" element={<UsersView />} />
-            <Route path="/branches" element={<BranchesView />} />
-            {pluginRegistry.routes.map((route) => (
-              <Route key={route.path} path={route.path} element={route.element} />
-            ))}
-          </Route>
-        </Routes>
-      </Router>
+      <AuthzProvider user={auth.user}>
+        <Router>
+          <Routes>
+            <Route path="/login" element={<LoginScreen />} />
+            <Route
+              element={
+                <RequireAuth>
+                  <Layout coreNavigation={coreNavigation} pluginNavigation={pluginRegistry.navigation} />
+                </RequireAuth>
+              }
+            >
+              <Route path="/" element={defaultPath ? <Navigate to={defaultPath} replace /> : <NoModulesState />} />
+              <Route path="/plugins" element={renderProtected(CORE_NAV_ITEMS[0], <PluginsView />)} />
+              <Route path="/roles" element={renderProtected(CORE_NAV_ITEMS[1], <RolesView />)} />
+              <Route path="/users" element={renderProtected(CORE_NAV_ITEMS[2], <UsersView />)} />
+              <Route path="/branches" element={renderProtected(CORE_NAV_ITEMS[3], <BranchesView />)} />
+              {pluginRegistry.routes.map((route) => (
+                <Route key={route.path} path={route.path} element={route.element} />
+              ))}
+              <Route path="*" element={<ForbiddenState defaultPath={defaultPath} />} />
+            </Route>
+          </Routes>
+        </Router>
+      </AuthzProvider>
     </AuthContext.Provider>
   )
 }

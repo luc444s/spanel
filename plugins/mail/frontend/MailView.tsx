@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@syst
 import { ConfirmDialog } from '@systutor/shell/ui/confirm-dialog'
 import { Dialog } from '@systutor/shell/ui/dialog'
 import { Input } from '@systutor/shell/ui/input'
+import { useAuthz } from '@spanel-app/authz'
 
 type ServerStatus = { provisioned: boolean; status: string }
 type MailDomain = { id: string; domain: string }
@@ -34,6 +35,7 @@ function StorageBar({ used, quota }: { used: number; quota: number }) {
 }
 
 export function MailView() {
+  const { hasAnyPermission } = useAuthz()
   const [server, setServer] = useState<ServerStatus | null>(null)
   const [domains, setDomains] = useState<MailDomain[]>([])
   const [mailboxes, setMailboxes] = useState<Mailbox[]>([])
@@ -56,12 +58,20 @@ export function MailView() {
   const [deleteDomain, setDeleteDomain] = useState<MailDomain | null>(null)
   const [deleteDomainLoading, setDeleteDomainLoading] = useState(false)
 
+  const canServerRead = hasAnyPermission(['mail.server.read'])
+  const canServerProvision = hasAnyPermission(['mail.server.provision'])
+  const canDomainsRead = hasAnyPermission(['mail.domains.read'])
+  const canDomainsCreate = hasAnyPermission(['mail.domains.create'])
+  const canDomainsDelete = hasAnyPermission(['mail.domains.delete'])
+  const canMailboxesRead = hasAnyPermission(['mail.mailboxes.read'])
+  const canMailboxesCreate = hasAnyPermission(['mail.mailboxes.create'])
+
   const fetchAll = async () => {
     try {
       const [s, d, m] = await Promise.all([
-        apiRequest<ServerStatus>('/api/v1/plugins/mail/server/status'),
-        apiRequest<MailDomain[]>('/api/v1/plugins/mail/domains'),
-        apiRequest<Mailbox[]>('/api/v1/plugins/mail/mailboxes'),
+        canServerRead ? apiRequest<ServerStatus>('/api/v1/plugins/mail/server/status') : Promise.resolve(null),
+        canDomainsRead ? apiRequest<MailDomain[]>('/api/v1/plugins/mail/domains') : Promise.resolve([]),
+        canMailboxesRead ? apiRequest<Mailbox[]>('/api/v1/plugins/mail/mailboxes') : Promise.resolve([]),
       ])
       setServer(s)
       setDomains(d)
@@ -73,7 +83,7 @@ export function MailView() {
     }
   }
 
-  useEffect(() => { void fetchAll() }, [])
+  useEffect(() => { void fetchAll() }, [canServerRead, canDomainsRead, canMailboxesRead])
 
   const filteredMailboxes = selectedDomain
     ? mailboxes.filter((m) => m.email.endsWith(`@${selectedDomain}`))
@@ -176,7 +186,7 @@ export function MailView() {
             <Badge className={server?.status === 'running' ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700' : undefined}>
               {server?.provisioned ? server.status : 'no provisionado'}
             </Badge>
-            {!server?.provisioned && (
+            {!server?.provisioned && canServerProvision && (
               <Button onClick={handleProvision} disabled={provisioning} className="px-3 py-1.5 text-xs">
                 {provisioning ? 'Provisionando…' : 'Provisionar'}
               </Button>
@@ -191,10 +201,12 @@ export function MailView() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-3">
             <CardTitle className="text-base">Dominios</CardTitle>
-            <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => setShowAddDomain(true)}>+ Agregar</Button>
+            {canDomainsCreate && <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => setShowAddDomain(true)}>+ Agregar</Button>}
           </CardHeader>
           <CardContent>
-            {domains.length === 0 ? (
+            {!canDomainsRead ? (
+              <p className="text-sm text-muted-foreground">No autorizado para ver dominios.</p>
+            ) : domains.length === 0 ? (
               <p className="text-sm text-muted-foreground">Sin dominios de correo.</p>
             ) : (
               <ul className="space-y-1">
@@ -214,13 +226,15 @@ export function MailView() {
                         <span className="truncate">{d.domain}</span>
                         <Badge className="text-xs shrink-0">{count}</Badge>
                       </div>
-                      <Button
-                        variant="secondary"
-                        className="ml-2 h-6 w-6 shrink-0 border-0 bg-transparent p-0 text-muted-foreground hover:bg-transparent hover:text-destructive"
-                        onClick={(e) => { e.stopPropagation(); setDeleteDomain(d) }}
-                      >
-                        ×
-                      </Button>
+                      {canDomainsDelete && (
+                        <Button
+                          variant="secondary"
+                          className="ml-2 h-6 w-6 shrink-0 border-0 bg-transparent p-0 text-muted-foreground hover:bg-transparent hover:text-destructive"
+                          onClick={(e) => { e.stopPropagation(); setDeleteDomain(d) }}
+                        >
+                          ×
+                        </Button>
+                      )}
                     </li>
                   )
                 })}
@@ -240,14 +254,16 @@ export function MailView() {
                 <CardDescription>{filteredMailboxes.length} buzón(es)</CardDescription>
               )}
             </div>
-            {selectedDomain && (
+            {selectedDomain && canMailboxesCreate && (
               <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => setShowCreateMailbox(true)}>
                 + Crear buzón
               </Button>
             )}
           </CardHeader>
           <CardContent>
-            {!selectedDomain ? (
+            {!canMailboxesRead ? (
+              <p className="text-sm text-muted-foreground">No autorizado para ver buzones.</p>
+            ) : !selectedDomain ? (
               <p className="text-sm text-muted-foreground">Seleccioná un dominio para ver sus buzones.</p>
             ) : filteredMailboxes.length === 0 ? (
               <p className="text-sm text-muted-foreground">Sin buzones en este dominio.</p>
