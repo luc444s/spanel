@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { apiRequest } from '@systutor/shell'
 import { Alert } from '@systutor/shell/ui/alert'
 import { Badge } from '@systutor/shell/ui/badge'
 import { Button } from '@systutor/shell/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@systutor/shell/ui/card'
+import { ConfirmDialog } from '@systutor/shell/ui/confirm-dialog'
 import type { Site } from './SitesView'
 
 export type SiteDetail = Site & {
@@ -17,26 +18,49 @@ export type SiteDetail = Site & {
   }
 }
 
+function statusBadgeClass(status: string) {
+  if (status === 'running') return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700'
+  if (status === 'unreachable') return 'border-amber-500/30 bg-amber-500/10 text-amber-700'
+  if (status === 'missing') return 'border-destructive/30 bg-destructive/10 text-destructive'
+  if (status === 'exited' || status === 'stopped') {
+    return 'border-border bg-secondary text-secondary-foreground'
+  }
+  return 'border-border bg-secondary text-secondary-foreground'
+}
+
 export function SiteDetailView() {
+  const navigate = useNavigate()
   const { id } = useParams<{ id: string }>()
   const [site, setSite] = useState<SiteDetail | null>(null)
   const [logs, setLogs] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [logsLoading, setLogsLoading] = useState(false)
+  const [busyAction, setBusyAction] = useState<string | null>(null)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+
+  const fetchSite = async (siteId: string) => {
+    try {
+      setError(null)
+      setSite(await apiRequest<SiteDetail>(`/api/v1/plugins/hosting/sites/${siteId}`))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
     if (!id) return
-    void (async () => {
-      try {
-        setSite(await apiRequest<SiteDetail>(`/api/v1/plugins/hosting/sites/${id}`))
-      } catch (e) {
-        setError(e instanceof Error ? e.message : String(e))
-      }
-    })()
+    setLoading(true)
+    setError(null)
+    void fetchSite(id)
   }, [id])
 
   const loadLogs = async () => {
     if (!id) return
     setError(null)
+    setLogsLoading(true)
     try {
       const res = await apiRequest<{ lines: string }>(
         `/api/v1/plugins/hosting/sites/${id}/logs?tail=50`,
@@ -44,10 +68,45 @@ export function SiteDetailView() {
       setLogs(res.lines)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setLogsLoading(false)
     }
   }
 
-  if (error) {
+  const runAction = async (action: 'start' | 'stop' | 'restart' | 'refresh') => {
+    if (!id) return
+    setBusyAction(action)
+    setError(null)
+    try {
+      if (action === 'refresh') {
+        await fetchSite(id)
+      } else {
+        await apiRequest(`/api/v1/plugins/hosting/sites/${id}/${action}`, { method: 'POST' })
+        await fetchSite(id)
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusyAction(null)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!id) return
+    setBusyAction('delete')
+    setError(null)
+    try {
+      await apiRequest(`/api/v1/plugins/hosting/sites/${id}`, { method: 'DELETE' })
+      navigate('/p/hosting/sites', { replace: true })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusyAction(null)
+      setDeleteOpen(false)
+    }
+  }
+
+  if (!site && error) {
     return (
       <div className="space-y-4">
         <Alert title="Error">{error}</Alert>
@@ -58,14 +117,18 @@ export function SiteDetailView() {
     )
   }
 
-  if (!site) {
+  if (loading && !site) {
     return <p className="text-sm text-muted-foreground">Cargando…</p>
   }
+
+  if (!site) return null
 
   const { origin } = site
 
   return (
     <div className="space-y-6">
+      {error && <Alert title="Error">{error}</Alert>}
+
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Link to="/p/hosting/sites" className="text-sm text-primary hover:underline">
@@ -73,7 +136,24 @@ export function SiteDetailView() {
           </Link>
           <h1 className="text-lg font-semibold">{site.name}</h1>
           <Badge>{site.stack}</Badge>
-          <Badge>{origin.container_status}</Badge>
+          <Badge className={statusBadgeClass(site.container_status)}>{site.container_status}</Badge>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" onClick={() => void runAction('start')} disabled={!!busyAction}>
+            {busyAction === 'start' ? 'Iniciando...' : 'Start'}
+          </Button>
+          <Button variant="secondary" onClick={() => void runAction('stop')} disabled={!!busyAction}>
+            {busyAction === 'stop' ? 'Deteniendo...' : 'Stop'}
+          </Button>
+          <Button variant="secondary" onClick={() => void runAction('restart')} disabled={!!busyAction}>
+            {busyAction === 'restart' ? 'Reiniciando...' : 'Restart'}
+          </Button>
+          <Button variant="secondary" onClick={() => void runAction('refresh')} disabled={!!busyAction}>
+            {busyAction === 'refresh' ? 'Actualizando...' : 'Actualizar'}
+          </Button>
+          <Button variant="secondary" className="text-destructive" onClick={() => setDeleteOpen(true)} disabled={!!busyAction}>
+            Eliminar de Spanel
+          </Button>
         </div>
       </div>
 
@@ -117,8 +197,8 @@ export function SiteDetailView() {
             <CardDescription>Últimas 50 líneas del container</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Button variant="secondary" onClick={() => void loadLogs()}>
-              Cargar logs
+            <Button variant="secondary" onClick={() => void loadLogs()} disabled={logsLoading}>
+              {logsLoading ? 'Cargando...' : 'Cargar logs'}
             </Button>
             {logs !== null && (
               <pre className="max-h-72 overflow-auto rounded-md border border-border bg-secondary p-3 text-xs">
@@ -157,6 +237,17 @@ export function SiteDetailView() {
           </CardContent>
         </Card>
       )}
+
+      <ConfirmDialog
+        open={deleteOpen}
+        title="Eliminar sitio de Spanel"
+        description={`¿Quitar "${site.name}" de Spanel? Solo elimina registro local. No borra containers remotos.`}
+        confirmLabel="Eliminar de Spanel"
+        destructive
+        loading={busyAction === 'delete'}
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={handleDelete}
+      />
     </div>
   )
 }

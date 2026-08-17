@@ -28,18 +28,18 @@ services:
     environment:
       SYSTUTOR_DATABASE_URL: postgresql+psycopg://spanel:${DB_PASSWORD:-spanel-change-me}@db:5432/spanel
       SYSTUTOR_REDIS_URL: redis://redis:6379/0
-      SYSTUTOR_JWT_SECRET_KEY: ${JWT_SECRET:-change-me-in-production}
-      SYSTUTOR_CORS_ORIGINS: http://localhost:${WEB_PORT:-5175},http://127.0.0.1:${WEB_PORT:-5175}
+      SYSTUTOR_JWT_SECRET_KEY: ${SYSTUTOR_JWT_SECRET_KEY:-change-me-in-production}
+      SYSTUTOR_CORS_ORIGINS: ${SYSTUTOR_CORS_ORIGINS:-http://localhost:5175,http://127.0.0.1:5175}
       SYSTUTOR_ENV: production
       SYSTUTOR_LOG_LEVEL: INFO
       SYSTUTOR_PLUGINS_DIR: /app/plugins
-      SPANEL_DOCKER_SSH_USER: ${DOCKER_SSH_USER}
-      SPANEL_DOCKER_SSH_HOST: ${DOCKER_SSH_HOST}
-      SPANEL_DOCKER_SSH_PORT: ${DOCKER_SSH_PORT:-22}
-      SPANEL_DOCKER_SSH_PASSWORD: ${DOCKER_SSH_PASSWORD}
+      SPANEL_DOCKER_SSH_USER: ${SPANEL_DOCKER_SSH_USER}
+      SPANEL_DOCKER_SSH_HOST: ${SPANEL_DOCKER_SSH_HOST}
+      SPANEL_DOCKER_SSH_PORT: ${SPANEL_DOCKER_SSH_PORT:-22}
+      SPANEL_DOCKER_SSH_PASSWORD: ${SPANEL_DOCKER_SSH_PASSWORD}
       SPANEL_MODE: ${SPANEL_MODE:-production}
       SPANEL_API_URL: ${SPANEL_API_URL:-http://host.docker.internal:8001}
-      SPANEL_SSO_SECRET: ${SSO_SECRET:-spanel-sso-change-me}
+      SPANEL_SSO_SECRET: ${SPANEL_SSO_SECRET:-spanel-sso-change-me}
     ports:
       - "${API_PORT:-8001}:8001"
     extra_hosts:
@@ -49,38 +49,50 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8001/api/v1/system/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
     restart: unless-stopped
 
   web:
     image: node:20-alpine
-    working_dir: /app
-    command: ["sh", "-c", "npm install && node node_modules/vite/bin/vite.js --host 0.0.0.0 --port ${WEB_PORT:-5175}"]
+    working_dir: /app/apps/web
+    command: ["sh", "-c", "npm ci --no-audit --no-fund && node node_modules/vite/bin/vite.js --host 0.0.0.0 --port ${WEB_PORT:-5175}"]
     volumes:
       - .:/app
-      - web-node-modules:/app/node_modules
       - web-app-node-modules:/app/apps/web/node_modules
     ports:
       - "${WEB_PORT:-5175}:${WEB_PORT:-5175}"
     environment:
       NODE_ENV: development
+      VITE_API_PROXY_TARGET: http://api:8001
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     restart: unless-stopped
+    profiles:
+      - dev
 
   web-prod:
-    image: nginx:alpine
-    volumes:
-      - ./apps/web/dist:/usr/share/nginx/html:ro
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    build:
+      context: .
+      dockerfile: Dockerfile.web
     ports:
       - "${WEB_PORT:-80}:80"
     depends_on:
-      - api
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
     restart: unless-stopped
     profiles:
       - production
 
 volumes:
   spanel-db:
-  web-node-modules:
   web-app-node-modules:

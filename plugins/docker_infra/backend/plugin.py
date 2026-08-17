@@ -76,9 +76,27 @@ def list_containers(all_containers: bool = False) -> list[dict[str, str]]:
         {
             "name": raw.get("Names", ""),
             "image": raw.get("Image", ""),
+            "state": raw.get("State", ""),
             "status": raw.get("Status", ""),
         }
         for raw in _parse_json_lines(_run_remote_docker(args))
+    ]
+
+
+def list_container_stats() -> list[dict[str, str | None]]:
+    return [
+        {
+            "name": raw.get("Name", ""),
+            "cpu_percent": raw.get("CPUPerc") or None,
+            "mem_usage": raw.get("MemUsage") or None,
+            "mem_percent": raw.get("MemPerc") or None,
+            "net_io": raw.get("NetIO") or None,
+            "block_io": raw.get("BlockIO") or None,
+            "pids": raw.get("PIDs") or None,
+        }
+        for raw in _parse_json_lines(
+            _run_remote_docker(["stats", "--no-stream", "--format", "json"])
+        )
     ]
 
 
@@ -209,6 +227,14 @@ def containers_list(
 ):
     try:
         return list_containers(all_containers=all_containers)
+    except DockerAdapterError as exc:
+        raise HTTPException(status_code=502, detail=f"docker remoto: {exc}") from exc
+
+
+@router.get("/containers/stats")
+def containers_stats(_=Depends(get_current_user)):
+    try:
+        return list_container_stats()
     except DockerAdapterError as exc:
         raise HTTPException(status_code=502, detail=f"docker remoto: {exc}") from exc
 

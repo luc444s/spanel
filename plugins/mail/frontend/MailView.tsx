@@ -173,11 +173,11 @@ export function MailView() {
             <CardDescription>docker-mailserver en el docker remoto</CardDescription>
           </div>
           <div className="flex items-center gap-3">
-            <Badge variant={server?.status === 'running' ? 'default' : 'secondary'}>
+            <Badge className={server?.status === 'running' ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700' : undefined}>
               {server?.provisioned ? server.status : 'no provisionado'}
             </Badge>
             {!server?.provisioned && (
-              <Button onClick={handleProvision} disabled={provisioning} size="sm">
+              <Button onClick={handleProvision} disabled={provisioning} className="px-3 py-1.5 text-xs">
                 {provisioning ? 'Provisionando…' : 'Provisionar'}
               </Button>
             )}
@@ -191,7 +191,7 @@ export function MailView() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-3">
             <CardTitle className="text-base">Dominios</CardTitle>
-            <Button variant="secondary" size="sm" onClick={() => setShowAddDomain(true)}>+ Agregar</Button>
+            <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => setShowAddDomain(true)}>+ Agregar</Button>
           </CardHeader>
           <CardContent>
             {domains.length === 0 ? (
@@ -212,12 +212,11 @@ export function MailView() {
                     >
                       <div className="flex items-center gap-2 truncate">
                         <span className="truncate">{d.domain}</span>
-                        <Badge variant="secondary" className="text-xs shrink-0">{count}</Badge>
+                        <Badge className="text-xs shrink-0">{count}</Badge>
                       </div>
                       <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive shrink-0 ml-2"
+                        variant="secondary"
+                        className="ml-2 h-6 w-6 shrink-0 border-0 bg-transparent p-0 text-muted-foreground hover:bg-transparent hover:text-destructive"
                         onClick={(e) => { e.stopPropagation(); setDeleteDomain(d) }}
                       >
                         ×
@@ -242,7 +241,7 @@ export function MailView() {
               )}
             </div>
             {selectedDomain && (
-              <Button variant="secondary" size="sm" onClick={() => setShowCreateMailbox(true)}>
+              <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => setShowCreateMailbox(true)}>
                 + Crear buzón
               </Button>
             )}

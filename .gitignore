@@ -5,3 +5,5 @@ vendor/systutor-core/.env
 __pycache__/
 *.pyc
 .venv/
+.postgres/
+.postgres.log

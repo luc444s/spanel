@@ -130,22 +130,21 @@ export function DomainsView() {
                     <td className="py-2 pr-4 font-medium">{d.fqdn}</td>
                     <td className="py-2 pr-4 text-muted-foreground font-mono text-xs">{d.site_id.slice(0, 8)}</td>
                     <td className="py-2 pr-4">
-                      <Badge variant={d.ssl_status === 'active' ? 'default' : 'secondary'}>
+                      <Badge className={d.ssl_status === 'active' ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700' : undefined}>
                         {d.ssl_status}
                       </Badge>
                     </td>
                     <td className="py-2 flex gap-2">
                       <Button
                         variant="secondary"
-                        size="sm"
+                        className="px-3 py-1.5 text-xs"
                         onClick={() => { setEditDomain(d); setEditFqdn(d.fqdn) }}
                       >
                         Editar
                       </Button>
                       <Button
                         variant="secondary"
-                        size="sm"
-                        className="text-destructive"
+                        className="px-3 py-1.5 text-xs text-destructive"
                         onClick={() => setDeleteDomain(d)}
                       >
                         Eliminar

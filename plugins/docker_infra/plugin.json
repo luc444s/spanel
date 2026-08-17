@@ -5,7 +5,7 @@
   "api_version": "1",
   "requires": [],
   "backend_entrypoint": "backend.plugin:register",
-  "frontend_entrypoint": "frontend/register.ts",
+  "frontend_entrypoint": "frontend/register.tsx",
   "permissions": [
     "docker_infra.containers.read",
     "docker_infra.containers.manage"

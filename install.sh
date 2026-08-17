@@ -7,6 +7,7 @@ CORE_URL="${SYSTUTOR_CORE_URL:-https://github.com/luc444s/systutor-core.git}"
 SHELL_URL="${SYSTUTOR_SHELL_URL:-https://github.com/luc444s/systutor-shell.git}"
 CORE_PATH="vendor/systutor-core"
 SHELL_PATH="vendor/systutor-shell"
+VENV_DIR=".venv"
 
 DO_CORE=1
 DO_SHELL=1
@@ -40,6 +41,27 @@ is_termux() {
 }
 
 have() { command -v "$1" >/dev/null 2>&1; }
+
+venv_python() {
+  if [ -x "$VENV_DIR/bin/python3" ]; then
+    printf '%s\n' "$VENV_DIR/bin/python3"
+  else
+    printf '%s\n' "python3"
+  fi
+}
+
+ensure_venv() {
+  if ! have python3; then
+    echo "error: python3 no encontrado" >&2
+    exit 1
+  fi
+  if [ ! -x "$VENV_DIR/bin/python3" ]; then
+    step "python3 -m venv $VENV_DIR"
+    [ "$DRY_RUN" = 1 ] || python3 -m venv "$VENV_DIR"
+  fi
+  step "$VENV_DIR/bin/python3 -m pip install --upgrade pip"
+  [ "$DRY_RUN" = 1 ] || "$VENV_DIR/bin/python3" -m pip install --upgrade pip
+}
 
 check_arch() {
   local arch
@@ -107,9 +129,10 @@ PY
 }
 
 install_core() {
+  ensure_venv
   step "kernel: pip install -e $CORE_PATH (editable)"
   if [ "$DRY_RUN" = 0 ]; then
-    if have pip3; then pip3 install -e "$CORE_PATH"; else pip install -e "$CORE_PATH"; fi
+    "$(venv_python)" -m pip install -e "$CORE_PATH"
   fi
 }
 
@@ -122,10 +145,15 @@ install_shell() {
   rel="$(python3 -c "import os,sys; print(os.path.relpath(sys.argv[1], sys.argv[2]))" "$SHELL_PATH" "$web")"
   python_patch tsconfig-paths "$ts_conf" "$rel"
   python_patch vite-alias "$vite_conf" "$rel"
-  step "npm: instalando peer deps del shell"
+  step "npm: instalando deps del frontend"
   [ "$DRY_RUN" = 1 ] && return 0
-  (cd "$web" && npm install react react-dom clsx tailwind-merge lucide-react leaflet react-leaflet sonner @tanstack/react-query --no-audit --no-fund) \
-    || warn "npm install fallo — instala manualmente las peer deps del shell"
+  if [ -f "$web/package-lock.json" ]; then
+    (cd "$web" && npm ci --no-audit --no-fund) \
+      || warn "npm ci fallo — instala manualmente deps del frontend"
+  else
+    (cd "$web" && npm install --no-audit --no-fund) \
+      || warn "npm install fallo — instala manualmente deps del frontend"
+  fi
 }
 
 main() {

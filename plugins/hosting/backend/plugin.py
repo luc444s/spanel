@@ -71,8 +71,8 @@ class ProvisionWordpressRequest(BaseModel):
 router = APIRouter(tags=["hosting"])
 
 
-def _site_row_to_dict(row) -> dict:
-    return {
+def _site_row_to_dict(row, *, container_status: str | None = None) -> dict:
+    payload = {
         "id": row.id,
         "tenant_id": row.tenant_id,
         "branch_id": row.branch_id,
@@ -81,6 +81,29 @@ def _site_row_to_dict(row) -> dict:
         "container_name": row.container_name,
         "domains": json.loads(row.domains_json or "[]"),
         "created_at": row.created_at.isoformat() if row.created_at else None,
+    }
+    if container_status is not None:
+        payload["container_status"] = container_status
+    return payload
+
+
+def _site_status_map(docker, rows: list) -> dict[str, str]:
+    try:
+        containers = docker.list_containers(all_containers=True)
+    except docker.DockerAdapterError:
+        return {row.container_name: "unreachable" for row in rows}
+
+    by_name = {
+        container.get("name", ""): (
+            container.get("state")
+            or container.get("status", "").split(" ", 1)[0].lower()
+            or "unknown"
+        )
+        for container in containers
+    }
+    return {
+        row.container_name: by_name.get(row.container_name, "missing")
+        for row in rows
     }
 
 
@@ -101,13 +124,20 @@ def list_sites(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ):
-    rows = db.execute(
+    rows = list(
+        db.execute(
         text(
             "SELECT * FROM hosting_site WHERE tenant_id = :tenant ORDER BY name"
         ),
         {"tenant": user.tenant_id},
-    ).mappings()
-    return [_site_row_to_dict(row) for row in rows]
+        ).mappings()
+    )
+    docker = _docker_infra()
+    status_map = _site_status_map(docker, rows)
+    return [
+        _site_row_to_dict(row, container_status=status_map.get(row.container_name, "missing"))
+        for row in rows
+    ]
 
 
 @router.post("/sites/adopt", status_code=201)
@@ -116,6 +146,11 @@ def adopt_site(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ):
+    if payload.container_name in PROTECTED_CONTAINERS:
+        raise HTTPException(
+            status_code=403,
+            detail=f"container protegido (operativo): {payload.container_name}",
+        )
     docker = _docker_infra()
     try:
         info = docker.inspect_container(payload.container_name)
@@ -682,6 +717,38 @@ def patch_site(
     return {"updated": True}
 
 
+@router.delete("/sites/{site_id}")
+def delete_site(
+    site_id: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+):
+    site = _get_own_site(db, site_id, user)
+    if json.loads(site.domains_json or "[]"):
+        raise HTTPException(
+            status_code=409,
+            detail="site con dominios: primero eliminarlos en proxy",
+        )
+
+    linked_domains = db.execute(
+        text("SELECT 1 FROM hosting_domain WHERE site_id = :site LIMIT 1"),
+        {"site": site.id},
+    ).first()
+    if linked_domains is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="site con dominios: primero eliminarlos en proxy",
+        )
+
+    db.execute(text("DELETE FROM hosting_backup WHERE site_id = :site"), {"site": site.id})
+    db.execute(
+        text("DELETE FROM hosting_site WHERE id = :id AND tenant_id = :tenant"),
+        {"id": site.id, "tenant": user.tenant_id},
+    )
+    db.commit()
+    return {"deleted": True, "id": site.id}
+
+
 def _guard_protected(site) -> None:
     if site.container_name in PROTECTED_CONTAINERS:
         raise HTTPException(
@@ -775,4 +842,7 @@ def site_detail(
     except docker.DockerAdapterError:
         origin["container_status"] = "unreachable"
 
-    return {**_site_row_to_dict(site), "origin": origin}
+    return {
+        **_site_row_to_dict(site, container_status=origin["container_status"]),
+        "origin": origin,
+    }
