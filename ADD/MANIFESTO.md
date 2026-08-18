@@ -80,6 +80,26 @@ contrato — ni menos (aumenta errores por ignorancia) ni más (aumenta errores
 por ruido). La A.SPEC, con su SCOPE, OUT OF SCOPE, Change Surface e
 Invariantes, es precisamente la herramienta para delimitar ese contexto.
 
+## Ley estructural
+
+ADD no solo reduce blast radius del cambio. También evita concentración
+accidental de responsabilidades dentro del código.
+
+Ley:
+
+> Un archivo debe preservar una superficie de responsabilidad coherente y una
+> razón principal de cambio.
+
+El tamaño del archivo es una señal heurística, no la regla primaria.
+
+- Primero se evalúa cohesión.
+- Luego se evalúa acoplamiento.
+- Recién después se evalúa tamaño.
+
+Un archivo pequeño puede violar ADD si mezcla varias responsabilidades.
+Un archivo más grande puede seguir cumpliendo ADD si mantiene una sola
+responsabilidad coherente.
+
 ## ADD y agentes
 
 Un humano puede entregar una A.SPEC (ej. `HOST-0042`) y un agente recibe

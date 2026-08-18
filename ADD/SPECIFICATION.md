@@ -176,6 +176,105 @@ ADD/
 └── ASPEC-TEMPLATE.md
 ```
 
+## 10. Ley estructural
+
+Además de atomicidad observable, ADD exige coherencia estructural.
+
+### 10.1 Regla primaria
+
+Un archivo MUST preservar:
+
+- una superficie de responsabilidad coherente
+- una razón principal de cambio
+
+La pregunta correcta no es "¿cuántas líneas tiene?" sino:
+
+> "¿Este archivo sigue haciendo una sola cosa coherente?"
+
+### 10.2 Tamaño como heurística
+
+El tamaño del archivo NO es la regla primaria. Es una señal de alerta.
+
+- `0-200` líneas: cómodo
+- `200-400` líneas: tolerable
+- `>400` líneas: revisar cohesión
+- `>600` líneas: extracción fuertemente recomendada
+
+Estas cifras no fallan una A.SPEC por sí mismas. Solo elevan exigencia de
+justificación estructural.
+
+### 10.3 Archivos de entrypoint
+
+Archivos como `plugin.py`, `register.py`, `main.py`, `router.py` o equivalentes
+MUST actuar principalmente como entrypoint o composition root.
+
+Pueden:
+
+- registrar routers
+- cablear dependencias
+- exponer entrypoints públicos
+
+No deben convertirse en contenedores de toda la lógica del feature si esa
+lógica puede vivir en módulos vecinos más cohesivos.
+
+### 10.4 Trigger de extracción
+
+Si una A.SPEC agrega una nueva responsabilidad observable a un archivo ya bajo
+presión estructural (`>400` líneas o múltiples motivos de cambio), la
+implementación MUST hacer una de estas dos cosas:
+
+1. extraer la nueva responsabilidad a un módulo nuevo
+2. abrir una A.SPEC estructural previa o pareada para separar el archivo
+
+### 10.5 Falla estructural
+
+Una A.SPEC falla aunque el comportamiento nuevo funcione si:
+
+- mezcla varias responsabilidades no relacionadas en un mismo archivo
+- convierte un entrypoint en un god-file
+- aumenta acoplamiento evitable entre rutas, servicios y acceso a datos
+- deja el archivo con múltiples razones principales de cambio
+
+## 11. Commit y changelog
+
+ADD exige trazabilidad, no burocracia innecesaria.
+
+### 11.1 Commit obligatorio
+
+Cada A.SPEC integrada MUST quedar trazable a un commit identificable.
+
+Idealmente:
+
+- un commit por A.SPEC
+- o una secuencia corta de commits claramente atribuibles a esa A.SPEC
+
+El mensaje de commit SHOULD referenciar el identificador de la A.SPEC cuando
+sea posible.
+
+### 11.2 Changelog no obligatorio por defecto
+
+ADD NO exige changelog por cada commit.
+
+Un changelog es opcional salvo que el proceso del proyecto o la release lo
+requiera explícitamente.
+
+### 11.3 Cuándo sí exigir changelog
+
+Changelog SHOULD existir cuando:
+
+- hay release pública
+- hay cambios operativos o de despliegue relevantes
+- múltiples equipos o agentes necesitan historial resumido
+- el cambio afecta usuarios o integradores externos
+
+### 11.4 Regla mínima
+
+La regla mínima de ADD es:
+
+- commit trazable: obligatorio
+- changelog por commit: opcional
+- changelog por release o hito: recomendado
+
 Opcional:
 
 ```

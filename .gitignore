@@ -3,6 +3,7 @@ apps/web/dist/
 .env
 vendor/systutor-core/.env
 __pycache__/
+plugins/**/__pycache__/
 *.pyc
 .venv/
 .postgres/

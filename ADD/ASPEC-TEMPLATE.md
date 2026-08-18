@@ -55,6 +55,19 @@ blast_radius:
   must_not_affect: []
 ```
 
+## Structural Constraints
+
+<!-- Cohesion first. File size is only warning signal. -->
+
+```yaml
+structural_constraints:
+  primary_rule: one coherent responsibility and one main reason to change
+  entrypoints_must_stay_thin: true
+  review_threshold_lines: 400
+  extraction_threshold_lines: 600
+  preferred_new_logic_locations: []
+```
+
 ## Traceability
 
 <!-- Requirement → esta A.SPEC → code → migration → test → commit → deployment -->
@@ -71,4 +84,5 @@ blast_radius:
 - [ ] Invariants preserved
 - [ ] Verification passed
 - [ ] No unrelated changes
+- [ ] Structural constraints respected
 - [ ] Traceability established
