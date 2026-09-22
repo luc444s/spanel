@@ -3,19 +3,8 @@ services:
     build: .
     ports:
       - "3000:3000"
-    environment:
-      - SYSTUTOR_DATABASE_URL=postgresql+psycopg://postgres:postgres@postgres:5432/sysadmin
-      - SYSTUTOR_REDIS_URL=redis://redis:6379/0
-      - SYSTUTOR_JWT_SECRET_KEY=dokploy-test-secret
-      - SYSTUTOR_SEED_ADMIN_EMAIL=sihuen8@gmail.com
-      - SYSTUTOR_SEED_ADMIN_PASSWORD=1408slal
-      - SYSTUTOR_CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
-      - MAIL_SERVER_HOST=169.58.66.32
-      - MAIL_SERVER_PORT=22
-      - MAIL_SERVER_USER=root
-      - MAIL_SERVER_PASSWORD=xxZGT4jgXKXPOZG4lSFYnuO1c
-      - MAIL_DMS_CONTAINER=mailserver
-      - MAIL_USE_SSH=true
+    env_file:
+      - .env.docker
     depends_on:
       postgres:
         condition: service_healthy
@@ -26,9 +15,9 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: sysadmin
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-sysadmin}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
