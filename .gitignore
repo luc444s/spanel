@@ -8,3 +8,6 @@ __pycache__/
 node_modules/
 *.db
 *.log
+*.tar.gz
+apps/web/dist/
+apps/web/node_modules/

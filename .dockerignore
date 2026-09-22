@@ -1,0 +1,12 @@
+.git
+.venv
+node_modules
+__pycache__
+*.pyc
+.env
+.env.docker
+*.log
+.DS_Store
+apps/web/node_modules
+apps/web/dist
+vendor/systutor-core/src/systutor/__pycache__
