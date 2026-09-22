@@ -11,3 +11,4 @@ node_modules/
 *.tar.gz
 apps/web/dist/
 apps/web/node_modules/
+.env.docker
