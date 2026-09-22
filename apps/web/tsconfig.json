@@ -1,0 +1,38 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "allowJs": false,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@systutor/sdk/frontend": ["../../vendor/systutor-core/src/systutor/sdk/frontend/index.ts"],
+      "@systutor/shell/*": ["../../vendor/systutor-shell/src/*"],
+      "@systutor/themes": ["../../vendor/systutor-themes/src/index.ts"],
+      "@systutor/themes/*": ["../../vendor/systutor-themes/src/*"],
+      "zustand": ["./node_modules/zustand"],
+      "react": ["./node_modules/@types/react"],
+      "react-dom": ["./node_modules/@types/react-dom"],
+      "react/jsx-runtime": ["./node_modules/@types/react/jsx-runtime"],
+      "clsx": ["./node_modules/clsx/clsx.d.ts"],
+      "tailwind-merge": ["./node_modules/tailwind-merge/dist/types.d.ts"],
+      "lucide-react": ["./node_modules/lucide-react/dist/lucide-react.d.ts"],
+      "@tanstack/react-query": ["./node_modules/@tanstack/react-query/build/legacy/index.d.ts"],
+      "sonner": ["./node_modules/sonner/dist/index.d.ts"]
+    }
+  },
+  "include": ["src"],
+  "references": []
+}

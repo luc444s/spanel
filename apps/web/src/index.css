@@ -1,0 +1,32 @@
+@import "@fontsource-variable/geist";
+@import url("https://fonts.googleapis.com/css2?family=PT+Sans:wght@400;700&display=swap");
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face {
+  font-family: 'JetBrains Mono', 'Geist Variable', monospace;
+  font-display: optional;
+}
+
+@layer base {
+  /* Paleta y reglas de tema (light/dark/retro) se inyectan en runtime
+     desde apps/web/src/features/theme/tokens.ts vía apply-tokens.ts.
+     Única fuente editable de tema: tokens.ts (sin editar este CSS). */
+
+  body {
+    @apply m-0 min-w-[320px] min-h-screen font-sans;
+    color: hsl(var(--foreground));
+    background: hsl(var(--background));
+  }
+
+  #root {
+    @apply min-h-screen;
+  }
+
+  * {
+    @apply box-border;
+  }
+
+
+}
