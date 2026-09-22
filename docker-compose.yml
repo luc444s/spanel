@@ -2,23 +2,50 @@ services:
   app:
     build: .
     ports:
-      - "8000:8000"
-    env_file:
-      - .env.docker
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "3000:3000"
+    environment:
+      - SYSTUTOR_DATABASE_URL=postgresql+psycopg://postgres:postgres@postgres:5432/sysadmin
+      - SYSTUTOR_REDIS_URL=redis://redis:6379/0
+      - SYSTUTOR_JWT_SECRET_KEY=dokploy-test-secret
+      - SYSTUTOR_SEED_ADMIN_EMAIL=sihuen8@gmail.com
+      - SYSTUTOR_SEED_ADMIN_PASSWORD=1408slal
+      - SYSTUTOR_CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+      - MAIL_SERVER_HOST=169.58.66.32
+      - MAIL_SERVER_PORT=22
+      - MAIL_SERVER_USER=root
+      - MAIL_SERVER_PASSWORD=xxZGT4jgXKXPOZG4lSFYnuO1c
+      - MAIL_DMS_CONTAINER=mailserver
+      - MAIL_USE_SSH=true
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
     restart: unless-stopped
 
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: sysadmin
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 5
     restart: unless-stopped
+
+volumes:
+  pgdata:
