@@ -1,0 +1,6 @@
+{
+  "permissions": [
+    {"name": "tenant.tenants.read", "description": "List and view tenants"},
+    {"name": "tenant.tenants.manage", "description": "Create, update tenants and assign users"}
+  ]
+}

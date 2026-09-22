@@ -1,0 +1,19 @@
+{
+  "id": "mail",
+  "name": "Mail Administration",
+  "version": "0.1.0",
+  "api_version": "1",
+  "requires": [],
+  "backend_entrypoint": "backend.register:register",
+  "frontend_entrypoint": "frontend/register.ts",
+  "permissions": [
+    "mail.accounts.read",
+    "mail.accounts.create",
+    "mail.account.password"
+  ],
+  "events": [
+    "mail.account.created",
+    "mail.account.password_changed"
+  ],
+  "description": "Minimalist mail account management via Docker Mailserver"
+}

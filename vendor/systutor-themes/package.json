@@ -1,0 +1,11 @@
+{
+  "name": "@systutor/themes",
+  "version": "0.1.0",
+  "description": "Sistema de temas de SYSTUTOR: tokens atómicos por tema, inyección de CSS vars y store zustand",
+  "license": "MIT",
+  "type": "module",
+  "main": "src/index.ts",
+  "peerDependencies": {
+    "zustand": ">=4"
+  }
+}

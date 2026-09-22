@@ -1,0 +1,28 @@
+{
+  "name": "@systutor/shell",
+  "version": "0.1.0",
+  "description": "Frontend core de SYSTUTOR: componentes UI genericos, consola operativa y clientes de infraestructura. Sin logica de negocio.",
+  "license": "MIT",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "react": "^18.3.0 || ^19.0.0",
+    "react-dom": "^18.3.0 || ^19.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@monaco-editor/react": { "optional": true },
+    "@react-pdf-viewer/core": { "optional": true },
+    "leaflet": { "optional": true },
+    "monaco-editor": { "optional": true },
+    "pdfjs-dist": { "optional": true },
+    "react-leaflet": { "optional": true },
+    "react-router-dom": { "optional": true },
+    "sonner": { "optional": true }
+  }
+}

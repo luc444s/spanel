@@ -1,0 +1,7 @@
+{
+  "permissions": [
+    {"name": "mail.accounts.read", "description": "View mail accounts for tenant domain"},
+    {"name": "mail.accounts.create", "description": "Create new mail accounts"},
+    {"name": "mail.account.password", "description": "Change mail account passwords"}
+  ]
+}
