@@ -15,7 +15,7 @@ COPY plugins/ ../../plugins/
 RUN npm run build
 
 # ── Stage 2: Python backend + static frontend ──
-FROM python:3.12-slim AS production
+FROM python:3.12-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     openssh-client sshpass libpq-dev gcc \
@@ -30,8 +30,6 @@ COPY vendor/systutor-core/app/ ./vendor/systutor-core/app/
 RUN pip install --no-cache-dir ./vendor/systutor-core psycopg[binary]
 
 COPY plugins/ ./plugins/
-
-# Remove backend-only files from plugins
 RUN find plugins/ -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null; \
     find plugins/ -name "tests" -type d -exec rm -rf {} + 2>/dev/null; \
     find plugins/ -name "*.pyc" -delete 2>/dev/null; \
@@ -39,14 +37,14 @@ RUN find plugins/ -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null; \
 
 COPY --from=frontend-build /app/dist/ ./static/
 
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app/vendor/systutor-core
 ENV SYSTUTOR_PLUGINS_DIR=/app/plugins
 ENV SYSTUTOR_STATIC_DIR=/app/static
 
-EXPOSE 8000
-
-COPY entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
+EXPOSE 3000
 
 CMD ["/app/entrypoint.sh"]
