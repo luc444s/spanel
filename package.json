@@ -1,0 +1,10 @@
+{
+  "name": "mailadmin",
+  "private": true,
+  "scripts": {
+    "frontend": "cd apps/web && node node_modules/vite/bin/vite.js",
+    "services": ". .venv/bin/activate && cd vendor/systutor-core && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000",
+    "db": ". .venv/bin/activate && cd vendor/systutor-core && bash ../../scripts/systutor-db.sh",
+    "dev": "npm run services & npm run frontend"
+  }
+}
