@@ -7,10 +7,10 @@ COPY apps/web/package.json apps/web/package-lock.json* ./
 RUN npm install --prefer-offline
 
 COPY apps/web/ ./
-COPY vendor/systutor-core/src/systutor/sdk/frontend/ ../../vendor/systutor-core/src/systutor/sdk/frontend/
-COPY vendor/systutor-shell/src/ ../../vendor/systutor-shell/src/
-COPY vendor/systutor-themes/src/ ../../vendor/systutor-themes/src/
-COPY plugins/ ../../plugins/
+COPY vendor/systutor-core/src/systutor/sdk/frontend/ ./vendor/systutor-core/src/systutor/sdk/frontend/
+COPY vendor/systutor-shell/src/ ./vendor/systutor-shell/src/
+COPY vendor/systutor-themes/src/ ./vendor/systutor-themes/src/
+COPY vendor/systutor-core/plugins/ ./plugins/
 
 RUN npm run build
 
@@ -29,7 +29,7 @@ COPY vendor/systutor-core/app/ ./vendor/systutor-core/app/
 
 RUN pip install --no-cache-dir ./vendor/systutor-core psycopg[binary]
 
-COPY plugins/ ./plugins/
+COPY vendor/systutor-core/plugins/ ./plugins/
 RUN find plugins/ -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null; \
     find plugins/ -name "tests" -type d -exec rm -rf {} + 2>/dev/null; \
     find plugins/ -name "*.pyc" -delete 2>/dev/null; \
