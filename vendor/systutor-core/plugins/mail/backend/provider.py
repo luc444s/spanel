@@ -93,9 +93,10 @@ class DockerMailServerProvider(MailProvider):
             ]
             return _run_local(ssh_cmd, stdin_data=stdin_data)
 
+        inner_cmd = docker_cmd.replace("{container}", "").replace("docker exec", "").strip()
         local_cmd = ["docker", "exec"] + (
             ["-i"] if stdin_data else []
-        ) + [container] + docker_cmd.replace("{container}", "").split()
+        ) + [self._container] + inner_cmd.split()
         return _run_local(local_cmd, stdin_data=stdin_data)
 
     def list_accounts(self) -> list[str]:
