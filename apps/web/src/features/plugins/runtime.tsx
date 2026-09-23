@@ -27,7 +27,7 @@ type FrontendRuntimeInput = {
 const EMPTY_PERMISSIONS: string[] = [];
 
 const frontendPluginModules = import.meta.glob<FrontendPluginModule>(
-  "../../../../../plugins/*/frontend/register.{ts,tsx}",
+  "../../../../../vendor/systutor-core/plugins/*/frontend/register.{ts,tsx}",
   { eager: true }
 );
 
