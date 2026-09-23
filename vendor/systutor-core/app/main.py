@@ -41,18 +41,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     import os
 
+    from starlette.middleware.base import BaseHTTPMiddleware
     from starlette.responses import FileResponse
 
     static_dir = os.environ.get("SYSTUTOR_STATIC_DIR", "")
     if static_dir and os.path.isdir(static_dir):
         index_html = os.path.join(static_dir, "index.html")
 
-        @app.get("/{full_path:path}", include_in_schema=False)
-        async def serve_spa(full_path: str):
-            file_path = os.path.join(static_dir, full_path)
-            if full_path and os.path.isfile(file_path):
-                return FileResponse(file_path)
-            return FileResponse(index_html)
+        class SPAMiddleware(BaseHTTPMiddleware):
+            async def dispatch(self, request, call_next):
+                response = await call_next(request)
+                if response.status_code == 404 and not request.url.path.startswith("/api/"):
+                    file_path = os.path.join(static_dir, request.url.path.lstrip("/"))
+                    if os.path.isfile(file_path):
+                        return FileResponse(file_path)
+                    return FileResponse(index_html)
+                return response
+
+        app.add_middleware(SPAMiddleware)
 
     return app
 
