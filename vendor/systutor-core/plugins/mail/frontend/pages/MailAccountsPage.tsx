@@ -138,22 +138,27 @@ export default function MailAccountsPage() {
             No hay correos creados para este dominio.
           </p>
         ) : (
-          <div className="grid min-w-[720px] grid-cols-3 gap-3 overflow-x-auto">
-            {accountColumns.map((column, columnIndex) => (
-              <div key={columnIndex} className="space-y-1 rounded-md border border-border bg-card p-2">
-                {column.map((email) => (
-                  <button
-                    key={email}
-                    type="button"
-                    onClick={() => { setSelected(email); setNewPass(""); setConfirmPass(""); setError(null); }}
-                    className="block w-full truncate rounded px-2 py-1 text-left text-sm text-primary hover:bg-accent hover:underline"
-                    title={email}
-                  >
-                    {email}
-                  </button>
-                ))}
-              </div>
-            ))}
+          <div className="overflow-x-auto pb-2">
+            <div
+              className="min-w-[720px]"
+              style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "0.75rem" }}
+            >
+              {accountColumns.map((column, columnIndex) => (
+                <div key={columnIndex} className="space-y-1 rounded-md border border-border bg-card p-2">
+                  {column.map((email) => (
+                    <button
+                      key={email}
+                      type="button"
+                      onClick={() => { setSelected(email); setNewPass(""); setConfirmPass(""); setError(null); }}
+                      className="block w-full truncate rounded px-2 py-1 text-left text-sm text-primary hover:bg-accent hover:underline"
+                      title={email}
+                    >
+                      {email}
+                    </button>
+                  ))}
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
