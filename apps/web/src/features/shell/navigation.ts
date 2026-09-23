@@ -26,17 +26,19 @@ export type ShellNavSection = {
 
 type BuildShellSidebarSectionsInput = {
   permissions: string[];
+  isSuperadmin: boolean;
   pluginNavigation: PluginNavigationItem[];
 };
 
 export function buildShellSidebarSections({
   permissions,
+  isSuperadmin,
   pluginNavigation,
 }: BuildShellSidebarSectionsInput): ShellNavSection[] {
   const sections: ShellNavSection[] = [];
 
   const systemItems: Array<ShellNavLinkItem | ShellNavActionItem> = [];
-  if (permissions.includes("core.plugin.manage")) {
+  if (isSuperadmin || permissions.includes("core.plugin.manage")) {
     systemItems.push({ kind: "link", label: "Dashboard", to: "/app/dashboard" });
     systemItems.push({ kind: "link", label: "Plugins", to: "/app/plugins" });
   }
@@ -45,13 +47,18 @@ export function buildShellSidebarSections({
   }
 
   const settingsItems: Array<ShellNavLinkItem | ShellNavActionItem> = [];
-  if (permissions.includes("core.users.read")) {
+  if (isSuperadmin || permissions.includes("core.users.read")) {
     settingsItems.push({ kind: "link", label: "Usuarios", to: "/app/settings/users" });
   }
-  if (permissions.includes("core.roles.read") || permissions.includes("core.roles.manage")) {
+  if (
+    isSuperadmin ||
+    permissions.includes("core.roles.read") ||
+    permissions.includes("core.roles.manage")
+  ) {
     settingsItems.push({ kind: "link", label: "Roles", to: "/app/settings/roles" });
   }
   if (
+    isSuperadmin ||
     permissions.includes("core.branches.read") ||
     permissions.includes("core.branches.manage")
   ) {

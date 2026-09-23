@@ -16,9 +16,10 @@ export function PermissionBoundary({
   children,
 }: PermissionBoundaryProps) {
   const permissions = useAuthStore((state) => state.permissions);
+  const isSuperadmin = useAuthStore((state) => state.isSuperadmin);
 
-  const hasRequired = hasRequiredPermissions(permissions, requiredPermissions);
-  const hasAny = hasAnyPermission(permissions, anyPermissions);
+  const hasRequired = hasRequiredPermissions(permissions, requiredPermissions, isSuperadmin);
+  const hasAny = hasAnyPermission(permissions, anyPermissions, isSuperadmin);
 
   if (!hasRequired || !hasAny) {
     return <Navigate replace to="/app/dashboard" />;

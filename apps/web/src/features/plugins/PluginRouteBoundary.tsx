@@ -21,6 +21,7 @@ export function PluginRouteBoundary({
 }: PluginRouteBoundaryProps) {
   const runtime = usePluginFrontendRuntime();
   const userPermissions = useAuthStore((state) => state.permissions ?? EMPTY_PERMISSIONS);
+  const isSuperadmin = useAuthStore((state) => state.isSuperadmin);
   const record = runtime.recordsById.get(pluginId);
 
   if (runtime.isLoading) {
@@ -39,7 +40,7 @@ export function PluginRouteBoundary({
     return <Navigate replace to="/app/plugins" />;
   }
 
-  if (!hasRequiredPermissions(userPermissions, requiredPermissions)) {
+  if (!hasRequiredPermissions(userPermissions, requiredPermissions, isSuperadmin)) {
     return <Navigate replace to="/app/plugins" />;
   }
 

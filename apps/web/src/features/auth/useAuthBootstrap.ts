@@ -13,6 +13,7 @@ export function useAuthBootstrap() {
   const queryClient = useQueryClient();
   const token = useAuthStore((state) => state.token);
   const permissions = useAuthStore((state) => state.permissions);
+  const isSuperadmin = useAuthStore((state) => state.isSuperadmin);
   const hydrateUserContext = useAuthStore((state) => state.hydrateUserContext);
   const setPluginRuntime = useAuthStore((state) => state.setPluginRuntime);
 
@@ -23,7 +24,9 @@ export function useAuthBootstrap() {
   });
 
   const effectivePermissions = currentUserQuery.data?.permissions ?? permissions;
+  const effectiveIsSuperadmin = currentUserQuery.data?.is_superadmin ?? isSuperadmin;
   const canReadPluginRuntime =
+    effectiveIsSuperadmin ||
     effectivePermissions.includes("core.plugin.read") ||
     effectivePermissions.includes("core.plugin.runtime.read") ||
     effectivePermissions.includes("core.plugin.manage");

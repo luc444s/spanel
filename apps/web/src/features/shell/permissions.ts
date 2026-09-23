@@ -1,7 +1,12 @@
 export function hasRequiredPermissions(
   userPermissions: string[],
-  requiredPermissions: string[] | undefined
+  requiredPermissions: string[] | undefined,
+  isSuperadmin = false
 ) {
+  if (isSuperadmin) {
+    return true;
+  }
+
   if (!requiredPermissions || requiredPermissions.length === 0) {
     return true;
   }
@@ -10,7 +15,15 @@ export function hasRequiredPermissions(
 }
 
 
-export function hasAnyPermission(userPermissions: string[], requiredPermissions: string[] | undefined) {
+export function hasAnyPermission(
+  userPermissions: string[],
+  requiredPermissions: string[] | undefined,
+  isSuperadmin = false
+) {
+  if (isSuperadmin) {
+    return true;
+  }
+
   if (!requiredPermissions || requiredPermissions.length === 0) {
     return true;
   }

@@ -131,8 +131,8 @@ class DockerMailServerProvider(MailProvider):
                 self._exec(command)
             else:
                 self._exec(
-                    "docker exec -i {container} setup email add " + shlex.quote(email),
-                    stdin_data=password,
+                    "docker exec {container} setup email add " + shlex.quote(email),
+                    stdin_data=f"{password}\n{password}\n",
                 )
         except AppError as exc:
             if "already exists" in str(exc).lower():
@@ -157,8 +157,8 @@ class DockerMailServerProvider(MailProvider):
                 self._exec(command)
             else:
                 self._exec(
-                    "docker exec -i {container} setup email update " + shlex.quote(email),
-                    stdin_data=password,
+                    "docker exec {container} setup email update " + shlex.quote(email),
+                    stdin_data=f"{password}\n{password}\n",
                 )
         except AppError as exc:
             if "not found" in str(exc).lower():

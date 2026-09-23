@@ -62,10 +62,11 @@ cd mailadmin
 
 # 2. Configurar variables de entorno
 cp .env.docker.example .env.docker
-# Editar .env.docker con tus configuraciones
+# Editar .env.docker con valores reales del servidor
+# Nunca commitear .env.docker
 
 # 3. Iniciar servicios
-docker compose up -d
+docker compose up -d --build
 
 # 4. Acceder a la aplicación
 # Frontend: http://localhost:3000
@@ -85,8 +86,9 @@ source .venv/bin/activate
 pip install -e vendor/systutor-core
 
 # 3. Configurar variables de entorno
-cp .env.docker.example .env
-# Editar .env con tus configuraciones locales
+cp .env.example .env
+# Editar .env con valores locales reales
+# Nunca commitear .env
 
 # 4. Instalar dependencias del frontend
 cd apps/web
@@ -120,12 +122,12 @@ npm run dev
 El sistema está diseñado para funcionar con **Docker Mailserver (DMS)** ejecutándose en un servidor remoto. La comunicación se realiza vía SSH:
 
 ```bash
-# Ejemplo de configuración en .env
-MAIL_SERVER_HOST=192.168.1.100
+# Ejemplo de configuración en .env.docker o en el gestor de secretos del servidor
+MAIL_SERVER_HOST=<mail-server-host>
 MAIL_SERVER_PORT=22
-MAIL_SERVER_USER=root
-MAIL_SERVER_PASSWORD=tu-password-seguro
-MAIL_DMS_CONTAINER=mailserver
+MAIL_SERVER_USER=<ssh-user>
+MAIL_SERVER_PASSWORD=<ssh-password>
+MAIL_DMS_CONTAINER=<dms-container-name>
 MAIL_USE_SSH=true
 ```
 
@@ -239,9 +241,9 @@ docker compose build
 # Login
 curl -X POST http://localhost:3000/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email": "admin@example.com", "password": "password"}'
+  -d '{"email": "<admin-email>", "password": "<admin-password>"}'
 
-# Respuesta: {"access_token": "eyJ...", "token_type": "bearer"}
+# Respuesta: {"access_token": "<jwt-token>", "token_type": "bearer"}
 ```
 
 ### Uso de Endpoints
@@ -254,13 +256,13 @@ curl -H "Authorization: Bearer $TOKEN" \
 # Crear cuenta de correo
 curl -X POST -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"username": "ventas", "password": "securepass123"}' \
+  -d '{"username": "ventas", "password": "<mailbox-password>"}' \
   http://localhost:3000/api/v1/plugins/mail/mail/accounts
 
 # Cambiar contraseña
 curl -X PUT -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"password": "newsecurepass456"}' \
+  -d '{"password": "<new-mailbox-password>"}' \
   http://localhost:3000/api/v1/plugins/mail/mail/accounts/ventas@example.com/password
 ```
 
@@ -305,7 +307,7 @@ docker compose down
 ### El plugin de correo no carga
 
 1. Verificar que el servidor de correo SSH sea accesible
-2. Verificar variables `MAIL_*` en `.env`
+2. Verificar variables `MAIL_*` en `.env.docker` o en el gestor de secretos del servidor
 3. Revisar logs: `docker compose logs app`
 
 ### Error de conexión a BD
