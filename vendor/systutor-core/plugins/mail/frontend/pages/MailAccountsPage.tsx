@@ -13,8 +13,31 @@ const ACCOUNT_ROWS_PER_COLUMN = 15;
 const ACCOUNT_COLUMNS = 3;
 const ACCOUNT_PAGE_SIZE = ACCOUNT_ROWS_PER_COLUMN * ACCOUNT_COLUMNS;
 
+function useIsPortrait() {
+  const [isPortrait, setIsPortrait] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const query = window.matchMedia("(orientation: portrait)");
+    setIsPortrait(query.matches);
+
+    function handleChange(event: MediaQueryListEvent) {
+      setIsPortrait(event.matches);
+    }
+
+    query.addEventListener("change", handleChange);
+    return () => query.removeEventListener("change", handleChange);
+  }, []);
+
+  return isPortrait;
+}
+
 export default function MailAccountsPage() {
   const queryClient = useQueryClient();
+  const isPortrait = useIsPortrait();
   const [selected, setSelected] = useState<string | null>(null);
   const [newPass, setNewPass] = useState("");
   const [confirmPass, setConfirmPass] = useState("");
@@ -138,10 +161,14 @@ export default function MailAccountsPage() {
             No hay correos creados para este dominio.
           </p>
         ) : (
-          <div className="overflow-x-auto pb-2">
+          <div className={isPortrait ? "pb-2" : "overflow-x-auto pb-2"}>
             <div
-              className="min-w-[720px]"
-              style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "0.75rem" }}
+              className={isPortrait ? undefined : "min-w-[720px]"}
+              style={{
+                display: "grid",
+                gridTemplateColumns: isPortrait ? "1fr" : "repeat(3, minmax(0, 1fr))",
+                gap: "0.75rem",
+              }}
             >
               {accountColumns.map((column, columnIndex) => (
                 <div key={columnIndex} className="space-y-1 rounded-md border border-border bg-card p-2">
