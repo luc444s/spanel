@@ -10,6 +10,7 @@ WORKDIR /app/apps/web
 RUN npm install --prefer-offline
 
 COPY apps/web/ ./
+RUN ln -s /app/vendor/systutor-core/plugins /app/plugins
 RUN npm run build
 
 # ── Stage 2: Python backend + static frontend ──
