@@ -9,6 +9,17 @@ services:
       WORKERS: ${WORKERS:-1}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - default
+      - proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.routers.spanel-http.entrypoints=web"
+      - "traefik.http.routers.spanel-http.rule=Host(`spanel.systutor.com`)"
+      - "traefik.http.routers.spanel.entrypoints=websecure"
+      - "traefik.http.routers.spanel.rule=Host(`spanel.systutor.com`)"
+      - "traefik.http.routers.spanel.tls=true"
     depends_on:
       postgres:
         condition: service_healthy
@@ -42,3 +53,7 @@ services:
 
 volumes:
   pgdata:
+
+networks:
+  proxy:
+    external: true
