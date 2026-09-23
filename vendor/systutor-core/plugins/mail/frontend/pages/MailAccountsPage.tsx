@@ -138,7 +138,7 @@ export default function MailAccountsPage() {
             No hay correos creados para este dominio.
           </p>
         ) : (
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="grid min-w-[720px] grid-cols-3 gap-3 overflow-x-auto">
             {accountColumns.map((column, columnIndex) => (
               <div key={columnIndex} className="space-y-1 rounded-md border border-border bg-card p-2">
                 {column.map((email) => (
