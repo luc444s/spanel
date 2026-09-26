@@ -23,6 +23,9 @@ function resolveLanHost() {
 
 const devPort = Number(process.env.VITE_DEV_PORT ?? "5173");
 const hmrHost = process.env.VITE_HMR_HOST ?? resolveLanHost();
+// Puerto del backend en dev. Permite correr mailadmin junto a otro proyecto
+// que ya ocupe el 8000 (ver script "services" de package.json).
+const apiPort = Number(process.env.SYSTUTOR_API_PORT ?? "8000");
 
 // Plugins y packages importan bare deps (react, leaflet, etc.) que viven
 // en apps/web/node_modules. En dev, optimizeDeps los resuelve desde el
@@ -87,7 +90,7 @@ export default defineConfig({
     },
     proxy: {
       "/api": {
-        target: "http://127.0.0.1:8000",
+        target: `http://127.0.0.1:${apiPort}`,
         changeOrigin: true,
       },
     },
@@ -98,7 +101,7 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       "/api": {
-        target: "http://127.0.0.1:8000",
+        target: `http://127.0.0.1:${apiPort}`,
         changeOrigin: true,
       },
     },
