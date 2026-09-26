@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import shlex
 import subprocess
 from abc import ABC, abstractmethod
@@ -32,6 +33,62 @@ def _validate_email(email: str) -> None:
 def _validate_container(container: str) -> None:
     if not container or not container.replace("-", "").replace("_", "").isalnum():
         raise AppError("Invalid container name", status_code=500, code="invalid_config")
+
+
+def build_ssh_command(
+    *,
+    user: str,
+    host: str,
+    port: int,
+    remote_cmd: str,
+    control_path: str | None = None,
+    control_persist: int = 0,
+) -> list[str]:
+    """Builds the `ssh` argv for one remote command.
+
+    Extracted from `_exec` so the transport is verifiable without opening a connection.
+
+    `control_path` empty means "no multiplexing": the argv is then exactly the one this
+    provider has always used, which is what makes turning the feature on safe. When it is
+    set, ControlMaster=auto reuses a session across calls, and ControlPersist keeps the
+    master alive briefly after the last one. `auto` also falls back to a fresh connection
+    when the cached one is dead, so a stale socket cannot break a call.
+    """
+    cmd = ["ssh", "-t", "-o", "StrictHostKeyChecking=no", "-p", str(port)]
+    if control_path:
+        cmd += [
+            "-o",
+            "ControlMaster=auto",
+            "-o",
+            f"ControlPath={control_path}",
+            "-o",
+            f"ControlPersist={control_persist}",
+        ]
+    cmd += [f"{user}@{host}", remote_cmd]
+    return cmd
+
+
+def _prepare_control_dir(control_path: str) -> str | None:
+    """Returns a usable ControlPath, or None if multiplexing must be skipped.
+
+    The socket lives in a directory that only its owner can enter. A world-writable
+    directory would let any local user pre-create the socket and hijack the SSH session,
+    which means speaking to the mail server with our credentials. So the mode is set
+    explicitly instead of trusting the umask.
+
+    Any failure (read-only filesystem, missing permissions) returns None and the caller
+    falls back to a connection per call. The optimization must never break startup.
+    """
+    directory = os.path.dirname(control_path)
+    if not directory:
+        return None
+    try:
+        os.makedirs(directory, mode=0o700, exist_ok=True)
+        os.chmod(directory, 0o700)
+    except OSError as exc:
+        logger.warning("ssh: ControlPath no disponible (%s), conexión por llamada", exc)
+        return None
+    return control_path
 
 
 def _run_local(args: list[str], stdin_data: str | None = None, timeout: int = 30) -> str:
@@ -68,6 +125,8 @@ class DockerMailServerProvider(MailProvider):
         password: str,
         container: str,
         use_ssh: bool = False,
+        ssh_control_path: str | None = None,
+        ssh_control_persist: int = 60,
     ) -> None:
         self._host = host
         self._port = port
@@ -75,21 +134,29 @@ class DockerMailServerProvider(MailProvider):
         self._password = password
         self._container = container
         self._use_ssh = use_ssh
+        self._ssh_control_path = ssh_control_path
+        self._ssh_control_persist = ssh_control_persist
 
     def _exec(self, docker_cmd: str, stdin_data: str | None = None) -> str:
         container = shlex.quote(self._container)
 
         if self._use_ssh:
-            import os
-
             os.environ["SSHPASS"] = self._password
             remote_cmd = docker_cmd.replace("{container}", container)
+            control_path = None
+            if self._ssh_control_path:
+                control_path = _prepare_control_dir(self._ssh_control_path)
             ssh_cmd = [
-                "sshpass", "-e", "ssh", "-t",
-                "-o", "StrictHostKeyChecking=no",
-                "-p", str(self._port),
-                f"{self._user}@{self._host}",
-                remote_cmd,
+                "sshpass",
+                "-e",
+                *build_ssh_command(
+                    user=self._user,
+                    host=self._host,
+                    port=self._port,
+                    remote_cmd=remote_cmd,
+                    control_path=control_path,
+                    control_persist=self._ssh_control_persist,
+                ),
             ]
             return _run_local(ssh_cmd, stdin_data=stdin_data)
 

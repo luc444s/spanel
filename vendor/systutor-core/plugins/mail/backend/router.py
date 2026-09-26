@@ -33,6 +33,8 @@ def _get_mail_service(db: Session = Depends(get_db_session)) -> MailService:
         password=settings.mail_server_password,
         container=settings.mail_dms_container,
         use_ssh=settings.mail_use_ssh,
+        ssh_control_path=settings.mail_ssh_control_path or None,
+        ssh_control_persist=settings.mail_ssh_control_persist,
     )
     return MailService(provider=provider, db=db)
 

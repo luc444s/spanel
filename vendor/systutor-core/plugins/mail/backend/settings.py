@@ -42,7 +42,14 @@ class MailSettings(BaseModel):
     mail_dms_container: str = "mailserver"
     mail_use_ssh: bool = False
     mail_accounts_cache_enabled: bool = True
-    mail_accounts_cache_ttl: int = 60
+    # A.SPEC 0006: 300 s, wider than the frontend staleTime (60 s). The client refetches
+    # every minute but now hits Redis instead of the mail server. Writes from the app still
+    # invalidate immediately, so this only bounds how long a change made OUTSIDE the app
+    # stays invisible.
+    mail_accounts_cache_ttl: int = 300
+    # Empty disables SSH multiplexing, which keeps the argv identical to the pre-0006 one.
+    mail_ssh_control_path: str = ""
+    mail_ssh_control_persist: int = 60
 
 
 _mail_settings: MailSettings | None = None
@@ -62,7 +69,9 @@ def register_mail_settings() -> None:
         mail_accounts_cache_enabled=os.getenv(
             "MAIL_ACCOUNTS_CACHE_ENABLED", "true"
         ).lower() in ("true", "1", "yes"),
-        mail_accounts_cache_ttl=int(os.getenv("MAIL_ACCOUNTS_CACHE_TTL", "60")),
+        mail_accounts_cache_ttl=int(os.getenv("MAIL_ACCOUNTS_CACHE_TTL", "300")),
+        mail_ssh_control_path=os.getenv("MAIL_SSH_CONTROL_PATH", ""),
+        mail_ssh_control_persist=int(os.getenv("MAIL_SSH_CONTROL_PERSIST", "60")),
     )
 
 
