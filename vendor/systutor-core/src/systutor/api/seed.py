@@ -39,8 +39,6 @@ BASE_PERMISSIONS = [
     "core.documents.manage",
     "core.signatures.read",
     "core.signatures.manage",
-    "core.tenants.read",
-    "core.tenants.manage",
 ]
 
 

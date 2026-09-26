@@ -45,7 +45,7 @@ def list_accounts(
     mail_service: MailService = Depends(_get_mail_service),
 ) -> MailAccountsResponse:
     tenant_id = request.state.current_tenant_id
-    can_read_all = tenant_context.has_permission("mail.accounts.read.all")
+    can_read_all = tenant_context.has_permission("mail.accounts.all")
     return mail_service.list_accounts(tenant_id, can_read_all=can_read_all)
 
 

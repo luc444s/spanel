@@ -48,16 +48,52 @@ def _scan_permissions() -> dict[str, list[str]]:
     return found
 
 
-def _plugin_permissions() -> set[str]:
-    declared: set[str] = set()
-    for manifest in (ROOT / "plugins").glob("*/permissions/*.json"):
+def _manifest_permissions() -> dict[str, set[str]]:
+    """Permissions per plugin, as declared in plugin.json.
+
+    This is the file sync_permissions reads (plugin.manifest.permissions), so it
+    is the catalog that decides whether a permission is actually granted. A
+    permission declared only in permissions/*.json looks real and grants nobody
+    anything.
+    """
+    declared: dict[str, set[str]] = {}
+    for manifest in (ROOT / "plugins").glob("*/plugin.json"):
         payload = json.loads(manifest.read_text(encoding="utf-8"))
-        declared.update(p["name"] for p in payload.get("permissions", []))
+        declared[payload["id"]] = set(payload.get("permissions", []))
     return declared
 
 
-CATALOG = set(BASE_PERMISSIONS) | _plugin_permissions()
+def _sidecar_permissions() -> dict[str, set[str]]:
+    declared: dict[str, set[str]] = {}
+    for manifest in (ROOT / "plugins").glob("*/permissions/*.json"):
+        payload = json.loads(manifest.read_text(encoding="utf-8"))
+        owner = manifest.parent.parent.name
+        declared[owner] = {p["name"] for p in payload.get("permissions", [])}
+    return declared
+
+
+MANIFEST_PERMISSIONS = _manifest_permissions()
+_PLUGIN_NAMES = set().union(*MANIFEST_PERMISSIONS.values()) if MANIFEST_PERMISSIONS else set()
+CATALOG = set(BASE_PERMISSIONS) | _PLUGIN_NAMES
 USED = _scan_permissions()
+
+
+def test_plugin_manifest_matches_sidecar():
+    """plugin.json and permissions/*.json must declare the same set.
+
+    They drifted once already: mail.accounts.read.all was added to the sidecar
+    only, so sync_permissions never granted it and the cross-domain mail view
+    silently stopped working for every user including the admin.
+    """
+    sidecar = _sidecar_permissions()
+    for plugin_id, names in MANIFEST_PERMISSIONS.items():
+        other = sidecar.get(plugin_id)
+        assert other is not None, f"{plugin_id} has no permissions/*.json sidecar"
+        assert names == other, (
+            f"{plugin_id} permission declarations disagree:\n"
+            f"  only in plugin.json:   {sorted(names - other)}\n"
+            f"  only in permissions/: {sorted(other - names)}"
+        )
 
 
 def test_scan_actually_found_something():

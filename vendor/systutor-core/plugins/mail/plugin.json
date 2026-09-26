@@ -8,6 +8,7 @@
   "frontend_entrypoint": "frontend/register.ts",
   "permissions": [
     "mail.accounts.read",
+    "mail.accounts.all",
     "mail.accounts.create",
     "mail.account.password"
   ],

@@ -8,6 +8,9 @@ admin user existed, so a new permission never reached the role.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -194,24 +197,52 @@ def test_seeded_admin_keeps_full_access(app, db_session: Session):
     granted = set(BASE_PERMISSIONS)
     missing = [p for p in granted if not context.has_permission(p)]
     assert not missing, f"seeded admin lost access to: {missing}"
-    # The two tenant permissions that replaced require_superadmin (A.SPEC 0004).
-    assert context.has_permission("core.tenants.read") is True
-    assert context.has_permission("core.tenants.manage") is True
+    # A.SPEC 0004: the tenant plugin declares its own permissions; they are NOT
+    # kernel permissions and must not be added to BASE_PERMISSIONS. They arrive
+    # through sync_permissions reading the plugin manifest.
+    assert "tenant.tenants.read" not in set(BASE_PERMISSIONS)
+    assert "tenant.tenants.manage" not in set(BASE_PERMISSIONS)
+
+
+def test_real_plugin_manifests_load_and_validate():
+    """A.SPEC 0004 follow-up: every real plugin manifest must load.
+
+    This is the gap that let a broken plugin ship green. A.SPEC 0004 introduced
+    mail.accounts.read.all, which violates the manifest rule
+    <module>.<resource>.<action>. The whole mail plugin then failed to load, its
+    manifest was dropped, and sync_permissions silently never granted the
+    permission. Every existing test still passed, because the mail tests use a
+    fake provider and never load a real manifest.
+
+    So: load the real registry and assert nothing failed to validate.
+    """
+    from systutor.kernel.plugins.runtime import PluginManifestRegistry
+
+    root = Path(__file__).resolve().parents[1] / "plugins"
+    registry = PluginManifestRegistry(root)
+    registry.discover()
+    manifests = list(registry.list())
+
+    assert len(manifests) >= 2, f"expected the real plugins, found {len(manifests)}"
+    for manifest in manifests:
+        for permission in manifest.permissions:
+            segments = permission.split(".")
+            assert len(segments) == 3, (
+                f"{manifest.id}: '{permission}' must be <module>.<resource>.<action>, "
+                f"got {len(segments)} segments"
+            )
 
 
 def test_mail_cross_domain_permission_is_declared(app, db_session: Session):
-    """I3: the cross-domain mail permission replaces the removed flag.
+    """A.SPEC 0004: the cross-domain mail permission replaces the removed flag.
 
-    This test environment loads fake plugins, never the real mail plugin, so
-    the permission cannot be granted here. What must hold is that it is
-    declared, because sync_permissions reads plugin manifests.
+    Declared in plugin.json, which is what sync_permissions reads. The sidecar
+    permissions/mail.json is checked for agreement in
+    test_permission_catalog.test_plugin_manifest_matches_sidecar.
     """
-    import json
-    from pathlib import Path
-
-    manifest = Path(__file__).resolve().parents[1] / "plugins/mail/permissions/mail.json"
-    declared = {p["name"] for p in json.loads(manifest.read_text())["permissions"]}
-    assert "mail.accounts.read.all" in declared
+    plugin_json = Path(__file__).resolve().parents[1] / "plugins/mail/plugin.json"
+    declared = set(json.loads(plugin_json.read_text())["permissions"])
+    assert "mail.accounts.all" in declared
     assert "mail.accounts.read" in declared
 
 
