@@ -1,6 +1,5 @@
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 
 from systutor.api.v1.core import router as core_router
 from systutor.api.v1.system import router as system_router

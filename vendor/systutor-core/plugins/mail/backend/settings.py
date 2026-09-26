@@ -6,6 +6,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
+
 # Load .env from project root (mailadmin/)
 def _find_project_root() -> Path:
     current = Path(__file__).resolve().parent

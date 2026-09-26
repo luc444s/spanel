@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from plugins.mail.backend.schemas import CreateAccountRequest, ChangePasswordRequest
-from plugins.mail.backend.service import MailService
+from plugins.mail.backend.schemas import ChangePasswordRequest, CreateAccountRequest
 
 
 def test_create_account_request_valid():

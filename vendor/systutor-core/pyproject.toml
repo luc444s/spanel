@@ -57,7 +57,21 @@ select = ["E", "F", "I", "B", "UP"]
 "src/systutor/api/v1/core/*.py" = ["B008"]
 "src/systutor/kernel/auth/dependencies.py" = ["B008"]
 "src/systutor/kernel/auth/router.py" = ["B008"]
-"../../plugins/*/backend/router.py" = ["B008"]
+"plugins/tenant/backend/router.py" = ["B008"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI resolves these at import time, so calling them in argument
+# defaults is the framework's idiom, not a mutable-default bug.
+# require_superadmin is deliberately absent: it is defined in the same
+# file that calls it, so ruff cannot resolve its qualified name. It is
+# exempted by per-file-ignores above.
+extend-immutable-calls = [
+  "fastapi.Depends",
+  "fastapi.Query",
+  "fastapi.Path",
+  "fastapi.Body",
+  "systutor.kernel.auth.dependencies.require_permission",
+]
 
 [tool.pyright]
 include = ["src", "tests", "app"]

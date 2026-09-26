@@ -5,9 +5,8 @@ Revises: 20260629_0005
 Create Date: 2026-07-08 23:30:00.000000
 """
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 revision = "20260708_0008"
 down_revision = "20260629_0005"
@@ -143,7 +142,10 @@ def downgrade() -> None:
         op.f("ix_core_signature_evidence_signature_session_id"),
         table_name="core_signature_evidence",
     )
-    op.drop_index(op.f("ix_core_signature_evidence_tenant_id"), table_name="core_signature_evidence")
+    op.drop_index(
+        op.f("ix_core_signature_evidence_tenant_id"),
+        table_name="core_signature_evidence",
+    )
     op.drop_table("core_signature_evidence")
 
     op.drop_index(op.f("ix_core_signature_sessions_status"), table_name="core_signature_sessions")
@@ -151,12 +153,18 @@ def downgrade() -> None:
         op.f("ix_core_signature_sessions_document_version_id"),
         table_name="core_signature_sessions",
     )
-    op.drop_index(op.f("ix_core_signature_sessions_tenant_id"), table_name="core_signature_sessions")
+    op.drop_index(
+        op.f("ix_core_signature_sessions_tenant_id"),
+        table_name="core_signature_sessions",
+    )
     op.drop_table("core_signature_sessions")
 
     op.drop_index(op.f("ix_core_document_versions_status"), table_name="core_document_versions")
     op.drop_index(op.f("ix_core_document_versions_entity_id"), table_name="core_document_versions")
-    op.drop_index(op.f("ix_core_document_versions_entity_type"), table_name="core_document_versions")
+    op.drop_index(
+        op.f("ix_core_document_versions_entity_type"),
+        table_name="core_document_versions",
+    )
     op.drop_index(op.f("ix_core_document_versions_module"), table_name="core_document_versions")
     op.drop_index(op.f("ix_core_document_versions_tenant_id"), table_name="core_document_versions")
     op.drop_table("core_document_versions")
