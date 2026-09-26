@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FormEvent, useEffect, useState } from "react";
-import { toast } from "sonner";
 
 import { changeMailAccountPassword, createMailAccount, listMailAccounts, mailKeys } from "../api";
 import { Button } from "@systutor/shell/ui/button";
@@ -8,10 +7,23 @@ import { Dialog } from "@systutor/shell/ui/dialog";
 import { Input } from "@systutor/shell/ui/input";
 import { Alert } from "@systutor/shell/ui/alert";
 import { Pagination } from "@systutor/shell/ui/pagination";
+import { toast } from "@systutor/shell/ui/toast";
 
 const ACCOUNT_ROWS_PER_COLUMN = 15;
 const ACCOUNT_COLUMNS = 3;
 const ACCOUNT_PAGE_SIZE = ACCOUNT_ROWS_PER_COLUMN * ACCOUNT_COLUMNS;
+
+// Stable toast ids, one per operation, so the pending toast is replaced in place by the
+// success or error one instead of stacking a second toast below it: a slow mail server
+// keeps a single readable row instead of a moving target.
+//
+// The id goes in the data object, NOT as the first argument. sonner has no
+// toast.success(id, message) overload: the signature is (message, data) and the id is
+// read from data.id. Passing (id, message) makes the id the toast's text and spreads the
+// message string into numeric keys, which produces a second, unidentifiable toast that
+// spins forever.
+const CREATE_TOAST = "mail:create-account";
+const PASSWORD_TOAST = "mail:change-password";
 
 // Matches the backend cache TTL (MAIL_ACCOUNTS_CACHE_TTL) so the UI does not ask for
 // a refetch while the server would still answer from its own cache anyway.
@@ -70,31 +82,45 @@ export default function MailAccountsPage() {
     }
   }, [accountsPage, totalAccountPages]);
 
+  // Both dialogs close the moment the request is dispatched, not when it resolves. The
+  // mail server is reached over SSH, so waiting kept the modal open for seconds with a
+  // button that said nothing. The result travels by toast instead.
+  //
+  // Client-side validation (mismatched or too-short passwords) is the one exception: no
+  // request went out, and the error belongs next to the fields the user just typed.
+  function closePasswordDialog() {
+    setSelected(null);
+    setNewPass("");
+    setConfirmPass("");
+    setError(null);
+  }
+
+  function closeCreateDialog() {
+    setShowCreate(false);
+    setCreateUser("");
+    setCreatePass("");
+    setCreateConfirm("");
+    setCreateError(null);
+  }
+
   const changeMutation = useMutation({
     mutationFn: ({ email, password }: { email: string; password: string }) => changeMailAccountPassword(email, { password }),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: mailKeys.accounts });
-      setSelected(null);
-      setNewPass("");
-      setConfirmPass("");
-      setError(null);
-      toast.success("Contraseña actualizada");
-    },
-    onError: (e: Error) => setError(e.message),
+    onSuccess: () => toast.success("Contraseña modificada", { id: PASSWORD_TOAST }),
+    // A password change does not alter the account list, so there is nothing to
+    // invalidate: the only refetch that mattered was a wasted round trip to the
+    // mail server sitting in front of the success toast.
+    onError: (e: Error) => toast.error(e.message, { id: PASSWORD_TOAST }),
   });
 
   const createMutation = useMutation({
     mutationFn: createMailAccount,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: mailKeys.accounts });
-      setShowCreate(false);
-      setCreateUser("");
-      setCreatePass("");
-      setCreateConfirm("");
-      setCreateError(null);
-      toast.success("Cuenta creada");
+    onSuccess: () => {
+      // Not awaited: the new mailbox has to show up, but the user should not wait for
+      // the refetch to read the confirmation.
+      void queryClient.invalidateQueries({ queryKey: mailKeys.accounts });
+      toast.success("Cuenta creada", { id: CREATE_TOAST });
     },
-    onError: (e: Error) => setCreateError(e.message),
+    onError: (e: Error) => toast.error(e.message, { id: CREATE_TOAST }),
   });
 
   function handleSubmitPassword(e: FormEvent<HTMLFormElement>) {
@@ -102,16 +128,24 @@ export default function MailAccountsPage() {
     setError(null);
     if (newPass !== confirmPass) { setError("Las contraseñas no coinciden"); return; }
     if (newPass.length < 8) { setError("Mínimo 8 caracteres"); return; }
-    changeMutation.mutate({ email: selected!, password: newPass });
+    const email = selected;
+    if (!email) return;
+    closePasswordDialog();
+    toast.loading("Cambiando contraseña...", { id: PASSWORD_TOAST });
+    changeMutation.mutate({ email, password: newPass });
   }
 
   function handleSubmitCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setCreateError(null);
-    if (!createUser.trim()) { setCreateError("Usuario requerido"); return; }
+    const username = createUser.trim();
+    if (!username) { setCreateError("Usuario requerido"); return; }
     if (createPass !== createConfirm) { setCreateError("Las contraseñas no coinciden"); return; }
     if (createPass.length < 8) { setCreateError("Mínimo 8 caracteres"); return; }
-    createMutation.mutate({ username: createUser, password: createPass });
+    const password = createPass;
+    closeCreateDialog();
+    toast.loading("Creando cuenta...", { id: CREATE_TOAST });
+    createMutation.mutate({ username, password });
   }
 
   if (accountsQuery.isLoading) {
@@ -141,7 +175,7 @@ export default function MailAccountsPage() {
         </Button>
       </div>
 
-      <Dialog open={showCreate} title="Crear correo" onClose={() => setShowCreate(false)}>
+      <Dialog open={showCreate} title="Crear correo" onClose={closeCreateDialog}>
         <form className="space-y-3" onSubmit={handleSubmitCreate}>
           <label className="block space-y-1 text-sm text-foreground">
             <span>Usuario</span>
@@ -160,8 +194,8 @@ export default function MailAccountsPage() {
           </label>
           {createError && <Alert title="Error">{createError}</Alert>}
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="secondary" size="sm" onClick={() => setShowCreate(false)}>Cancelar</Button>
-            <Button type="submit" size="sm" disabled={createMutation.isPending}>{createMutation.isPending ? "..." : "Crear"}</Button>
+            <Button type="button" variant="secondary" size="sm" onClick={closeCreateDialog}>Cancelar</Button>
+            <Button type="submit" size="sm">Crear</Button>
           </div>
         </form>
       </Dialog>
@@ -208,7 +242,7 @@ export default function MailAccountsPage() {
         </div>
       </div>
 
-      <Dialog open={Boolean(selected)} title="Cambiar contraseña" description={selected} onClose={() => setSelected(null)}>
+      <Dialog open={Boolean(selected)} title="Cambiar contraseña" description={selected} onClose={closePasswordDialog}>
         <form className="space-y-3" onSubmit={handleSubmitPassword}>
           <label className="block space-y-1 text-sm text-foreground">
             <span>Nueva contraseña</span>
@@ -220,8 +254,8 @@ export default function MailAccountsPage() {
           </label>
           {error && <Alert title="Error">{error}</Alert>}
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="secondary" size="sm" onClick={() => setSelected(null)}>Cancelar</Button>
-            <Button type="submit" size="sm" disabled={changeMutation.isPending}>{changeMutation.isPending ? "..." : "Guardar"}</Button>
+            <Button type="button" variant="secondary" size="sm" onClick={closePasswordDialog}>Cancelar</Button>
+            <Button type="submit" size="sm">Guardar</Button>
           </div>
         </form>
       </Dialog>
