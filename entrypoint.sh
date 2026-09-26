@@ -16,13 +16,13 @@ Base.metadata.create_all(engine)
 print('Tables ensured')
 "
 
-# Seed demo data if admin user doesn't exist, then clear plugin_registry
+# Seed demo data on first boot; sync admin role permissions on every boot.
+# The first-boot-vs-sync decision lives in ensure_seed, not here, so it is testable.
 python -c "
 from systutor.core.database import build_session_factory, register_model_metadata
 from systutor.core.config import get_settings
-from sqlalchemy import select, text
-from systutor.api.seed import seed_demo_data
-from systutor.kernel.auth.models import User
+from sqlalchemy import text
+from systutor.api.seed import ensure_seed
 from systutor.kernel.plugins.runtime import PluginManifestRegistry, PluginRuntime
 
 register_model_metadata()
@@ -30,17 +30,14 @@ settings = get_settings()
 factory = build_session_factory(settings)
 db = factory()
 
-existing = db.scalar(select(User).where(User.email == settings.seed_admin_email))
-if not existing:
-    registry = PluginManifestRegistry(settings.plugins_dir)
-    registry.discover()
-    runtime = PluginRuntime(registry, context_builder=lambda m: None)
-    runtime.load()
-    loaded = [r for r in runtime.list_results() if r.manifest]
-    result = seed_demo_data(db, settings, loaded)
-    print('Seed created:', result['user_email'])
-else:
-    print('Seed already exists')
+registry = PluginManifestRegistry(settings.plugins_dir)
+registry.discover()
+runtime = PluginRuntime(registry, context_builder=lambda m: None)
+runtime.load()
+loaded = [r for r in runtime.list_results() if r.manifest]
+
+result = ensure_seed(db, settings, loaded)
+print('Seed:', result['status'], result['user_email'])
 
 db.execute(text('DELETE FROM plugin_registry'))
 db.commit()

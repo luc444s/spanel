@@ -6,6 +6,7 @@ from sqlalchemy import Select, select
 from sqlalchemy.orm import Session
 
 from systutor.core.config import Settings
+from systutor.core.errors import AppError
 from systutor.kernel.auth.models import User
 from systutor.kernel.auth.security import hash_password
 from systutor.kernel.permissions.models import Permission, Role, RolePermission
@@ -151,6 +152,70 @@ def _get_or_create_admin_user(
     return user
 
 
+ADMIN_ROLE_NAME = "admin"
+ADMIN_ROLE_DESCRIPTION = "Administrative role for demo tenant"
+
+
+def sync_permissions(
+    db: Session,
+    tenant: Tenant,
+    plugins: Sequence[LoadedPlugin],
+) -> list[str]:
+    """Grant every kernel and plugin permission to the admin role. Idempotent.
+
+    Safe to call on every boot. Unlike `seed_demo_data` this does not create
+    the tenant, branch or user, so it can run against an existing deployment.
+    A permission added to BASE_PERMISSIONS, or declared by a newly loaded
+    plugin, reaches the existing admin role on the next start.
+    """
+    admin_role = _get_or_create_role(
+        db,
+        tenant,
+        name=ADMIN_ROLE_NAME,
+        description=ADMIN_ROLE_DESCRIPTION,
+    )
+
+    plugin_permissions = [
+        plugin.manifest.permissions for plugin in plugins if plugin.manifest is not None
+    ]
+    all_permission_names = sorted(set(BASE_PERMISSIONS).union(*plugin_permissions))
+    for permission_name in all_permission_names:
+        permission = _get_or_create_permission(db, permission_name)
+        _ensure_role_permission(db, admin_role.id, permission.id)
+
+    return all_permission_names
+
+
+def ensure_seed(
+    db: Session,
+    settings: Settings,
+    plugins: Sequence[LoadedPlugin],
+) -> dict[str, str]:
+    """Idempotent boot path: seed on first boot, sync permissions on every boot.
+
+    Before this, entrypoint.sh decided between the two branches in shell. The
+    decision now lives here, where it is testable.
+    """
+    existing = db.scalar(select(User).where(User.email == settings.seed_admin_email))
+    if existing is not None:
+        tenant = db.get(Tenant, existing.tenant_id)
+        if tenant is None:
+            raise AppError(
+                f"Admin user {existing.email} points at a missing tenant",
+                status_code=500,
+                code="seed_orphan_admin",
+            )
+        granted = sync_permissions(db, tenant, plugins)
+        return {
+            "status": "permissions_synced",
+            "user_email": existing.email,
+            "permissions_granted": str(len(granted)),
+        }
+
+    result = seed_demo_data(db, settings, plugins)
+    return {"status": "seeded", **result}
+
+
 def seed_demo_data(
     db: Session,
     settings: Settings,
@@ -164,20 +229,13 @@ def seed_demo_data(
     """
     tenant = _get_or_create_tenant(db, settings)
     branch = _get_or_create_branch(db, tenant, settings)
+    sync_permissions(db, tenant, plugins)
     admin_role = _get_or_create_role(
         db,
         tenant,
-        name="admin",
-        description="Administrative role for demo tenant",
+        name=ADMIN_ROLE_NAME,
+        description=ADMIN_ROLE_DESCRIPTION,
     )
-
-    plugin_permissions = [
-        plugin.manifest.permissions for plugin in plugins if plugin.manifest is not None
-    ]
-    all_permission_names = sorted(set(BASE_PERMISSIONS).union(*plugin_permissions))
-    for permission_name in all_permission_names:
-        permission = _get_or_create_permission(db, permission_name)
-        _ensure_role_permission(db, admin_role.id, permission.id)
 
     user = _get_or_create_admin_user(db, tenant, branch, settings)
     assign_role_to_user(db, user=user, role=admin_role)
