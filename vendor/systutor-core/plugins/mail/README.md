@@ -12,6 +12,8 @@ Minimalist mail account management plugin for SYSTUTOR Core.
 
 - **Provider**: Docker Mailserver via SSH (subprocess + system ssh)
 - **Isolation**: Multi-tenant by domain filtering
+- **Cache**: the raw account list is cached in the kernel `CacheBackend` (Redis)
+  with a TTL, shared by all tenants; filtering by domain happens after the read
 - **Security**: Passwords never logged, never in responses
 
 ## Configuration
@@ -25,7 +27,12 @@ MAIL_SERVER_PORT=22
 MAIL_SERVER_USER=root
 MAIL_SERVER_PASSWORD=your-password
 MAIL_DMS_CONTAINER=mailserver
+MAIL_ACCOUNTS_CACHE_ENABLED=true
+MAIL_ACCOUNTS_CACHE_TTL=60
 ```
+
+`MAIL_ACCOUNTS_CACHE_ENABLED=false` disables the cache entirely: every read goes
+straight to the mail server. This is the kill switch for production.
 
 ## Routes
 

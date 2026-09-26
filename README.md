@@ -116,6 +116,8 @@ npm run dev
 | `MAIL_SERVER_USER` | Usuario SSH | `root` |
 | `MAIL_SERVER_PASSWORD` | Password SSH | - |
 | `MAIL_DMS_CONTAINER` | Nombre del container DMS | `mailserver` |
+| `MAIL_ACCOUNTS_CACHE_ENABLED` | Cache Redis de la lista de correos | `true` |
+| `MAIL_ACCOUNTS_CACHE_TTL` | TTL (segundos) de la lista de correos en cache | `60` |
 
 ### Configuración del Servidor de Correo
 
@@ -129,7 +131,15 @@ MAIL_SERVER_USER=<ssh-user>
 MAIL_SERVER_PASSWORD=<ssh-password>
 MAIL_DMS_CONTAINER=<dms-container-name>
 MAIL_USE_SSH=true
+
+# La lista de correos se cachea en Redis (read-through, TTL) y se invalida al crear una cuenta
+MAIL_ACCOUNTS_CACHE_ENABLED=true
+MAIL_ACCOUNTS_CACHE_TTL=60
 ```
+
+Con la cache activa, `GET /mail/accounts` no abre viaje al servidor de correo mientras
+la entrada siga viva, y dos requests consecutivos producen una sola llamada al
+servidor. `MAIL_ACCOUNTS_CACHE_ENABLED=false` desactiva la cache por completo.
 
 ## Plugins
 

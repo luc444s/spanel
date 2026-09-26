@@ -40,6 +40,8 @@ class MailSettings(BaseModel):
     mail_server_password: str = ""
     mail_dms_container: str = "mailserver"
     mail_use_ssh: bool = False
+    mail_accounts_cache_enabled: bool = True
+    mail_accounts_cache_ttl: int = 60
 
 
 _mail_settings: MailSettings | None = None
@@ -56,6 +58,10 @@ def register_mail_settings() -> None:
         mail_server_password=os.getenv("MAIL_SERVER_PASSWORD", ""),
         mail_dms_container=os.getenv("MAIL_DMS_CONTAINER", "mailserver"),
         mail_use_ssh=os.getenv("MAIL_USE_SSH", "false").lower() in ("true", "1", "yes"),
+        mail_accounts_cache_enabled=os.getenv(
+            "MAIL_ACCOUNTS_CACHE_ENABLED", "true"
+        ).lower() in ("true", "1", "yes"),
+        mail_accounts_cache_ttl=int(os.getenv("MAIL_ACCOUNTS_CACHE_TTL", "60")),
     )
 
 

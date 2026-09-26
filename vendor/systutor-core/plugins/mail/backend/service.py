@@ -1,21 +1,85 @@
 from __future__ import annotations
 
+import json
 import logging
 
 from sqlalchemy.orm import Session
 
 from plugins.mail.backend.provider import MailProvider
 from plugins.mail.backend.schemas import MailAccountsResponse, MailMessageResponse
+from plugins.mail.backend.settings import MailSettings, get_mail_settings
+from systutor.core.cache import CacheBackend, cache
 from systutor.core.errors import AppError, NotFoundError
 from systutor.kernel.tenants.models import Tenant
 
 logger = logging.getLogger(__name__)
 
+# Single key shared by every tenant. The cached value is ALWAYS the raw list coming
+# from the mail provider; tenant filtering happens after the cache, never inside it.
+ACCOUNTS_CACHE_KEY = "mail:accounts:raw"
+
 
 class MailService:
-    def __init__(self, provider: MailProvider, db: Session) -> None:
+    def __init__(
+        self,
+        provider: MailProvider,
+        db: Session,
+        *,
+        cache_backend: CacheBackend | None = None,
+        settings: MailSettings | None = None,
+    ) -> None:
         self._provider = provider
         self._db = db
+        self._cache_override = cache_backend
+        self._settings_override = settings
+
+    def _settings(self) -> MailSettings:
+        if self._settings_override is not None:
+            return self._settings_override
+        return get_mail_settings()
+
+    def _cache(self) -> CacheBackend:
+        if self._cache_override is not None:
+            return self._cache_override
+        return cache()
+
+    def _cache_enabled(self) -> bool:
+        return self._settings().mail_accounts_cache_enabled
+
+    def _cache_read_raw(self) -> list[str] | None:
+        """Returns the cached raw account list, or None on miss/failure/corruption."""
+        try:
+            raw = self._cache().get(ACCOUNTS_CACHE_KEY)
+        except Exception as exc:  # cache must never break the request
+            logger.warning("mail accounts cache read failed: %s", exc)
+            return None
+        if raw is None:
+            return None
+        try:
+            payload = json.loads(raw)
+        except (TypeError, ValueError):
+            logger.warning("mail accounts cache value is not valid JSON, treating as miss")
+            return None
+        if not isinstance(payload, list) or not all(isinstance(i, str) for i in payload):
+            logger.warning("mail accounts cache value has unexpected shape, treating as miss")
+            return None
+        return list(payload)
+
+    def _cache_write_raw(self, accounts: list[str]) -> None:
+        try:
+            self._cache().set(
+                ACCOUNTS_CACHE_KEY,
+                json.dumps(accounts),
+                self._settings().mail_accounts_cache_ttl,
+            )
+        except Exception as exc:  # cache must never break the request
+            logger.warning("mail accounts cache write failed: %s", exc)
+
+    def _cache_invalidate(self) -> None:
+        try:
+            self._cache().delete(ACCOUNTS_CACHE_KEY)
+        except Exception as exc:  # cache must never break the request
+            logger.warning("mail accounts cache invalidation failed: %s", exc)
 
     def _get_tenant_domain(self, tenant_id: str) -> str:
         tenant = self._db.get(Tenant, tenant_id)
@@ -29,23 +93,9 @@ class MailService:
             )
         return tenant.domain
 
-    def list_accounts(self, tenant_id: str, is_superadmin: bool = False) -> MailAccountsResponse:
-        if is_superadmin:
-            try:
-                all_accounts = self._provider.list_accounts()
-            except AppError as exc:
-                if exc.status_code == 500:
-                    raise AppError(
-                        "Mail server unavailable",
-                        status_code=503,
-                        code="service_unavailable",
-                    ) from exc
-                raise
-            return MailAccountsResponse(domain="all", accounts=all_accounts)
-
-        domain = self._get_tenant_domain(tenant_id)
+    def _call_provider_list_accounts(self) -> list[str]:
         try:
-            all_accounts = self._provider.list_accounts()
+            return self._provider.list_accounts()
         except AppError as exc:
             if exc.status_code == 500:
                 raise AppError(
@@ -54,6 +104,26 @@ class MailService:
                     code="service_unavailable",
                 ) from exc
             raise
+
+    def _raw_accounts(self) -> list[str]:
+        """Read-through: cache first, provider on miss, then populate the cache."""
+        if not self._cache_enabled():
+            return self._call_provider_list_accounts()
+
+        cached = self._cache_read_raw()
+        if cached is not None:
+            return cached
+
+        accounts = self._call_provider_list_accounts()
+        self._cache_write_raw(accounts)
+        return accounts
+
+    def list_accounts(self, tenant_id: str, is_superadmin: bool = False) -> MailAccountsResponse:
+        if is_superadmin:
+            return MailAccountsResponse(domain="all", accounts=self._raw_accounts())
+
+        domain = self._get_tenant_domain(tenant_id)
+        all_accounts = self._raw_accounts()
 
         filtered = [
             account
@@ -90,6 +160,8 @@ class MailService:
             raise
 
         logger.info("Mail account created: %s by user %s", email, user_id)
+        if self._cache_enabled():
+            self._cache_invalidate()
         return MailMessageResponse(message="Account created successfully", email=email)
 
     def change_password(

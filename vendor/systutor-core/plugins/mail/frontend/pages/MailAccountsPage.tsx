@@ -13,6 +13,10 @@ const ACCOUNT_ROWS_PER_COLUMN = 15;
 const ACCOUNT_COLUMNS = 3;
 const ACCOUNT_PAGE_SIZE = ACCOUNT_ROWS_PER_COLUMN * ACCOUNT_COLUMNS;
 
+// Matches the backend cache TTL (MAIL_ACCOUNTS_CACHE_TTL) so the UI does not ask for
+// a refetch while the server would still answer from its own cache anyway.
+const ACCOUNTS_STALE_TIME_MS = 60_000;
+
 function useIsPortrait() {
   const [isPortrait, setIsPortrait] = useState(false);
 
@@ -49,7 +53,14 @@ export default function MailAccountsPage() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [accountsPage, setAccountsPage] = useState(1);
 
-  const accountsQuery = useQuery({ queryKey: mailKeys.accounts, queryFn: listMailAccounts });
+  // staleTime is declared here, not in providers.tsx, so the account list is not
+  // re-fetched on every navigation. Invalidation after create/password-change
+  // still refetches because invalidateQueries bypasses staleTime.
+  const accountsQuery = useQuery({
+    queryKey: mailKeys.accounts,
+    queryFn: listMailAccounts,
+    staleTime: ACCOUNTS_STALE_TIME_MS,
+  });
   const accounts = accountsQuery.data?.accounts ?? [];
   const totalAccountPages = Math.max(1, Math.ceil(accounts.length / ACCOUNT_PAGE_SIZE));
 
