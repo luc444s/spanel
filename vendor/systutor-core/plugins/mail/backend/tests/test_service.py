@@ -127,7 +127,7 @@ def test_response_contract_unchanged():
     service = make_service(provider)
 
     tenant_response = service.list_accounts(TENANT_A)
-    superadmin_response = service.list_accounts(TENANT_A, is_superadmin=True)
+    superadmin_response = service.list_accounts(TENANT_A, can_read_all=True)
 
     for response in (tenant_response, superadmin_response):
         payload = response.model_dump()
@@ -164,7 +164,7 @@ def test_cache_hit_preserves_tenant_isolation():
 
     second_a = service.list_accounts(TENANT_A)
     second_b = service.list_accounts(TENANT_B)
-    second_super = service.list_accounts(TENANT_A, is_superadmin=True)
+    second_super = service.list_accounts(TENANT_A, can_read_all=True)
 
     assert provider.list_calls == 1
     assert second_a.accounts == first.accounts == ["a@acme.com"]
@@ -314,7 +314,7 @@ def test_provider_error_still_maps_to_503_for_superadmin():
     service = make_service(provider)
 
     with pytest.raises(AppError) as excinfo:
-        service.list_accounts(TENANT_A, is_superadmin=True)
+        service.list_accounts(TENANT_A, can_read_all=True)
 
     assert excinfo.value.status_code == 503
     assert excinfo.value.code == "service_unavailable"

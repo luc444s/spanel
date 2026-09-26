@@ -9,7 +9,6 @@ export type UserProfile = {
   email: string;
   full_name: string;
   is_active: boolean;
-  is_superadmin: boolean;
   category: string | null;
   permissions: string[];
 };

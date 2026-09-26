@@ -43,7 +43,6 @@ def create_user(
         full_name=full_name,
         password_hash=hash_password(password),
         is_active=True,
-        is_superadmin=False,
     )
     db.add(user)
     db.flush()
@@ -194,7 +193,6 @@ def test_permission_checks_apply_to_new_core_apis(
         full_name="No Users Read",
         password_hash=hash_password("Viewer123!"),
         is_active=True,
-        is_superadmin=False,
     )
     db_session.add(limited_user)
     db_session.commit()

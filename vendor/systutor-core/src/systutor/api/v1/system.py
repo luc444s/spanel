@@ -142,7 +142,7 @@ def list_plugin_runtime(
     ),
     tenant_context: TenantContext = Depends(get_current_tenant_context),
 ) -> list[PluginRuntimeRecordResponse]:
-    can_read_full_runtime = tenant_context.is_superadmin or any(
+    can_read_full_runtime = any(
         permission in tenant_context.current_permissions
         for permission in ("core.plugin.runtime.read", "core.plugin.manage")
     )

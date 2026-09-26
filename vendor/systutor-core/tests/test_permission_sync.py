@@ -13,13 +13,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from systutor.api import seed as seed_module
-from systutor.api.seed import ensure_seed, sync_permissions
+from systutor.api.seed import BASE_PERMISSIONS, ensure_seed, sync_permissions
 from systutor.core.errors import AppError
 from systutor.kernel.auth.models import User
 from systutor.kernel.permissions.models import Permission, Role, RolePermission
+from systutor.kernel.tenants.context import build_tenant_context
 from systutor.kernel.tenants.models import Tenant
 
-NEW_PERMISSION = "core.tenants.manage"
+NEW_PERMISSION = "core.testonly.permission"
 
 
 def _role_permission_names(db: Session, role: Role) -> set[str]:
@@ -55,7 +56,8 @@ def test_ensure_seed_creates_on_first_boot(app, db_session: Session):
 
     user = db_session.scalar(select(User))
     assert user is not None
-    assert user.is_superadmin is True
+    # A.SPEC 0004: the admin's power is the role's, not a flag's.
+    assert not hasattr(user, "is_superadmin"), "the flag column is back in the model"
 
 
 # --- THE TRUTH: a new permission reaches the role on the second boot --------
@@ -136,33 +138,81 @@ def test_ensure_seed_is_idempotent(app, db_session: Session):
     assert rows_after == rows_first, "repeated sync must not duplicate role_permission rows"
 
 
-# --- I1 / I7: the superadmin bypass is untouched by this change -------------
+# --- I1 / I7: A.SPEC 0004 inverted the bypass test --------------------------
 
 
-def test_superadmin_bypass_still_present(app, db_session: Session):
-    """I1 + I7: this A.SPEC must not change who is authorized for what.
+def test_superadmin_no_longer_bypasses_permissions(app, db_session: Session):
+    """THE TRUTH of A.SPEC 0004: no flag can shortcut authorization.
 
-    A superadmin with zero role permissions still passes has_permission,
-    because the bypass is untouched. When the debt is paid later, this test
-    is what must change.
+    Before this A.SPEC a superadmin with zero role permissions passed
+    has_permission for anything. Now permissions are the only mechanism.
+    The old test was named test_superadmin_bypass_still_present; this is
+    the same measurement with the opposite expected result.
     """
     from systutor.kernel.tenants.context import TenantContext
 
-    ensure_seed(db_session, app.state.settings, app.state.plugin_runtime.list_results())
-    user = db_session.scalar(select(User))
-    assert user.is_superadmin is True
-
     context = TenantContext(
-        current_tenant_id=user.tenant_id,
-        current_branch_id=user.branch_id,
-        current_user_id=user.id,
+        current_tenant_id="t1",
+        current_branch_id="b1",
+        current_user_id="u1",
         current_permissions=(),
         current_warehouse_ids=None,
-        is_superadmin=True,
     )
-    assert context.has_permission("a.permission.they.do.not.have") is True, (
-        "the bypass changed; this A.SPEC was supposed to leave it alone"
+    assert context.has_permission("a.permission.they.do.not.have") is False, (
+        "A.SPEC 0004 FAIL: a flag is still short-circuiting authorization"
     )
+
+
+def test_has_permission_is_pure_membership(app, db_session: Session):
+    from systutor.kernel.tenants.context import TenantContext
+
+    context = TenantContext(
+        current_tenant_id="t1",
+        current_branch_id="b1",
+        current_user_id="u1",
+        current_permissions=("core.users.read", "core.tenants.read"),
+        current_warehouse_ids=None,
+    )
+    assert context.has_permission("core.users.read") is True
+    assert context.has_permission("core.tenants.read") is True
+    assert context.has_permission("core.users.delete") is False
+
+
+def test_seeded_admin_keeps_full_access(app, db_session: Session):
+    """I1: the guarantee that 0004 is not a lockout.
+
+    The seeded admin holds every permission by role, so removing the flag
+    costs it nothing. If this fails, the deployment must be rolled back.
+    """
+
+    settings = app.state.settings
+    plugins = app.state.plugin_runtime.list_results()
+    ensure_seed(db_session, settings, plugins)
+    user = db_session.scalar(select(User))
+
+    context = build_tenant_context(db_session, user)
+    granted = set(BASE_PERMISSIONS)
+    missing = [p for p in granted if not context.has_permission(p)]
+    assert not missing, f"seeded admin lost access to: {missing}"
+    # The two tenant permissions that replaced require_superadmin (A.SPEC 0004).
+    assert context.has_permission("core.tenants.read") is True
+    assert context.has_permission("core.tenants.manage") is True
+
+
+def test_mail_cross_domain_permission_is_declared(app, db_session: Session):
+    """I3: the cross-domain mail permission replaces the removed flag.
+
+    This test environment loads fake plugins, never the real mail plugin, so
+    the permission cannot be granted here. What must hold is that it is
+    declared, because sync_permissions reads plugin manifests.
+    """
+    import json
+    from pathlib import Path
+
+    manifest = Path(__file__).resolve().parents[1] / "plugins/mail/permissions/mail.json"
+    declared = {p["name"] for p in json.loads(manifest.read_text())["permissions"]}
+    assert "mail.accounts.read.all" in declared
+    assert "mail.accounts.read" in declared
 
 
 def test_ensure_seed_rejects_orphan_admin(app, db_session: Session):
@@ -178,7 +228,6 @@ def test_ensure_seed_rejects_orphan_admin(app, db_session: Session):
         full_name="ghost",
         password_hash="x",
         is_active=True,
-        is_superadmin=True,
     )
     db_session.add(ghost)
     db_session.flush()

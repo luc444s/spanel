@@ -63,7 +63,6 @@ def create_access_token(
     email: str,
     tenant_id: str,
     branch_id: str | None,
-    is_superadmin: bool,
 ) -> str:
     now = datetime.now(UTC)
     payload = {
@@ -71,7 +70,6 @@ def create_access_token(
         "email": email,
         "tenant_id": tenant_id,
         "branch_id": branch_id,
-        "is_superadmin": is_superadmin,
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(minutes=settings.jwt_access_token_ttl_minutes)).timestamp()),
     }

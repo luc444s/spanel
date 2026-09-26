@@ -16,17 +16,12 @@ class TenantContext:
     current_user_id: str
     current_permissions: tuple[str, ...]
     current_warehouse_ids: tuple[str, ...] | None
-    is_superadmin: bool
 
     def has_permission(self, permission_name: str) -> bool:
-        return self.is_superadmin or permission_name in self.current_permissions
+        return permission_name in self.current_permissions
 
     def has_warehouse_access(self, warehouse_id: str) -> bool:
-        return (
-            self.is_superadmin
-            or self.current_warehouse_ids is None
-            or warehouse_id in self.current_warehouse_ids
-        )
+        return self.current_warehouse_ids is None or warehouse_id in self.current_warehouse_ids
 
 
 def build_tenant_context(db: Session, user: User) -> TenantContext:
@@ -38,5 +33,4 @@ def build_tenant_context(db: Session, user: User) -> TenantContext:
         current_user_id=user.id,
         current_permissions=permissions,
         current_warehouse_ids=warehouse_ids or None,
-        is_superadmin=user.is_superadmin,
     )

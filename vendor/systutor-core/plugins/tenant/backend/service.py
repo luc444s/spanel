@@ -96,7 +96,6 @@ def create_user_for_tenant(
         full_name=full_name or email.split("@")[0],
         password_hash=hash_password(password),
         is_active=True,
-        is_superadmin=False,
     )
     db.add(user)
     db.flush()

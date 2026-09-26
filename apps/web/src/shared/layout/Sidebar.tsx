@@ -24,11 +24,9 @@ function ChevronDown({ open }: { open: boolean }) {
 export function Sidebar() {
   const logout = useLogoutAction();
   const permissions = useAuthStore((state) => state.permissions);
-  const isSuperadmin = useAuthStore((state) => state.isSuperadmin);
   const pluginRuntime = usePluginFrontendRuntime();
   const sections = buildShellSidebarSections({
     permissions,
-    isSuperadmin,
     pluginNavigation: pluginRuntime.navigation,
   });
 

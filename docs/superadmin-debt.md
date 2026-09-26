@@ -1,10 +1,29 @@
-# Deuda controlada: el bypass de `is_superadmin`
+# Deuda PAGADA: el bypass de `is_superadmin`
 
-Estado: **abierta, con mecanismo de seguridad instalado** (A.SPEC 0003, commit pendiente).
-Última revisión: 2026-09-26.
+> **Cerrada.** A.SPEC 0004 eliminó el flag completo. Este documento queda como registro
+> histórico de por qué existía, qué lo hacía peligroso, y qué queda como deuda menor.
+> Última revisión: 2026-09-26.
 
-Esto no es documentación. Es el contrato que hace *controlada* una deuda que decidimos no
-pagar ahora, y el criterio exacto para revisitarla.
+**Lo que se eliminó**: la columna `users.is_superadmin`, el claim del JWT, los DTOs,
+los 5 cortocircuitos, `require_superadmin` y sus 7 endpoints, y los 40 usos del frontend.
+El acceso del superadmin ahora es **exclusivamente por `RolePermission`**.
+
+**Lo que queda como deuda menor**:
+
+| Deuda | Por qué no se pagó | Costo |
+|---|---|---|
+La columna `users.is_superadmin` sigue existiendo en las bases desplegadas | `entrypoint.sh` usa `create_all`, que no ejecuta migraciones. Borrarla exige `ALTER TABLE` | Inerte: ya no la lee nadie. Un `ALTER TABLE ... DROP COLUMN` lo resuelve |
+`npm run db` apunta a `scripts/systutor-db.sh`, que no existe | Corrección trivial, sin relación con autorización | El comando falla; hay que hacerlo a mano |
+`pyright` no incluye `plugins/**` | Agregarlo puede exponer errores de tipos nuevos nunca revisados | El plugin mail y tenant no tienen type-check |
+Permisos como strings inline (~15 en `api/v1/core/`) | Fuera del alcance de 0004 | Un typo es un **403 silencioso**. Faltan constantes y un test contra el catálogo |
+`mailadmin/.venv` con dos editables | Verificado que los cores son equivalentes, sin impacto | Tests de kernel necesitan `PYTHONPATH=src` |
+
+---
+
+# Registro histórico
+
+Lo que sigue es el análisis previo al pago. Se conserva porque explica las trampas que
+había y que conviene no reintroducir.
 
 ---
 

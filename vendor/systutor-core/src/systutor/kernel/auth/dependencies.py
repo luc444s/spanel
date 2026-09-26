@@ -59,12 +59,6 @@ def get_current_user(
     token_email = _require_string_claim(payload, "email")
     token_tenant_id = _require_string_claim(payload, "tenant_id")
     token_branch_id = _require_optional_string_claim(payload, "branch_id")
-    token_is_superadmin = payload.get("is_superadmin")
-    if not isinstance(token_is_superadmin, bool):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token is_superadmin",
-        )
 
     user = get_user_by_id(db, subject)
     if user is None or not user.is_active:
@@ -79,11 +73,6 @@ def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token branch mismatch",
         )
-    if user.is_superadmin != token_is_superadmin:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token privilege mismatch",
-        )
     if not validate_user_branch_scope(db, user):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -93,7 +82,6 @@ def get_current_user(
     request.state.current_user_id = user.id
     request.state.current_tenant_id = user.tenant_id
     request.state.current_branch_id = user.branch_id
-    request.state.is_superadmin = user.is_superadmin
     return user
 
 
@@ -171,7 +159,7 @@ def require_any_permission(*permission_names: str) -> Callable[..., User]:
         current_user: User = Depends(get_current_user),
         tenant_context: TenantContext = Depends(get_current_tenant_context),
     ) -> User:
-        if tenant_context.is_superadmin or any(
+        if any(
             tenant_context.has_permission(permission_name) for permission_name in permission_names
         ):
             return current_user

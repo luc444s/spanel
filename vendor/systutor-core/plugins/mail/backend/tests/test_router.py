@@ -36,14 +36,13 @@ def build_client(service: MailService, tenant_id: str = TENANT_A) -> TestClient:
     register_exception_handlers(app)
     app.include_router(mail_router, prefix="/api/v1/plugins/mail")
 
-    user = SimpleNamespace(id="user-1", tenant_id=tenant_id, branch_id=None, is_superadmin=False)
+    user = SimpleNamespace(id="user-1", tenant_id=tenant_id, branch_id=None)
     context = TenantContext(
         current_tenant_id=tenant_id,
         current_branch_id=None,
         current_user_id="user-1",
         current_permissions=("mail.accounts.read",),
         current_warehouse_ids=None,
-        is_superadmin=False,
     )
 
     def fake_session() -> Any:
@@ -57,7 +56,6 @@ def build_client(service: MailService, tenant_id: str = TENANT_A) -> TestClient:
     @app.middleware("http")
     async def set_request_state(request: Request, call_next: Any) -> Any:
         request.state.current_tenant_id = tenant_id
-        request.state.is_superadmin = False
         return await call_next(request)
 
     return TestClient(app)

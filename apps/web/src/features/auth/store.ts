@@ -34,7 +34,6 @@ type AuthState = {
   enabledPlugins: PluginRuntimeRecord[];
   pluginRuntimeRecords: PluginRuntimeRecord[];
   isRuntimeBootstrapped: boolean;
-  isSuperadmin: boolean;
   setSession: (token: string) => void;
   hydrateUserContext: (user: UserProfile | null) => void;
   setPluginRuntime: (records: PluginRuntimeRecord[]) => void;
@@ -50,7 +49,6 @@ const authStore = createStore<AuthState>((set) => ({
   enabledPlugins: [],
   pluginRuntimeRecords: [],
   isRuntimeBootstrapped: false,
-  isSuperadmin: false,
   setSession: (token) => {
     if (typeof window !== "undefined") {
       window.localStorage.setItem(TOKEN_KEY, token);
@@ -80,7 +78,6 @@ const authStore = createStore<AuthState>((set) => ({
             }
           : null,
         permissions: user?.permissions ?? [],
-        isSuperadmin: user?.is_superadmin ?? false,
       };
     });
   },
@@ -120,7 +117,6 @@ const initialAuthContextState = {
   enabledPlugins: [],
   pluginRuntimeRecords: [],
   isRuntimeBootstrapped: false,
-  isSuperadmin: false,
 } satisfies Omit<AuthState, "token" | "setSession" | "hydrateUserContext" | "setPluginRuntime" | "logout">;
 
 function isSameUserProfile(left: UserProfile | null, right: UserProfile | null) {
@@ -141,7 +137,6 @@ function isSameUserProfile(left: UserProfile | null, right: UserProfile | null) 
     left.email === right.email &&
     left.full_name === right.full_name &&
     left.is_active === right.is_active &&
-    left.is_superadmin === right.is_superadmin &&
     left.permissions.length === right.permissions.length &&
     left.permissions.every((permission, index) => permission === right.permissions[index])
   );

@@ -118,8 +118,8 @@ class MailService:
         self._cache_write_raw(accounts)
         return accounts
 
-    def list_accounts(self, tenant_id: str, is_superadmin: bool = False) -> MailAccountsResponse:
-        if is_superadmin:
+    def list_accounts(self, tenant_id: str, can_read_all: bool = False) -> MailAccountsResponse:
+        if can_read_all:
             return MailAccountsResponse(domain="all", accounts=self._raw_accounts())
 
         domain = self._get_tenant_domain(tenant_id)

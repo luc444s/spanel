@@ -39,6 +39,8 @@ BASE_PERMISSIONS = [
     "core.documents.manage",
     "core.signatures.read",
     "core.signatures.manage",
+    "core.tenants.read",
+    "core.tenants.manage",
 ]
 
 
@@ -130,7 +132,6 @@ def _get_or_create_admin_user(
         user.tenant_id = tenant.id
         user.full_name = settings.seed_admin_full_name
         user.is_active = True
-        user.is_superadmin = True
         if not user.password_hash:
             user.password_hash = hash_password(settings.seed_admin_password)
         db.add(user)
@@ -145,7 +146,6 @@ def _get_or_create_admin_user(
         full_name=settings.seed_admin_full_name,
         password_hash=hash_password(settings.seed_admin_password),
         is_active=True,
-        is_superadmin=True,
     )
     db.add(user)
     db.flush()

@@ -22,7 +22,6 @@ type FrontendRuntimeInput = {
   records: PluginRuntimeRecord[];
   registrations: PluginFrontendRegistration[];
   userPermissions: string[];
-  isSuperadmin: boolean;
 };
 
 const EMPTY_PERMISSIONS: string[] = [];
@@ -42,7 +41,6 @@ export function buildFrontendPluginRuntime({
   records,
   registrations,
   userPermissions,
-  isSuperadmin,
 }: FrontendRuntimeInput) {
   const recordsById = new Map(records.map((record) => [record.plugin_id, record]));
 
@@ -58,21 +56,21 @@ export function buildFrontendPluginRuntime({
     }
 
     for (const route of registration.routes) {
-      if (!hasRequiredPermissions(userPermissions, route.requiredPermissions, isSuperadmin)) {
+      if (!hasRequiredPermissions(userPermissions, route.requiredPermissions)) {
         continue;
       }
       routes.push({ ...route, pluginId: registration.pluginId });
     }
 
     for (const navEntry of registration.navigation) {
-      if (!hasRequiredPermissions(userPermissions, navEntry.requiredPermissions, isSuperadmin)) {
+      if (!hasRequiredPermissions(userPermissions, navEntry.requiredPermissions)) {
         continue;
       }
       navigation.push({ ...navEntry, pluginId: registration.pluginId });
     }
 
     for (const widget of registration.widgets) {
-      if (!hasRequiredPermissions(userPermissions, widget.requiredPermissions, isSuperadmin)) {
+      if (!hasRequiredPermissions(userPermissions, widget.requiredPermissions)) {
         continue;
       }
       widgets.push({ ...widget, pluginId: registration.pluginId });
@@ -89,7 +87,6 @@ export function buildFrontendPluginRuntime({
 
 export function usePluginFrontendRuntime() {
   const userPermissions = useAuthStore((state) => state.permissions ?? EMPTY_PERMISSIONS);
-  const isSuperadmin = useAuthStore((state) => state.isSuperadmin);
   const pluginRuntimeRecords = useAuthStore((state) => state.pluginRuntimeRecords);
   const isRuntimeBootstrapped = useAuthStore((state) => state.isRuntimeBootstrapped);
   const registrations = listFrontendPluginRegistrations();
@@ -97,8 +94,7 @@ export function usePluginFrontendRuntime() {
     records: pluginRuntimeRecords,
     registrations,
     userPermissions,
-    isSuperadmin,
-  });
+    });
 
   return {
     isLoading: !isRuntimeBootstrapped,

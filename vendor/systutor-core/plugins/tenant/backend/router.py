@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
-
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from plugins.tenant.backend.schemas import (
@@ -27,32 +25,17 @@ from plugins.tenant.backend.service import (
     update_tenant_domain,
 )
 from systutor.api.deps import get_db_session
-from systutor.kernel.auth.dependencies import get_current_user
+from systutor.kernel.auth.dependencies import require_permission
 from systutor.kernel.auth.models import User
 from systutor.kernel.auth.service import get_user_by_id
 
 router = APIRouter(prefix="/tenants", tags=["tenants"])
 
 
-def require_superadmin() -> Callable[..., User]:
-    def dependency(
-        request: Request,
-        current_user: User = Depends(get_current_user),
-    ) -> User:
-        if not current_user.is_superadmin:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Superadmin access required",
-            )
-        return current_user
-
-    return dependency
-
-
 @router.get("", response_model=TenantListResponse)
 def list_all_tenants(
     db: Session = Depends(get_db_session),
-    _current_user: User = Depends(require_superadmin()),
+    _current_user: User = Depends(require_permission("core.tenants.read")),
 ) -> TenantListResponse:
     tenants = list_tenants(db)
     return TenantListResponse(
@@ -73,7 +56,7 @@ def list_all_tenants(
 def create_new_tenant(
     body: CreateTenantRequest,
     db: Session = Depends(get_db_session),
-    _current_user: User = Depends(require_superadmin()),
+    _current_user: User = Depends(require_permission("core.tenants.manage")),
 ) -> TenantResponse:
     tenant = create_tenant(db, name=body.name, slug=body.slug, domain=body.domain)
     create_user_for_tenant(
@@ -98,7 +81,7 @@ def update_tenant(
     tenant_id: str,
     body: UpdateTenantDomainRequest,
     db: Session = Depends(get_db_session),
-    _current_user: User = Depends(require_superadmin()),
+    _current_user: User = Depends(require_permission("core.tenants.manage")),
 ) -> TenantResponse:
     tenant = get_tenant_by_id(db, tenant_id)
     if tenant is None:
@@ -118,7 +101,7 @@ def update_tenant(
 def list_tenant_users(
     tenant_id: str,
     db: Session = Depends(get_db_session),
-    _current_user: User = Depends(require_superadmin()),
+    _current_user: User = Depends(require_permission("core.tenants.read")),
 ) -> TenantUsersResponse:
     tenant = get_tenant_by_id(db, tenant_id)
     if tenant is None:
@@ -143,7 +126,7 @@ def create_user_in_tenant(
     tenant_id: str,
     body: CreateUserInTenantRequest,
     db: Session = Depends(get_db_session),
-    _current_user: User = Depends(require_superadmin()),
+    _current_user: User = Depends(require_permission("core.tenants.manage")),
 ) -> TenantUserResponse:
     tenant = get_tenant_by_id(db, tenant_id)
     if tenant is None:
@@ -170,7 +153,7 @@ def assign_existing_user(
     tenant_id: str,
     body: AssignUserRequest,
     db: Session = Depends(get_db_session),
-    _current_user: User = Depends(require_superadmin()),
+    _current_user: User = Depends(require_permission("core.tenants.manage")),
 ) -> TenantUserResponse:
     tenant = get_tenant_by_id(db, tenant_id)
     if tenant is None:
@@ -198,7 +181,7 @@ def reassign_user(
     user_id: str,
     body: ReassignUserRequest,
     db: Session = Depends(get_db_session),
-    _current_user: User = Depends(require_superadmin()),
+    _current_user: User = Depends(require_permission("core.tenants.manage")),
 ) -> TenantUserResponse:
     tenant = get_tenant_by_id(db, tenant_id)
     if tenant is None:

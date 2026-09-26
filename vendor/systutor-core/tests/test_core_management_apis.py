@@ -66,7 +66,6 @@ def create_user(
         full_name=full_name,
         password_hash=hash_password(password),
         is_active=True,
-        is_superadmin=False,
     )
     db.add(user)
     db.flush()

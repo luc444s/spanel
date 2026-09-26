@@ -232,7 +232,6 @@ def _create_limited_user(app, seeded_demo: dict[str, str]) -> tuple[str, str]:
             full_name="Limited Plugin User",
             password_hash=hash_password(password),
             is_active=True,
-            is_superadmin=False,
         )
         db.add(user)
         db.commit()

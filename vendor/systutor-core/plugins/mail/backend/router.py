@@ -15,8 +15,9 @@ from plugins.mail.backend.schemas import (
 from plugins.mail.backend.service import MailService
 from plugins.mail.backend.settings import get_mail_settings
 from systutor.api.deps import get_db_session
-from systutor.kernel.auth.dependencies import require_permission
+from systutor.kernel.auth.dependencies import get_current_tenant_context, require_permission
 from systutor.kernel.auth.models import User
+from systutor.kernel.tenants.context import TenantContext
 
 logger = logging.getLogger(__name__)
 
@@ -39,12 +40,13 @@ def _get_mail_service(db: Session = Depends(get_db_session)) -> MailService:
 @router.get("/accounts", response_model=MailAccountsResponse)
 def list_accounts(
     request: Request,
-    current_user: User = Depends(require_permission("mail.accounts.read")),
+    tenant_context: TenantContext = Depends(get_current_tenant_context),
+    _current_user: User = Depends(require_permission("mail.accounts.read")),
     mail_service: MailService = Depends(_get_mail_service),
 ) -> MailAccountsResponse:
     tenant_id = request.state.current_tenant_id
-    is_superadmin = getattr(request.state, "is_superadmin", False)
-    return mail_service.list_accounts(tenant_id, is_superadmin=is_superadmin)
+    can_read_all = tenant_context.has_permission("mail.accounts.read.all")
+    return mail_service.list_accounts(tenant_id, can_read_all=can_read_all)
 
 
 @router.post("/accounts", response_model=MailMessageResponse, status_code=201)

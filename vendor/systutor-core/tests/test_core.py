@@ -86,7 +86,6 @@ def test_permission_validation(client, db_session: Session, seeded_demo: dict[st
         full_name="Viewer",
         password_hash=hash_password("Viewer123!"),
         is_active=True,
-        is_superadmin=False,
     )
     db_session.add(limited_user)
     db_session.flush()

@@ -63,7 +63,6 @@ def create_user(
         full_name=full_name,
         password_hash=hash_password(password),
         is_active=is_active,
-        is_superadmin=False,
     )
     db.add(user)
     db.flush()
@@ -107,7 +106,6 @@ def build_token(
         email=user.email,
         tenant_id=tenant_id or user.tenant_id,
         branch_id=user.branch_id if branch_id is None else branch_id,
-        is_superadmin=user.is_superadmin,
     )
 
 
