@@ -170,19 +170,23 @@ class MailService:
         user_id: str,
         email: str,
         password: str,
+        can_manage_all: bool = False,
     ) -> MailMessageResponse:
-        domain = self._get_tenant_domain(tenant_id)
-
         if "@" not in email:
             raise AppError("Invalid email format", status_code=422, code="invalid_email")
 
-        _, email_domain = email.rsplit("@", 1)
-        if email_domain.lower() != domain.lower():
-            raise AppError(
-                "Email domain does not match tenant domain",
-                status_code=403,
-                code="domain_mismatch",
-            )
+        # `mail.accounts.all` already shows accounts of every domain in
+        # list_accounts, so it must be able to change them too. Without this the
+        # UI offers an account that the API always rejects with domain_mismatch.
+        if not can_manage_all:
+            domain = self._get_tenant_domain(tenant_id)
+            _, email_domain = email.rsplit("@", 1)
+            if email_domain.lower() != domain.lower():
+                raise AppError(
+                    "Email domain does not match tenant domain",
+                    status_code=403,
+                    code="domain_mismatch",
+                )
 
         try:
             self._provider.change_password(email, password)

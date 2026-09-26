@@ -71,6 +71,7 @@ def change_password(
     request: Request,
     email: str,
     body: ChangePasswordRequest,
+    tenant_context: TenantContext = Depends(get_current_tenant_context),
     current_user: User = Depends(require_permission("mail.account.password")),
     mail_service: MailService = Depends(_get_mail_service),
 ) -> MailMessageResponse:
@@ -80,5 +81,6 @@ def change_password(
         user_id=current_user.id,
         email=email,
         password=body.password,
+        can_manage_all=tenant_context.has_permission("mail.accounts.all"),
     )
     return result

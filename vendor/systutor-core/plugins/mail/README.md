@@ -11,7 +11,9 @@ Minimalist mail account management plugin for SYSTUTOR Core.
 ## Architecture
 
 - **Provider**: Docker Mailserver via SSH (subprocess + system ssh)
-- **Isolation**: Multi-tenant by domain filtering
+- **Isolation**: Multi-tenant by domain filtering. Holders of `mail.accounts.all`
+  read and change accounts of every domain; everyone else is limited to the
+  domain of their own tenant.
 - **Cache**: the raw account list is cached in the kernel `CacheBackend` (Redis)
   with a TTL, shared by all tenants; filtering by domain happens after the read
 - **Security**: Passwords never logged, never in responses
@@ -42,6 +44,8 @@ straight to the mail server. This is the kill switch for production.
 
 ## Permissions
 
-- `mail.accounts.read` — View accounts
+- `mail.accounts.read` — View accounts of the tenant domain
+- `mail.accounts.all` — View accounts of every domain (implies domain-wide scope
+  for password changes too)
 - `mail.accounts.create` — Create accounts
-- `mail.accounts.password.update` — Change passwords
+- `mail.account.password` — Change passwords

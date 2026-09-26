@@ -272,6 +272,47 @@ def test_change_password_does_not_invalidate_cache():
     assert provider.list_calls == 1
 
 
+# --- change_password domain scope matches what list_accounts exposes ---------
+
+
+def test_change_password_other_domain_is_403_without_manage_all():
+    provider = CountingMailProvider(["a@acme.com", "t2@other.com"])
+    service = make_service(provider)
+
+    with pytest.raises(AppError) as excinfo:
+        service.change_password(TENANT_A, "user-1", "t2@other.com", "newpassword123")
+
+    assert excinfo.value.status_code == 403
+    assert excinfo.value.code == "domain_mismatch"
+    assert provider.password_calls == 0
+
+
+def test_change_password_other_domain_allowed_with_manage_all():
+    provider = CountingMailProvider(["a@acme.com", "t2@other.com"])
+    service = make_service(provider)
+
+    result = service.change_password(
+        TENANT_A, "user-1", "t2@other.com", "newpassword123", can_manage_all=True
+    )
+
+    assert result.email == "t2@other.com"
+    assert provider.password_calls == 1
+
+
+def test_change_password_still_validates_email_format_with_manage_all():
+    provider = CountingMailProvider(["a@acme.com"])
+    service = make_service(provider)
+
+    with pytest.raises(AppError) as excinfo:
+        service.change_password(
+            TENANT_A, "user-1", "not-an-email", "newpassword123", can_manage_all=True
+        )
+
+    assert excinfo.value.status_code == 422
+    assert excinfo.value.code == "invalid_email"
+    assert provider.password_calls == 0
+
+
 # --- I4: conflicts are not swallowed ----------------------------------------
 
 
