@@ -16,7 +16,7 @@ import {
 } from "../api";
 import { Button } from "@systutor/shell/ui/button";
 import { Dialog } from "@systutor/shell/ui/dialog";
-import { Input } from "@systutor/shell/ui/input";
+import { Input, newCredentialProps, noAutofillProps } from "@systutor/shell/ui/input";
 import { Alert } from "@systutor/shell/ui/alert";
 
 export default function TenantsPage() {
@@ -186,11 +186,11 @@ export default function TenantsPage() {
           </div>
           <label className="block space-y-1 text-sm text-foreground">
             <span>Email</span>
-            <Input type="email" value={createUserEmail} onChange={(e) => setCreateUserEmail(e.target.value)} placeholder="admin@empresa.com" />
+            <Input type="email" value={createUserEmail} onChange={(e) => setCreateUserEmail(e.target.value)} placeholder="admin@empresa.com" {...noAutofillProps} />
           </label>
           <label className="block space-y-1 text-sm text-foreground">
             <span>Contraseña</span>
-            <Input type="password" value={createUserPassword} onChange={(e) => setCreateUserPassword(e.target.value)} placeholder="Mínimo 8 caracteres" />
+            <Input type="password" value={createUserPassword} onChange={(e) => setCreateUserPassword(e.target.value)} placeholder="Mínimo 8 caracteres" {...newCredentialProps} />
           </label>
           <label className="block space-y-1 text-sm text-foreground">
             <span>Nombre completo (opcional)</span>
@@ -273,11 +273,11 @@ export default function TenantsPage() {
             <p className="text-xs font-semibold uppercase text-muted-foreground">Crear usuario</p>
             <label className="block space-y-1 text-sm text-foreground">
               <span>Email</span>
-              <Input type="email" value={newUserEmail} onChange={(e) => setNewUserEmail(e.target.value)} placeholder="usuario@empresa.com" />
+              <Input type="email" value={newUserEmail} onChange={(e) => setNewUserEmail(e.target.value)} placeholder="usuario@empresa.com" {...noAutofillProps} />
             </label>
             <label className="block space-y-1 text-sm text-foreground">
               <span>Contraseña</span>
-              <Input type="password" value={newUserPassword} onChange={(e) => setNewUserPassword(e.target.value)} placeholder="Mínimo 8 caracteres" />
+              <Input type="password" value={newUserPassword} onChange={(e) => setNewUserPassword(e.target.value)} placeholder="Mínimo 8 caracteres" {...newCredentialProps} />
             </label>
             <label className="block space-y-1 text-sm text-foreground">
               <span>Nombre completo (opcional)</span>

@@ -22,7 +22,7 @@ import { Button } from "@systutor/shell/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@systutor/shell/ui/card";
 import { DataTable } from "@systutor/shell/ui/data-table";
 import { Dialog } from "@systutor/shell/ui/dialog";
-import { Input } from "@systutor/shell/ui/input";
+import { Input, newCredentialProps, noAutofillProps } from "@systutor/shell/ui/input";
 import { Select } from "@systutor/shell/ui/select";
 
 type UserFormState = {
@@ -300,7 +300,7 @@ export function UsersPageContent({
 
           <label className="block space-y-2 text-sm text-foreground">
             <span>Correo</span>
-            <Input type="email" value={formState.email} onChange={(event) => onFieldChange({ email: event.target.value })} />
+            <Input type="email" value={formState.email} onChange={(event) => onFieldChange({ email: event.target.value })} {...noAutofillProps} />
           </label>
 
           <label className="block space-y-2 text-sm text-foreground">
@@ -309,6 +309,7 @@ export function UsersPageContent({
               type="password"
               value={formState.password}
               onChange={(event) => onFieldChange({ password: event.target.value })}
+              {...newCredentialProps}
             />
           </label>
 

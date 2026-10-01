@@ -7,7 +7,7 @@ import { Button } from "../ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Checkbox } from "../ui/checkbox";
 import { Dialog } from "../ui/dialog";
-import { Input } from "../ui/input";
+import { Input, newCredentialProps, noAutofillProps } from "../ui/input";
 import { Select } from "../ui/select";
 
 type UserForm = {
@@ -245,6 +245,7 @@ export function UsersView() {
                 type="email"
                 value={form.email}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
+                {...noAutofillProps}
               />
             </label>
           </div>
@@ -254,7 +255,7 @@ export function UsersView() {
               type="password"
               value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
-              autoComplete="new-password"
+              {...newCredentialProps}
             />
           </label>
           <label className="block space-y-2 text-sm text-foreground">

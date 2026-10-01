@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { changeMailAccountPassword, createMailAccount, listMailAccounts, mailKeys } from "../api";
 import { Button } from "@systutor/shell/ui/button";
 import { Dialog } from "@systutor/shell/ui/dialog";
-import { Input } from "@systutor/shell/ui/input";
+import { Input, newCredentialProps, noAutofillProps } from "@systutor/shell/ui/input";
 import { Alert } from "@systutor/shell/ui/alert";
 import { Pagination } from "@systutor/shell/ui/pagination";
 import { toast } from "@systutor/shell/ui/toast";
@@ -180,17 +180,17 @@ export default function MailAccountsPage() {
           <label className="block space-y-1 text-sm text-foreground">
             <span>Usuario</span>
             <div className="flex items-center gap-0">
-              <Input type="text" value={createUser} onChange={(e) => setCreateUser(e.target.value)} placeholder="ventas" autoFocus className="rounded-r-none" />
+              <Input type="text" value={createUser} onChange={(e) => setCreateUser(e.target.value)} placeholder="ventas" autoFocus className="rounded-r-none" {...noAutofillProps} />
               <span className="inline-flex items-center rounded-r-md border border-l-0 border-input bg-muted px-2 text-sm text-muted-foreground">@{domain}</span>
             </div>
           </label>
           <label className="block space-y-1 text-sm text-foreground">
             <span>Contraseña</span>
-            <Input type="password" value={createPass} onChange={(e) => setCreatePass(e.target.value)} placeholder="Mínimo 8 caracteres" />
+            <Input type="password" value={createPass} onChange={(e) => setCreatePass(e.target.value)} placeholder="Mínimo 8 caracteres" {...newCredentialProps} />
           </label>
           <label className="block space-y-1 text-sm text-foreground">
             <span>Confirmar contraseña</span>
-            <Input type="password" value={createConfirm} onChange={(e) => setCreateConfirm(e.target.value)} placeholder="Repetir contraseña" />
+            <Input type="password" value={createConfirm} onChange={(e) => setCreateConfirm(e.target.value)} placeholder="Repetir contraseña" {...newCredentialProps} />
           </label>
           {createError && <Alert title="Error">{createError}</Alert>}
           <div className="flex justify-end gap-2">
@@ -246,11 +246,11 @@ export default function MailAccountsPage() {
         <form className="space-y-3" onSubmit={handleSubmitPassword}>
           <label className="block space-y-1 text-sm text-foreground">
             <span>Nueva contraseña</span>
-            <Input type="password" value={newPass} onChange={(e) => setNewPass(e.target.value)} placeholder="Mínimo 8 caracteres" autoFocus />
+            <Input type="password" value={newPass} onChange={(e) => setNewPass(e.target.value)} placeholder="Mínimo 8 caracteres" {...newCredentialProps} />
           </label>
           <label className="block space-y-1 text-sm text-foreground">
             <span>Confirmar contraseña</span>
-            <Input type="password" value={confirmPass} onChange={(e) => setConfirmPass(e.target.value)} placeholder="Repetir contraseña" />
+            <Input type="password" value={confirmPass} onChange={(e) => setConfirmPass(e.target.value)} placeholder="Repetir contraseña" {...newCredentialProps} />
           </label>
           {error && <Alert title="Error">{error}</Alert>}
           <div className="flex justify-end gap-2">
