@@ -337,4 +337,13 @@ npm run build
 
 ## License
 
-Propietario - Todos los derechos reservados.
+Spanel se distribuye bajo la **GNU Affero General Public License v3.0** (AGPL-3.0).
+
+Copyright (C) 2026 luc444s
+
+Este programa es software libre: puede redistribuirlo y/o modificarlo bajo los
+términos de la GNU Affero General Public License publicada por la Free Software
+Foundation, ya sea la versión 3 de la Licencia o (a su elección) cualquier
+versión posterior.
+
+Ver el texto completo en [LICENSE](./LICENSE).

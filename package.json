@@ -1,6 +1,7 @@
 {
   "name": "mailadmin",
   "private": true,
+  "license": "AGPL-3.0-or-later",
   "scripts": {
     "frontend": "cd apps/web && node node_modules/vite/bin/vite.js",
     "services": ". .venv/bin/activate && cd vendor/systutor-core && PYTHONPATH=src uvicorn app.main:app --reload --host 0.0.0.0 --port ${PORT:-8000}",
