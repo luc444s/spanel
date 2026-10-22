@@ -1,0 +1,16 @@
+{
+  "permissions": [
+    {
+      "name": "hosting.sites.read",
+      "description": "List and view the WordPress sites owned by the tenant"
+    },
+    {
+      "name": "hosting.users.read",
+      "description": "List the WordPress users of an owned site"
+    },
+    {
+      "name": "hosting.users.password",
+      "description": "Reset the password of one WordPress user of an owned site"
+    }
+  ]
+}

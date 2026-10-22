@@ -1,0 +1,21 @@
+{
+  "id": "hosting",
+  "name": "WordPress Hosting",
+  "version": "0.1.0",
+  "api_version": "1",
+  "requires": [],
+  "backend_entrypoint": "backend.register:register",
+  "frontend_entrypoint": "frontend/register.ts",
+  "permissions": [
+    "hosting.sites.read",
+    "hosting.users.read",
+    "hosting.users.password"
+  ],
+  "tenant_admin_permissions": [
+    "hosting.sites.read",
+    "hosting.users.read",
+    "hosting.users.password"
+  ],
+  "events": [],
+  "description": "WordPress sites, users and one-password reset for the current tenant"
+}
