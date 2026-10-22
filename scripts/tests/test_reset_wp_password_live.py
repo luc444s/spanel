@@ -46,7 +46,8 @@ import reset_wp_password as reset
 LIVE = os.environ.get("SPANEL_LIVE_TESTS") == "1"
 SITIO = os.environ.get("SPANEL_LIVE_SITE", "spanel-demowp-wp")
 RE_SITIO_PERMITIDO = re.compile(r"^spanel-(demowp|lab)-")
-LOGINS_DESCARTABLES = ("lab_a1", "lab_a2", "lab_dup")
+LOGINS_DESCARTABLES = ("lab_a1", "lab_a2", "lab_dup", "lab_norol")
+CON_ROL = ("lab_a1", "lab_a2", "lab_dup")
 PASSWORD_NUEVA = "lab-nueva-0010"
 
 # El PHP que verifica una contraseña contra un hash que ya esta en la base.
@@ -197,6 +198,9 @@ def _crear_descartables(sitio: Sitio) -> None:
         ("lab_a2", "lab_a2@example.invalid"),
         ("lab_dup", "lab_dup_uno@example.invalid"),
         ("lab_dup", "lab_dup_dos@example.invalid"),
+        # Sin fila de capabilities: es legal y el listado tiene que mostrarlo
+        # con rol vacio, no esconderlo.
+        ("lab_norol", "lab_norol@example.invalid"),
     )
     sentencias = [
         f"INSERT INTO {sitio.prefijo}users "
@@ -210,7 +214,7 @@ def _crear_descartables(sitio: Sitio) -> None:
     # al panel. El rol NO vive en wp_users, vive en wp_usermeta, con el prefijo
     # repetido en la clave del metadato. Es el mismo detalle que A.SPEC 0008
     # necesita, y por eso el test lo escribe de verdad en vez de suponerlo.
-    logins = ",".join(f"'{login}'" for login, _ in valores)
+    logins = ",".join(f"'{login}'" for login in CON_ROL)
     _sql(
         sitio,
         f"INSERT INTO {sitio.prefijo}usermeta (user_id, meta_key, meta_value) "
@@ -498,6 +502,120 @@ def test_id_y_usuario_juntos_fallan(sitio: Sitio) -> None:
 
 
 # ---------------------------------------------------------------------------
+# El listado. Lee las mismas filas reales que el reset, y no escribe.
+# ---------------------------------------------------------------------------
+
+
+def _listar(sitio: Sitio) -> tuple[subprocess.CompletedProcess[str], list[dict[str, str]]]:
+    """Corre `--listar` y devuelve las filas ya parseadas de la salida real."""
+    resultado = _correr_el_script(sitio, "--listar")
+    filas: list[dict[str, str]] = []
+    for linea in resultado.stdout.splitlines():
+        partes = linea.split()
+        if not partes or not partes[0].isdigit():
+            continue  # la cabecera
+        assert len(partes) == 5, f"linea del listado con campos raros: {linea!r}"
+        filas.append(
+            {
+                "id": partes[0],
+                "login": partes[1],
+                "email": partes[2],
+                "estado": partes[3],
+                "rol": partes[4],
+            }
+        )
+    return resultado, filas
+
+
+def test_listar_muestra_todos_los_usuarios(sitio: Sitio) -> None:
+    resultado, filas = _listar(sitio)
+
+    assert resultado.returncode == 0, resultado.stderr
+    total = int(_sql(sitio, f"SELECT COUNT(*) FROM {sitio.prefijo}users")[0][0])
+    assert len(filas) == total, "el listado no muestra una fila por usuario"
+    logins = {fila["login"] for fila in filas}
+    assert set(LOGINS_DESCARTABLES) <= logins, "falta un usuario de prueba"
+    assert "admin" in logins, "el admin real desaparecio del listado"
+
+
+def test_listar_muestra_los_dos_lab_dup_con_ids_distintos(sitio: Sitio) -> None:
+    _, filas = _listar(sitio)
+
+    duplicados = [fila for fila in filas if fila["login"] == "lab_dup"]
+    assert len(duplicados) == 2, "el listado escondio o mezclo las filas duplicadas"
+    assert len({fila["id"] for fila in duplicados}) == 2, "los dos lab_dup salen con el mismo ID"
+
+
+def test_listar_muestra_el_rol_administrator(sitio: Sitio) -> None:
+    _, filas = _listar(sitio)
+
+    roles = {fila["login"]: fila["rol"] for fila in filas}
+    assert "administrator" in roles["lab_a1"]
+    assert "administrator" in roles["lab_a2"]
+
+
+def test_listar_muestra_rol_vacio_para_el_usuario_sin_capabilities(sitio: Sitio) -> None:
+    _, filas = _listar(sitio)
+
+    roles = {fila["login"]: fila["rol"] for fila in filas}
+    assert roles["lab_norol"] == "-", "un usuario sin rol tiene que salir con '-', no desaparecer"
+
+
+def test_listar_no_imprime_hashes(sitio: Sitio) -> None:
+    resultado, _ = _listar(sitio)
+
+    assert "$wp$" not in resultado.stdout
+    assert "$P$" not in resultado.stdout
+    assert "user_pass" not in resultado.stdout
+
+    ids = [int(fila[0]) for fila in _sql(sitio, f"SELECT ID FROM {sitio.prefijo}users")]
+    antes = _hashes(sitio, ids)
+    _listar(sitio)
+    assert _hashes(sitio, ids) == antes, "listar cambio algun hash"
+
+
+def test_listar_es_excluyente_con_los_flags_de_escritura(sitio: Sitio) -> None:
+    ids = [int(fila[0]) for fila in _sql(sitio, f"SELECT ID FROM {sitio.prefijo}users")]
+    antes = _hashes(sitio, ids)
+
+    for extra in (["--password", "x"], ["--usuario", "admin"], ["--id", "1"]):
+        resultado = _correr_el_script(sitio, "--listar", *extra)
+        assert resultado.returncode != 0, f"--listar acepto {extra} en silencio"
+
+    assert _hashes(sitio, ids) == antes, "el rechazo de flags escribio en la base"
+
+
+def test_el_id_del_listado_sirve_para_resetear(sitio: Sitio) -> None:
+    """El circulo completo: el ID sale del listado y entra en el reset."""
+    _, filas = _listar(sitio)
+    duplicados = [fila for fila in filas if fila["login"] == "lab_dup"]
+    elegido = int(duplicados[0]["id"])
+    otro = int(duplicados[1]["id"])
+    antes = _hashes(sitio, [elegido, otro])
+
+    resultado = _correr_el_script(sitio, "--id", str(elegido), "--password", PASSWORD_NUEVA)
+
+    assert resultado.returncode == 0, resultado.stderr
+    despues = _hashes(sitio, [elegido, otro])
+    assert despues[elegido] != antes[elegido], "el ID del listado no sirvio para resetear"
+    assert despues[otro] == antes[otro], "resetear por el ID del listado toco la otra fila"
+
+
+def test_listar_ordena_por_id(sitio: Sitio) -> None:
+    _, filas = _listar(sitio)
+
+    ids = [int(fila["id"]) for fila in filas]
+    assert ids == sorted(ids), "el listado no esta ordenado por ID"
+
+
+def test_listar_no_cambia_el_reset(sitio: Sitio) -> None:
+    resultado = _correr_el_script(sitio, "--dry-run")
+
+    assert resultado.returncode == 0, resultado.stderr
+    assert "WordPress: admin" in resultado.stdout, "el reset dejo de apuntar a admin"
+
+
+# ---------------------------------------------------------------------------
 # Chequeo estatico y limpieza.
 # ---------------------------------------------------------------------------
 
@@ -515,6 +633,17 @@ def test_el_update_va_por_id() -> None:
     for linea in lecturas:
         assert "WHERE ID=" in linea, "la lectura del hash no va por ID"
         assert "user_login" not in linea, "la lectura del hash sigue filtrando por login"
+
+
+def test_listar_solo_lectura_en_el_codigo() -> None:
+    """La funcion del listado no puede nombrar un verbo de escritura."""
+    texto = RUTA_DEL_SCRIPT.read_text(encoding="utf-8")
+    inicio = texto.index("def usuarios_con_rol(")
+    fin = texto.index("def imprimir_usuarios(")
+    cuerpo = texto[inicio:fin].upper()
+
+    for verbo in ("INSERT ", "UPDATE ", "DELETE ", "REPLACE "):
+        assert verbo not in cuerpo, f"la consulta del listado contiene {verbo.strip()}"
 
 
 def test_limpieza_deja_el_sitio_como_estaba(sitio: Sitio) -> None:

@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
-"""Cambiar la contraseña de un usuario de un WordPress que YA está corriendo.
+"""Cambiar la contraseña de un usuario de un WordPress, o listar sus usuarios.
 
-Es la A.SPEC 0008, y es la respuesta a una pregunta concreta: si el sistema no
-guarda las contraseñas, ¿cómo entra un usuario que perdió la suya? Regenerando.
+Dos operaciones sobre un sitio que YA está corriendo:
+
+    --listar    muestra ID, login, email, estado y rol, y no escribe nada.
+    (default)   cambia la contraseña de un usuario, sin apagar nada.
+
+El reset es la respuesta a una pregunta concreta: si el sistema no guarda las
+contraseñas, ¿cómo entra un usuario que perdió la suya? Regenerando.
 
 Y se regenera SIN APAGAR NADA. La idea tiene dos pasos:
 
@@ -28,6 +33,7 @@ WordPress declara su propia conexion a la base en sus variables de entorno
 esta en Docker.
 
 Uso:
+    python3 scripts/reset_wp_password.py spanel-pwtest-wp --listar
     python3 scripts/reset_wp_password.py spanel-pwtest-wp
     python3 scripts/reset_wp_password.py spanel-pwtest-wp --password 'la-nueva'
     python3 scripts/reset_wp_password.py spanel-pwtest-wp --password 'la-nueva' --dry-run
@@ -406,6 +412,82 @@ def resolver_objetivo(
     return filas[0]
 
 
+# WordPress guarda los roles serializados por PHP dentro de usermeta:
+#     a:1:{s:13:"administrator";b:1;}
+# Se extraen todos los que esten activos: un sitio puede tener mas de uno en
+# el mismo array, y `b:0` significa desactivado.
+RE_ROL = re.compile(r's:\d+:"([^"]+)";b:1;')
+
+
+def roles_desde_capacidades(serializado: str) -> str:
+    """Convierte el valor serializado de `capabilities` en "administrator,editor".
+
+    Sin fila de capabilities el string llega vacio, y eso NO es un error: es un
+    usuario sin rol. Se muestra como `-` para que la salida siga siendo
+    separable por espacios.
+    """
+    roles = RE_ROL.findall(serializado)
+    return ",".join(roles) if roles else "-"
+
+
+def usuarios_con_rol(
+    env: dict[str, str],
+    db: str,
+    usuario: str,
+    password: str,
+    base: str,
+    prefijo: str,
+) -> list[dict[str, str]]:
+    """Las filas de `prefijo`users con su rol, en una sola consulta.
+
+    El `LEFT JOIN` es a proposito: un usuario sin fila de capabilities tiene
+    que aparecer igual. El prefijo se usa en los DOS lugares que lo necesitan
+    —la tabla y la clave del metadato— desde el mismo valor descubierto: fijar
+    `wp_` en el segundo funciona en el sitio de demo y falla en cualquier otro.
+    """
+    salida = pedir(
+        env,
+        f"docker exec {db} mariadb -u{usuario} -p{password} {base} -N -B -e \""
+        f"SELECT u.ID, u.user_login, u.user_email, u.user_status, COALESCE(m.meta_value, '') "
+        f"FROM {prefijo}users u "
+        f"LEFT JOIN {prefijo}usermeta m "
+        f"ON m.user_id = u.ID AND m.meta_key = '{prefijo}capabilities' "
+        f"ORDER BY u.ID\"",
+        secretos=(password,),
+    )
+    filas: list[dict[str, str]] = []
+    for linea in salida.splitlines():
+        if not linea.strip():
+            continue
+        partes = linea.split("\t")
+        if len(partes) < 5:
+            raise Fallo(f"la base devolvio una fila que no se entiende: {linea[:80]!r}")
+        filas.append(
+            {
+                "id": partes[0].strip(),
+                "login": partes[1].strip(),
+                "email": partes[2].strip(),
+                "estado": partes[3].strip(),
+                "rol": roles_desde_capacidades(partes[4]),
+            }
+        )
+    return filas
+
+
+def imprimir_usuarios(filas: list[dict[str, str]]) -> None:
+    """Una tabla alineada. La salida no lleva ni una columna de contraseña."""
+    cabecera = ("ID", "LOGIN", "EMAIL", "ESTADO", "ROL")
+    claves = ("id", "login", "email", "estado", "rol")
+    cuerpo = [tuple(fila[clave] for clave in claves) for fila in filas]
+    anchos = [
+        max([len(cabecera[i])] + [len(fila[i]) for fila in cuerpo]) for i in range(len(cabecera))
+    ]
+
+    print("  ".join(valor.ljust(anchos[i]) for i, valor in enumerate(cabecera)).rstrip())
+    for fila in cuerpo:
+        print("  ".join(valor.ljust(anchos[i]) for i, valor in enumerate(fila)).rstrip())
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("contenedor", help="nombre del contenedor de WordPress")
@@ -423,12 +505,26 @@ def main() -> int:
     )
     parser.add_argument("--env-file", type=Path, default=DEFAULT_ENV_FILE)
     parser.add_argument("--dry-run", action="store_true", help="muestra que haria y no cambia nada")
+    parser.add_argument(
+        "--listar",
+        action="store_true",
+        help="muestra los usuarios con su rol y no escribe nada",
+    )
     args = parser.parse_args()
 
     # Los dos selectores juntos no son una precedencia: son una ambiguedad del
     # operador. Se rechaza antes de leer la base, para no tener nada que deshacer.
     if args.id is not None and args.usuario is not None:
         print("FALLO: --id y --usuario son excluyentes: elegi uno de los dos.", file=sys.stderr)
+        return 1
+
+    # Un flag de solo lectura que ignora en silencio un flag de escritura es una
+    # trampa: se rechaza antes de la base, no se ignora.
+    if args.listar and (args.password is not None or args.usuario is not None or args.id is not None):
+        print(
+            "FALLO: --listar es de solo lectura y no se combina con --password, --usuario ni --id.",
+            file=sys.stderr,
+        )
         return 1
 
     env = load_env_file(args.env_file)
@@ -439,7 +535,9 @@ def main() -> int:
 
         conn = conexion_de_la_base(info)
         db, usuario, password, base = conn["host"], conn["usuario"], conn["password"], conn["base"]
-        volumen = volumen_del_sitio(info)
+        # El listado solo necesita la base. No exige un volumen en
+        # /var/www/html, asi tambien lista sitios con bind mount.
+        volumen = None if args.listar else volumen_del_sitio(info)
 
         # Que la base este viva es un requisito, no una casualidad: este metodo
         # no apaga nada para poder trabajar.
@@ -452,6 +550,10 @@ def main() -> int:
 
         prefijo = prefijo_de_tablas(env, db, usuario, password, base)
         tapar = (password,)
+
+        if args.listar:
+            imprimir_usuarios(usuarios_con_rol(env, db, usuario, password, base, prefijo))
+            return 0
 
         # Con --id el login no participa: el ID es unico por definicion. Sin
         # --id se resuelve el login, y el default "admin" solo existe cuando no
