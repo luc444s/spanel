@@ -1,8 +1,12 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState, type FormEvent } from "react";
 
 import {
   hostingKeys,
+  createHostingSite,
+  operateHostingSite,
+  hostingSiteLogs,
+  deleteHostingSite,
   listHostingSites,
   listSiteUsers,
   resetUserPassword,
@@ -13,6 +17,8 @@ import { Alert } from "@systutor/shell/ui/alert";
 import { Button } from "@systutor/shell/ui/button";
 import { Dialog } from "@systutor/shell/ui/dialog";
 import { toast } from "@systutor/shell/ui/toast";
+import { Input } from "@systutor/shell/ui/input";
+import { useAuthStore } from "../../../../../../apps/web/src/features/auth/store";
 
 type GeneratedPassword = {
   login: string;
@@ -26,6 +32,20 @@ function stateLabel(status: string) {
 }
 
 export default function HostingPage() {
+  const queryClient = useQueryClient();
+  const permissions = useAuthStore((state) => state.permissions);
+  const canCreate = permissions.includes("hosting.sites.create");
+  const canManage = permissions.includes("hosting.sites.manage");
+  const canDelete = permissions.includes("hosting.sites.delete");
+  const canReadUsers = permissions.includes("hosting.users.read");
+  const canReset = permissions.includes("hosting.users.password");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [domain, setDomain] = useState("");
+  const [email, setEmail] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<HostingSite | null>(null);
+  const [confirmation, setConfirmation] = useState("");
+  const [logsTarget, setLogsTarget] = useState<HostingSite | null>(null);
   const [selectedSite, setSelectedSite] = useState<HostingSite | null>(null);
   const [resetTarget, setResetTarget] = useState<WordPressUser | null>(null);
   const [generated, setGenerated] = useState<GeneratedPassword | null>(null);
@@ -38,7 +58,40 @@ export default function HostingPage() {
   const usersQuery = useQuery({
     queryKey: hostingKeys.users(selectedSite?.id ?? ""),
     queryFn: () => listSiteUsers(selectedSite!.id),
-    enabled: Boolean(selectedSite),
+    enabled: Boolean(selectedSite && canReadUsers),
+  });
+
+  const logsQuery = useQuery({
+    queryKey: ["hosting", logsTarget?.id, "logs"],
+    queryFn: () => hostingSiteLogs(logsTarget!.id),
+    enabled: Boolean(logsTarget),
+  });
+
+  const createMutation = useMutation({
+    mutationFn: createHostingSite,
+    onSuccess: async (data) => {
+      await queryClient.invalidateQueries({ queryKey: hostingKeys.sites });
+      setCreateOpen(false);
+      setName(""); setDomain(""); setEmail("");
+      setGenerated({ login: "admin", password: data.admin_password });
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const operateMutation = useMutation({
+    mutationFn: ({ siteId, action }: { siteId: string; action: "start" | "stop" | "restart" }) =>
+      operateHostingSite(siteId, action),
+    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: hostingKeys.sites }); },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteHostingSite,
+    onSuccess: async () => {
+      setDeleteTarget(null); setConfirmation(""); setSelectedSite(null); setLogsTarget(null);
+      await queryClient.invalidateQueries({ queryKey: hostingKeys.sites });
+    },
+    onError: (error: Error) => toast.error(error.message),
   });
 
   const resetMutation = useMutation({
@@ -88,6 +141,7 @@ export default function HostingPage() {
     <section className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold text-foreground">Hosting</h1>
+        {canCreate ? <Button onClick={() => setCreateOpen(true)}>Crear sitio</Button> : null}
       </div>
 
       {sites.length === 0 ? (
@@ -114,13 +168,25 @@ export default function HostingPage() {
                   <td className="py-2 pr-4">{stateLabel(site.status)}</td>
                   <td className="py-2 pr-4">{site.managed ? "Sí" : "No"}</td>
                   <td className="py-2">
-                    <Button
+                    {canReadUsers ? <Button
                       size="sm"
                       variant="secondary"
                       onClick={() => setSelectedSite(site)}
                     >
                       Ver usuarios
+                    </Button> : null}
+                    <Button size="sm" variant="secondary" onClick={() => setLogsTarget(site)}>
+                      Logs
                     </Button>
+                    {canManage ? (["start", "stop", "restart"] as const).map((action) => (
+                      <Button key={action} size="sm" variant="secondary"
+                        disabled={!site.managed || operateMutation.isPending}
+                        onClick={() => operateMutation.mutate({ siteId: site.id, action })}>
+                        {{ start: "Iniciar", stop: "Detener", restart: "Reiniciar" }[action]}
+                      </Button>
+                    )) : null}
+                    {canDelete ? <Button size="sm" variant="secondary" disabled={!site.managed}
+                      onClick={() => { setDeleteTarget(site); setConfirmation(""); }}>Eliminar</Button> : null}
                   </td>
                 </tr>
               ))}
@@ -158,7 +224,7 @@ export default function HostingPage() {
                     <th className="pb-2 pr-4">Email</th>
                     <th className="pb-2 pr-4">Estado</th>
                     <th className="pb-2 pr-4">Rol</th>
-                    {selectedSite.managed ? <th className="pb-2">Acciones</th> : null}
+                    {selectedSite.managed && canReset ? <th className="pb-2">Acciones</th> : null}
                   </tr>
                 </thead>
                 <tbody>
@@ -171,7 +237,7 @@ export default function HostingPage() {
                         {user.status === 0 ? "Activo" : "Inactivo"}
                       </td>
                       <td className="py-2 pr-4">{user.role}</td>
-                      {selectedSite.managed ? (
+                      {selectedSite.managed && canReset ? (
                         <td className="py-2">
                           <Button
                             size="sm"
@@ -190,6 +256,37 @@ export default function HostingPage() {
           )}
         </div>
       ) : null}
+
+      <Dialog
+        open={createOpen && canCreate}
+        title="Crear sitio WordPress"
+        onClose={() => setCreateOpen(false)}
+      >
+        <form className="space-y-3" onSubmit={(event: FormEvent) => {
+          event.preventDefault(); createMutation.mutate({ name, domain, admin_email: email });
+        }}>
+          <Input required placeholder="Nombre" value={name} onChange={(event) => setName(event.target.value)} />
+          <Input required placeholder="Dominio" value={domain} onChange={(event) => setDomain(event.target.value)} />
+          <Input required type="email" placeholder="Email del administrador" value={email}
+            onChange={(event) => setEmail(event.target.value)} />
+          <Button type="submit" disabled={createMutation.isPending}>Crear</Button>
+        </form>
+      </Dialog>
+
+      <Dialog open={Boolean(deleteTarget && canDelete)} title="Eliminar sitio definitivamente"
+        onClose={() => setDeleteTarget(null)}>
+        <p className="text-sm">Se eliminarán los contenedores y los datos sin posibilidad de recuperación.
+          Escribí {deleteTarget?.container_name} para confirmar.</p>
+        <Input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} />
+        <Button disabled={!deleteTarget || confirmation !== deleteTarget.container_name || deleteMutation.isPending}
+          onClick={() => { if (deleteTarget) deleteMutation.mutate(deleteTarget.id); }}>Eliminar</Button>
+      </Dialog>
+
+      <Dialog open={Boolean(logsTarget)} title={`Logs de ${logsTarget?.container_name ?? ""}`}
+        onClose={() => setLogsTarget(null)}>
+        {logsQuery.error ? <Alert title="Error">No se pudieron leer los logs.</Alert> :
+          <pre className="max-h-80 overflow-auto whitespace-pre-wrap text-xs">{logsQuery.data?.logs ?? "Cargando..."}</pre>}
+      </Dialog>
 
       <Dialog
         open={Boolean(resetTarget)}

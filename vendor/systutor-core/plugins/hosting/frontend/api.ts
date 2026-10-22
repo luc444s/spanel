@@ -39,6 +39,31 @@ export const hostingKeys = {
   users: (siteId: string) => ["hosting", siteId, "users"] as const,
 };
 
+export function createHostingSite(payload: { name: string; domain: string; admin_email: string }) {
+  return apiRequest<{ site: HostingSite; admin_password: string }>("/api/v1/plugins/hosting/sites", {
+    method: "POST", body: JSON.stringify(payload),
+  });
+}
+
+export function operateHostingSite(siteId: string, action: "start" | "stop" | "restart") {
+  return apiRequest<HostingSite>(
+    `/api/v1/plugins/hosting/sites/${encodeURIComponent(siteId)}/${action}`,
+    { method: "POST" }
+  );
+}
+
+export function hostingSiteLogs(siteId: string, lines = 200) {
+  return apiRequest<{ logs: string }>(
+    `/api/v1/plugins/hosting/sites/${encodeURIComponent(siteId)}/logs?lines=${lines}`
+  );
+}
+
+export function deleteHostingSite(siteId: string) {
+  return apiRequest<void>(`/api/v1/plugins/hosting/sites/${encodeURIComponent(siteId)}`, {
+    method: "DELETE",
+  });
+}
+
 export function listHostingSites() {
   return apiRequest<HostingSiteListResponse>("/api/v1/plugins/hosting/sites");
 }
