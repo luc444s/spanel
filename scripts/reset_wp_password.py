@@ -31,6 +31,13 @@ Uso:
     python3 scripts/reset_wp_password.py spanel-pwtest-wp
     python3 scripts/reset_wp_password.py spanel-pwtest-wp --password 'la-nueva'
     python3 scripts/reset_wp_password.py spanel-pwtest-wp --password 'la-nueva' --dry-run
+    python3 scripts/reset_wp_password.py spanel-pwtest-wp --id 7 --password 'la-nueva'
+
+A.SPEC 0011: un login NO es unico en la base (WordPress lo mantiene unico en
+el codigo, pero el esquema permite repetirlo). Por eso el script resuelve el
+login a UNA fila antes de escribir: si aparece en mas de una, falla y lista
+los IDs en vez de elegir. `--id` saltea esa resolucion porque el ID es unico
+por definicion, y es la salida cuando el login esta repetido.
 
 Si no se pasa `--password`, se genera una y se imprime. Ojo: se imprime UNA vez
 y no se guarda en ningun lado. Si se pierde, se regenera otra vez con este
@@ -48,7 +55,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from probe_docker import build_docker_argv, load_env_file, run  # noqa: E402
+from probe_docker import build_docker_argv, load_env_file, run
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_ENV_FILE = REPO_ROOT / "vendor" / "systutor-core" / ".env"
@@ -317,14 +324,112 @@ def prefijo_de_tablas(env: dict[str, str], db: str, usuario: str, password: str,
     return prefijos[0]
 
 
+def filas_de_usuarios(
+    env: dict[str, str],
+    db: str,
+    usuario: str,
+    password: str,
+    base: str,
+    prefijo: str,
+    condicion: str,
+) -> list[dict[str, str]]:
+    """Las filas de `prefijo`users que cumplen `condicion`, ya como datos.
+
+    `mariadb -N -B` devuelve texto con tabuladores y sin encabezado. Pasarlo a
+    filas es lo que permite decidir si el login resolvio a UNA fila o a varias
+    ANTES de escribir, en vez de mandar un WHERE que pueda tocar varias.
+    """
+    salida = pedir(
+        env,
+        f"docker exec {db} mariadb -u{usuario} -p{password} {base} -N -B -e "
+        f"\"SELECT ID, user_login, user_email FROM {prefijo}users WHERE {condicion}\"",
+        secretos=(password,),
+    )
+    filas: list[dict[str, str]] = []
+    for linea in salida.splitlines():
+        if not linea.strip():
+            continue
+        partes = linea.split("\t")
+        if len(partes) < 3:
+            raise Fallo(f"la base devolvio una fila que no se entiende: {linea[:80]!r}")
+        filas.append(
+            {
+                "id": partes[0].strip(),
+                "login": partes[1].strip(),
+                "email": partes[2].strip(),
+            }
+        )
+    return filas
+
+
+def resolver_objetivo(
+    env: dict[str, str],
+    db: str,
+    usuario: str,
+    password: str,
+    base: str,
+    prefijo: str,
+    *,
+    id_usuario: int | None,
+    login: str | None,
+) -> dict[str, str]:
+    """Convierte el selector del operador en EXACTAMENTE una fila, o falla.
+
+    No se elige cuando hay varias: la base permite logins repetidos, y adivinar
+    cual quiso decir el operador es justamente el bug que este script tenia
+    cuando actualizaba todas las filas con ese login. Se listan los candidatos
+    y el operador decide con `--id`.
+
+    `login` tiene que venir ya validado contra `RE_SQL_SEGURO`: se interpola en
+    el WHERE. `id_usuario` es un entero, asi que no puede inyectar nada.
+    """
+    if id_usuario is not None:
+        filas = filas_de_usuarios(env, db, usuario, password, base, prefijo, f"ID={int(id_usuario)}")
+        if not filas:
+            raise Fallo(f"no existe ningun usuario con ID {id_usuario} en {prefijo}users")
+        return filas[0]
+
+    if login is None:
+        raise Fallo("no se indico ni --id ni --usuario: no se puede elegir la fila")
+
+    filas = filas_de_usuarios(env, db, usuario, password, base, prefijo, f"user_login='{login}'")
+    if not filas:
+        # El mismo mensaje que daba el script antes de A.SPEC 0011.
+        raise Fallo(f"no existe el usuario {login!r} en {prefijo}users")
+    if len(filas) > 1:
+        candidatos = "\n".join(f"ID {fila['id']} {fila['login']} {fila['email']}" for fila in filas)
+        raise Fallo(
+            f"el login {login!r} aparece en {len(filas)} filas de {prefijo}users; "
+            "no se elige ninguna. Elegi una con --id:\n"
+            f"{candidatos}"
+        )
+    return filas[0]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("contenedor", help="nombre del contenedor de WordPress")
     parser.add_argument("--password", help="la nueva contraseña. Si no se pasa, se genera una")
-    parser.add_argument("--usuario", default="admin", help="login de WordPress (default: admin)")
+    parser.add_argument(
+        "--usuario",
+        default=None,
+        help="login de WordPress (default: admin, si tampoco se pasa --id)",
+    )
+    parser.add_argument(
+        "--id",
+        type=int,
+        default=None,
+        help="ID de la fila de wp_users. Excluyente con --usuario",
+    )
     parser.add_argument("--env-file", type=Path, default=DEFAULT_ENV_FILE)
     parser.add_argument("--dry-run", action="store_true", help="muestra que haria y no cambia nada")
     args = parser.parse_args()
+
+    # Los dos selectores juntos no son una precedencia: son una ambiguedad del
+    # operador. Se rechaza antes de leer la base, para no tener nada que deshacer.
+    if args.id is not None and args.usuario is not None:
+        print("FALLO: --id y --usuario son excluyentes: elegi uno de los dos.", file=sys.stderr)
+        return 1
 
     env = load_env_file(args.env_file)
     try:
@@ -348,36 +453,62 @@ def main() -> int:
         prefijo = prefijo_de_tablas(env, db, usuario, password, base)
         tapar = (password,)
 
-        if not RE_SQL_SEGURO.match(args.usuario):
-            raise Fallo(f"el usuario {args.usuario!r} no es seguro para meter en SQL")
+        # Con --id el login no participa: el ID es unico por definicion. Sin
+        # --id se resuelve el login, y el default "admin" solo existe cuando no
+        # se paso ninguno de los dos flags (I6 de A.SPEC 0011).
+        login = args.usuario if args.usuario is not None else (None if args.id is not None else "admin")
+        if login is not None and not RE_SQL_SEGURO.match(login):
+            raise Fallo(f"el usuario {login!r} no es seguro para meter en SQL")
 
-        nueva = args.password or ("p-" + secrets.token_urlsafe(15))
+        # Se resuelve ANTES del hash: un login ambiguo o inexistente no cuesta
+        # ningun contenedor y no bootea WordPress (I3 de A.SPEC 0011).
+        objetivo = resolver_objetivo(
+            env,
+            db,
+            usuario,
+            password,
+            base,
+            prefijo,
+            id_usuario=args.id,
+            login=login,
+        )
+
         print(f"Sitio:     {args.contenedor}  (volumen {volumen})")
         print(f"Base:      {db}/{base}  usuario={usuario}  prefijo={prefijo}users")
-        print(f"WordPress: {args.usuario}")
+        print(f"WordPress: {objetivo['login']} (ID {objetivo['id']})")
 
         if args.dry_run:
-            print("\n--dry-run: no se cambia nada.")
+            print(f"\n--dry-run: no se cambia nada. Se apuntaria a ID {objetivo['id']}.")
             return 0
 
+        nueva = args.password or ("p-" + secrets.token_urlsafe(15))
         hash_nuevo = hash_de_password(env, info, conn, db, nueva)
-        sql = f"SELECT user_pass FROM {prefijo}users WHERE user_login='{args.usuario}'"
-        antes = pedir(env, f"docker exec {db} mariadb -u{usuario} -p{password} {base} -N -B -e \"{sql}\"", secretos=tapar).strip()
+        # Ida y vuelta SIEMPRE por ID: el login ya se uso solo para resolver.
+        sql_hash = f"SELECT user_pass FROM {prefijo}users WHERE ID={objetivo['id']}"
+        antes = pedir(
+            env,
+            f"docker exec {db} mariadb -u{usuario} -p{password} {base} -N -B -e \"{sql_hash}\"",
+            secretos=tapar,
+        ).strip()
         if not antes:
-            raise Fallo(f"no existe el usuario {args.usuario!r} en {prefijo}users")
+            raise Fallo(f"no existe el usuario {objetivo['login']!r} en {prefijo}users")
 
         pedir(
             env,
             f"docker exec {db} mariadb -u{usuario} -p{password} {base} -e "
-            f"\"UPDATE {prefijo}users SET user_pass='{para_sql(hash_nuevo)}' WHERE user_login='{args.usuario}'\"",
+            f"\"UPDATE {prefijo}users SET user_pass='{para_sql(hash_nuevo)}' WHERE ID={objetivo['id']}\"",
             secretos=tapar,
         )
-        despues = pedir(env, f"docker exec {db} mariadb -u{usuario} -p{password} {base} -N -B -e \"{sql}\"", secretos=tapar).strip()
+        despues = pedir(
+            env,
+            f"docker exec {db} mariadb -u{usuario} -p{password} {base} -N -B -e \"{sql_hash}\"",
+            secretos=tapar,
+        ).strip()
 
         if despues != hash_nuevo or despues == antes:
             raise Fallo("el UPDATE no quedo aplicado como se esperaba")
 
-        print(f"\nContraseña de {args.usuario} cambiada. El sitio nunca se detuvo.")
+        print(f"\nContraseña de {objetivo['login']} (ID {objetivo['id']}) cambiada. El sitio nunca se detuvo.")
         print(f"NUEVA CONTRASEÑA: {nueva}")
         print("Se muestra una sola vez y no se guarda en ningun lado.")
         return 0
