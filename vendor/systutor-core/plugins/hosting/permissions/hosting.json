@@ -11,6 +11,18 @@
     {
       "name": "hosting.users.password",
       "description": "Reset the password of one WordPress user of an owned site"
+    },
+    {
+      "name": "hosting.sites.create",
+      "description": "Create a WordPress site for the tenant"
+    },
+    {
+      "name": "hosting.sites.manage",
+      "description": "Start, stop and restart an owned WordPress site"
+    },
+    {
+      "name": "hosting.sites.delete",
+      "description": "Delete an owned WordPress site and its resources (platform only)"
     }
   ]
 }

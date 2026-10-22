@@ -9,12 +9,17 @@
   "permissions": [
     "hosting.sites.read",
     "hosting.users.read",
-    "hosting.users.password"
+    "hosting.users.password",
+    "hosting.sites.create",
+    "hosting.sites.manage",
+    "hosting.sites.delete"
   ],
   "tenant_admin_permissions": [
     "hosting.sites.read",
     "hosting.users.read",
-    "hosting.users.password"
+    "hosting.users.password",
+    "hosting.sites.create",
+    "hosting.sites.manage"
   ],
   "events": [],
   "description": "WordPress sites, users and one-password reset for the current tenant"

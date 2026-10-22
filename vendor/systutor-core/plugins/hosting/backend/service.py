@@ -14,11 +14,13 @@ from __future__ import annotations
 import secrets
 
 from sqlalchemy import Select, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from systutor.core.errors import AppError, NotFoundError
 from systutor.kernel.audit.service import record_audit
 from systutor.kernel.tenants.context import TenantContext
+from systutor.kernel.tenants.models import Tenant
 
 from .database import (
     conexion_de_la_base,
@@ -30,11 +32,14 @@ from .database import (
 from .inspection import candidato_de, database_container, inspect_container
 from .models import HostingSite
 from .passwords import hash_de_password
+from .provisioner import Provisioner, SiteNames, slug_for
 from .reset import actualizar_hash, leer_hash
 from .schemas import (
+    CreateSiteResponse,
     HostingSiteListResponse,
     HostingSiteSummary,
     ResetPasswordResponse,
+    SiteLogsResponse,
     WordPressUserListResponse,
     WordPressUserSummary,
 )
@@ -117,6 +122,170 @@ class HostingService:
                 code="hosting_site_unavailable",
             )
         return info, candidato.gestionable
+
+    def _managed_site(self, site: HostingSite) -> dict:
+        info, managed = self._require_site(site)
+        if not managed:
+            raise AppError(
+                f"El sitio {site.container_name} no es gestionable (spanel.managed=false)",
+                status_code=409,
+                code="hosting_site_not_managed",
+            )
+        return info
+
+    def _audit_site(
+        self, site: HostingSite, context: TenantContext, action: str, details: dict | None = None
+    ) -> None:
+        record_audit(
+            self._db,
+            tenant_id=context.current_tenant_id,
+            branch_id=context.current_branch_id,
+            actor_user_id=context.current_user_id,
+            actor_type="user",
+            module="hosting",
+            action=f"hosting.site.{action}",
+            entity_type="hosting_site",
+            entity_id=site.id,
+            result="success",
+            correlation_id=None,
+            request_id=None,
+            details={"container_name": site.container_name, **(details or {})},
+        )
+
+    def create_site(
+        self, tenant_context: TenantContext, name: str, domain: str, admin_email: str
+    ) -> CreateSiteResponse:
+        try:
+            names = SiteNames(slug_for(name))
+        except ValueError as exc:
+            raise AppError(str(exc), status_code=422, code="hosting_invalid_name") from exc
+        tenant_id = tenant_context.current_tenant_id
+        tenant = self._db.get(Tenant, tenant_id)
+        if tenant is None or not tenant.is_active:
+            raise AppError(
+                "Tenant inactivo o inexistente", status_code=409, code="hosting_tenant_inactive"
+            )
+        if self._db.scalar(
+            select(HostingSite.id).where(
+                (HostingSite.domain == domain) | (HostingSite.container_name == names.wp)
+            )
+        ):
+            raise AppError(
+                "Dominio o nombre ya registrado", status_code=409, code="hosting_site_conflict"
+            )
+        provisioner = Provisioner(self._settings)
+        try:
+            password = provisioner.create(names, tenant_id, domain, admin_email)
+        except Fallo as exc:
+            raise AppError(str(exc), status_code=409, code="hosting_provision_failed") from exc
+        site = HostingSite(tenant_id=tenant_id, container_name=names.wp, domain=domain)
+        try:
+            self._db.add(site)
+            self._db.flush()
+            self._audit_site(site, tenant_context, "create")
+            self._db.commit()
+        except Exception as exc:
+            self._db.rollback()
+            failures = provisioner.cleanup(names, tenant_id)
+            if isinstance(exc, IntegrityError):
+                raise AppError(
+                    f"Dominio o nombre ya registrado; limpieza: {failures}",
+                    status_code=409,
+                    code="hosting_site_conflict",
+                ) from exc
+            raise AppError(
+                f"No se pudo registrar el sitio; limpieza: {failures}",
+                status_code=500,
+                code="hosting_provision_failed",
+            ) from exc
+        return CreateSiteResponse(
+            site=HostingSiteSummary(
+                id=site.id,
+                container_name=site.container_name,
+                domain=site.domain,
+                status="running",
+                managed=True,
+            ),
+            admin_password=password,
+        )
+
+    def _operate(
+        self, site: HostingSite, tenant_context: TenantContext, action: str
+    ) -> HostingSiteSummary:
+        self._managed_site(site)
+        try:
+            Provisioner(self._settings).command(action, site.container_name)
+        except Fallo as exc:
+            raise AppError(str(exc), status_code=409, code="hosting_site_unavailable") from exc
+        self._audit_site(site, tenant_context, action)
+        return HostingSiteSummary(
+            id=site.id,
+            container_name=site.container_name,
+            domain=site.domain,
+            status="exited" if action == "stop" else "running",
+            managed=True,
+        )
+
+    def start_site(self, site: HostingSite, tenant_context: TenantContext) -> HostingSiteSummary:
+        return self._operate(site, tenant_context, "start")
+
+    def stop_site(self, site: HostingSite, tenant_context: TenantContext) -> HostingSiteSummary:
+        return self._operate(site, tenant_context, "stop")
+
+    def restart_site(self, site: HostingSite, tenant_context: TenantContext) -> HostingSiteSummary:
+        return self._operate(site, tenant_context, "restart")
+
+    def site_logs(self, site: HostingSite, lines: int) -> SiteLogsResponse:
+        self._require_site(site)
+        limit = min(max(1, lines), max(1, min(1000, self._settings.log_lines)))
+        try:
+            logs = Provisioner(self._settings).command(
+                "logs", "--tail", str(limit), site.container_name
+            )
+        except Fallo as exc:
+            raise AppError(str(exc), status_code=409, code="hosting_site_unavailable") from exc
+        return SiteLogsResponse(logs=logs)
+
+    def delete_site(self, site: HostingSite, tenant_context: TenantContext) -> None:
+        info = self._inspect(site.container_name)
+        if info is not None:
+            self._managed_site(site)
+        names = SiteNames(site.container_name.removeprefix("spanel-").removesuffix("-wp"))
+        if names.wp != site.container_name:
+            raise AppError(
+                "Sitio externo: sin recursos gestionados",
+                status_code=409,
+                code="hosting_site_not_managed",
+            )
+        provisioner = Provisioner(self._settings)
+        # Never delete a foreign resource even when a row references its name.
+        for kind, name in (
+            ("container", names.wp),
+            ("container", names.db),
+            ("volume", names.wp),
+            ("volume", names.db),
+        ):
+            if provisioner.exists(kind, name) and not provisioner._owned(
+                kind, name, names, site.tenant_id
+            ):
+                raise AppError(
+                    f"Recurso ajeno: {name}", status_code=409, code="hosting_site_not_managed"
+                )
+        missing = [
+            name
+            for kind, name in (
+                ("container", names.wp),
+                ("container", names.db),
+                ("volume", names.wp),
+                ("volume", names.db),
+            )
+            if not provisioner.exists(kind, name)
+        ]
+        failures = provisioner.cleanup(names, site.tenant_id)
+        if failures:
+            raise AppError("; ".join(failures), status_code=409, code="hosting_delete_failed")
+        self._audit_site(site, tenant_context, "delete", {"missing": missing})
+        self._db.delete(site)
 
     def list_sites(self, tenant_id: str) -> HostingSiteListResponse:
         """Only the rows owned by the tenant; Docker is asked about those alone."""

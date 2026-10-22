@@ -52,6 +52,12 @@ class HostingSettings(BaseModel):
     docker_ssh_strict_host_key: str = "yes"
     docker_ssh_password: str = ""
     command_timeout: int = 60
+    wp_image: str = "wordpress:latest"
+    db_image: str = "mariadb:11"
+    network: str = "proxy"
+    traefik: bool = True
+    install_timeout: int = 180
+    log_lines: int = 200
 
 
 def _int_env(name: str, default: int) -> int:
@@ -70,9 +76,7 @@ def register_hosting_settings() -> HostingSettings:
         docker_ssh_host=os.getenv("SPANEL_DOCKER_SSH_HOST", "").strip(),
         docker_ssh_user=os.getenv("SPANEL_DOCKER_SSH_USER", "").strip(),
         docker_ssh_port=_int_env("SPANEL_DOCKER_SSH_PORT", 22),
-        docker_ssh_strict_host_key=os.getenv(
-            "SPANEL_DOCKER_SSH_STRICT_HOST_KEY", "yes"
-        ).strip(),
+        docker_ssh_strict_host_key=os.getenv("SPANEL_DOCKER_SSH_STRICT_HOST_KEY", "yes").strip(),
         # One secret, two names: the SSH password of the Docker machine is the
         # same one the mail plugin uses.
         docker_ssh_password=(
@@ -80,6 +84,12 @@ def register_hosting_settings() -> HostingSettings:
             or os.getenv("MAIL_SERVER_PASSWORD", "").strip()
         ),
         command_timeout=_int_env("SPANEL_HOSTING_COMMAND_TIMEOUT", 60),
+        wp_image=os.getenv("SPANEL_HOSTING_WP_IMAGE", "wordpress:latest"),
+        db_image=os.getenv("SPANEL_HOSTING_DB_IMAGE", "mariadb:11"),
+        network=os.getenv("SPANEL_HOSTING_NETWORK", "proxy"),
+        traefik=os.getenv("SPANEL_HOSTING_TRAEFIK", "true").lower() not in {"false", "0", "no"},
+        install_timeout=_int_env("SPANEL_HOSTING_INSTALL_TIMEOUT", 180),
+        log_lines=min(1000, max(1, _int_env("SPANEL_HOSTING_LOG_LINES", 200))),
     )
     _hosting_settings = settings
     return settings

@@ -7,7 +7,46 @@ container is always resolved from the owned `hosting_sites` row.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+
+class CreateSiteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=3, max_length=100)
+    domain: str = Field(min_length=4, max_length=253)
+    admin_email: str = Field(min_length=3, max_length=254)
+
+    @field_validator("domain")
+    @classmethod
+    def valid_domain(cls, value: str) -> str:
+        import re
+
+        value = value.strip().lower()
+        if not re.fullmatch(
+            r"(?=.{4,253}$)[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+",
+            value,
+        ):
+            raise ValueError("Invalid domain")
+        return value
+
+    @field_validator("admin_email")
+    @classmethod
+    def valid_email(cls, value: str) -> str:
+        import re
+
+        if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", value):
+            raise ValueError("Invalid email")
+        return value
+
+
+class CreateSiteResponse(BaseModel):
+    site: HostingSiteSummary
+    admin_password: str
+
+
+class SiteLogsResponse(BaseModel):
+    logs: str
 
 
 class HostingSiteSummary(BaseModel):
