@@ -262,3 +262,68 @@ def replace_role_permissions(
         db.add(RolePermission(role_id=role.id, permission_id=permission.id))
 
     db.flush()
+
+
+TENANT_ADMIN_ROLE_NAME = "tenant_admin"
+# Permission every tenant administrator needs for the shell to load the plugin
+# runtime. It is a kernel capability, not a plugin declaration, so it is kept
+# here instead of forcing every plugin manifest to repeat it. The old
+# `MAIL_PERMISSIONS` list carried it for the same reason.
+TENANT_ADMIN_BASE_PERMISSIONS = ("core.plugin.runtime.read",)
+
+
+def sync_tenant_admin_role(
+    db: Session,
+    *,
+    tenant_id: str,
+    permissions: list[str] | None = None,
+) -> list[str]:
+    """Make a tenant's `tenant_admin` role hold the declared subset plus the base.
+
+    The declared subset comes from the installed plugins, which persist it
+    during manifest synchronisation. A tenant administrator receives only
+    those permissions, never the full plugin permission set: that is how
+    `tenant.tenants.manage` stays a platform capability. The kernel adds its
+    own `core.plugin.runtime.read`, without which the frontend never loads the
+    plugin navigation.
+
+    It is idempotent: the role's permissions are replaced, not appended, so
+    calling it on every boot neither duplicates rows nor keeps a permission a
+    plugin stopped declaring.
+    """
+    if permissions is None:
+        # Local import: persistent.py imports this module for ensure_permission.
+        from systutor.kernel.plugins.persistent import list_tenant_admin_permissions
+
+        declared = list_tenant_admin_permissions()
+    else:
+        declared = list(permissions)
+
+    granted = sorted(set(TENANT_ADMIN_BASE_PERMISSIONS) | set(declared))
+
+    role = db.scalar(
+        select(Role).where(
+            Role.tenant_id == tenant_id,
+            Role.name == TENANT_ADMIN_ROLE_NAME,
+        )
+    )
+    if role is None:
+        role = Role(
+            tenant_id=tenant_id,
+            name=TENANT_ADMIN_ROLE_NAME,
+            description="Tenant administrator",
+            is_active=True,
+        )
+        db.add(role)
+        db.flush()
+
+    resolved = [
+        ensure_permission(
+            db,
+            permission_name=permission_name,
+            description=f"Plugin permission {permission_name}",
+        )
+        for permission_name in granted
+    ]
+    replace_role_permissions(db, role=role, permissions=resolved)
+    return granted

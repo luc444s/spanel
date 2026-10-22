@@ -12,6 +12,10 @@ from sqlalchemy.orm import Session
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
+# Test the checkout, not whatever `systutor` happens to be installed in the
+# environment. Without this, an editable install pointing at another clone
+# silently runs the wrong kernel.
+sys.path.insert(0, str(REPO_ROOT / "src"))
 
 import systutor.kernel.models  # noqa: F401, E402
 from app.main import create_app  # noqa: E402

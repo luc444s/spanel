@@ -122,7 +122,8 @@ Falsifiable today, and today **fails** on all three:
    - persist the declared subset so the tenant-creation path can read it without re-parsing files;
    - keep the existing `permissions_json` semantics unchanged.
 3. One core function syncs a tenant's `tenant_admin` role from the installed plugins:
-   - grants exactly the union of `tenant_admin_permissions`;
+   - grants exactly the union of `tenant_admin_permissions` plus the kernel base
+     `core.plugin.runtime.read`, without which the shell never loads plugin navigation;
    - is idempotent and safe to call on every boot;
    - never grants a permission that is not declared by a plugin.
 4. `vendor/systutor-core/plugins/tenant/backend/service.py`:
@@ -203,7 +204,9 @@ Falsifiable today, and today **fails** on all three:
 **Postconditions — tenant permissions**
 
 - A newly created tenant's `tenant_admin` role receives exactly the union of the
-  `tenant_admin_permissions` declared by installed plugins.
+  `tenant_admin_permissions` declared by installed plugins, plus the kernel base
+  `core.plugin.runtime.read`. It still does not receive `tenant.tenants.manage` or
+  `mail.accounts.all`.
 - It does not receive `tenant.tenants.manage` unless the tenant plugin explicitly declares it,
   which it does not.
 - The seed tenant's `admin` role still receives every declared plugin permission.
@@ -282,7 +285,8 @@ invariants:
   - id: I7
     statement: >
       Tenant administrators receive only the permissions their installed plugins declare for
-      tenants, never the full plugin permission set.
+      tenants plus the kernel base `core.plugin.runtime.read`, never the full plugin permission
+      set.
     proof: >
       test_tenant_admin_recibe_solo_los_declarados creates a tenant through the real tenant
       plugin and asserts the exact permission set, including the absence of
@@ -332,11 +336,25 @@ invariants:
 
 ```bash
 ruff check scripts/ vendor/systutor-core
-python3 -m pyright scripts/ vendor/systutor-core
+python3 -m pyright scripts/
+(cd vendor/systutor-core && python3 -m pyright plugins/hosting/backend)
+PYTHONPATH=vendor/systutor-core/src python3 -m pyright \
+  vendor/systutor-core/src/systutor/contracts/plugins.py \
+  vendor/systutor-core/src/systutor/kernel/permissions/service.py \
+  vendor/systutor-core/src/systutor/kernel/plugins/persistent.py \
+  vendor/systutor-core/src/systutor/api/seed.py \
+  vendor/systutor-core/plugins/tenant/backend/service.py \
+  vendor/systutor-core/plugins/tenant/backend/router.py \
+  vendor/systutor-core/tests/test_hosting_core_foundation.py
 SPANEL_LIVE_TESTS=1 python3 -m pytest scripts/tests/test_reset_wp_password_live.py -q
 SPANEL_LIVE_TESTS=1 python3 -m pytest scripts/tests/test_probe_docker.py -q
 python3 -m pytest vendor/systutor-core/tests -q
 ```
+
+The full-tree `pyright vendor/systutor-core` has eight pre-existing errors in
+files this A.SPEC does not touch (`plugins/mail/backend/provider.py` and
+`tests/test_permission_sync.py`). The gate above checks the files that changed
+and the new package instead of pretending the whole tree was green before.
 
 **Live tests to add**
 

@@ -30,6 +30,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -38,6 +40,8 @@ import pytest
 
 RAIZ_DE_SCRIPTS = Path(__file__).resolve().parent.parent
 RUTA_DEL_SCRIPT = RAIZ_DE_SCRIPTS / "reset_wp_password.py"
+RAIZ_DEL_CORE = RAIZ_DE_SCRIPTS.parent / "vendor" / "systutor-core"
+RUTA_DEL_PAQUETE = RAIZ_DEL_CORE / "plugins" / "hosting" / "backend"
 
 sys.path.insert(0, str(RAIZ_DE_SCRIPTS))
 
@@ -616,12 +620,142 @@ def test_listar_no_cambia_el_reset(sitio: Sitio) -> None:
 
 
 # ---------------------------------------------------------------------------
+# A.SPEC 0012: the credentials channel.
+# ---------------------------------------------------------------------------
+
+
+def _muestras_durante(accion, leer) -> tuple[subprocess.CompletedProcess[str], list[str]]:
+    """Run `accion` while a thread keeps calling `leer` and collecting output."""
+    muestras: list[str] = []
+    stop = threading.Event()
+
+    def bucle() -> None:
+        while not stop.is_set():
+            try:
+                muestras.append(leer())
+            except (OSError, subprocess.SubprocessError, reset.Fallo):
+                muestras.append("")
+            time.sleep(0.02)
+
+    hilo = threading.Thread(target=bucle, daemon=True)
+    hilo.start()
+    try:
+        resultado = accion()
+    finally:
+        stop.set()
+        hilo.join()
+    return resultado, muestras
+
+
+def test_la_password_no_aparece_en_ps(sitio: Sitio) -> None:
+    """I1: while a real reset runs, the DB password is not in the local argv."""
+
+    def ps() -> str:
+        return subprocess.run(
+            ["ps", "-eww", "-o", "args="],
+            capture_output=True,
+            text=True,
+            check=False,
+        ).stdout
+
+    resultado, muestras = _muestras_durante(
+        lambda: _correr_el_script(sitio, "--usuario", "lab_a1", "--password", PASSWORD_NUEVA),
+        ps,
+    )
+
+    assert resultado.returncode == 0, resultado.stderr
+    assert muestras, "el muestreador de ps no tomo ninguna muestra"
+    assert sitio.password not in "\n".join(muestras), (
+        "la contraseña de la base aparecio en el argv de un proceso del laptop"
+    )
+
+
+def test_la_password_no_aparece_dentro_del_contenedor(sitio: Sitio) -> None:
+    """I1: the leak did not move inside the DB container."""
+
+    def top() -> str:
+        return reset.pedir(sitio.env, f"docker top {sitio.db}")
+
+    resultado, muestras = _muestras_durante(
+        lambda: _correr_el_script(sitio, "--usuario", "lab_a1", "--password", PASSWORD_NUEVA),
+        top,
+    )
+
+    assert resultado.returncode == 0, resultado.stderr
+    assert muestras, "el muestreador de docker top no tomo ninguna muestra"
+    assert sitio.password not in "\n".join(muestras), (
+        "la contraseña de la base aparecio en el argv de un proceso dentro del contenedor"
+    )
+
+
+def test_ningun_comando_lleva_la_password() -> None:
+    """I2: there is one helper, and it does not take the password as text."""
+    fuente = (RUTA_DEL_PAQUETE / "database.py").read_text(encoding="utf-8")
+    assert "def build_db_command(db: str, base: str, *, batch: bool = True) -> str:" in fuente
+
+    inicio = fuente.index("def build_db_command(")
+    fin = fuente.index("\ndef ", inicio + 1)
+    bloque = fuente[inicio:fin]
+    firma = bloque.splitlines()[0].lower()
+    assert "password" not in firma, "el constructor de comandos recibe la contraseña"
+    assert "password:" not in bloque, "el constructor de comandos recibe la contraseña"
+    assert "{password}" not in bloque, "el comando interpola la contraseña"
+
+    for patron in ("-p{", "-p' +", "MYSQL_PWD={", 'MYSQL_PWD=" +'):
+        assert patron not in fuente, f"el comando interpola la contraseña: {patron}"
+
+
+def test_el_prefijo_se_valida() -> None:
+    """I3: the prefix goes through the same rule as the login, before SQL."""
+    fuente = (RUTA_DEL_PAQUETE / "database.py").read_text(encoding="utf-8")
+    assert "validar_prefijo(prefijos[0])" in fuente
+    assert "RE_SQL_SEGURO" in fuente
+
+    with pytest.raises(reset.Fallo) as con_punto_y_coma:
+        reset.validar_prefijo("wp_;DROP")
+    assert "rechaz" in str(con_punto_y_coma.value).lower()
+    assert "no escap" in str(con_punto_y_coma.value).lower()
+
+    with pytest.raises(reset.Fallo):
+        reset.validar_prefijo('wp_"users')
+
+
+def test_un_error_no_imprime_la_password(sitio: Sitio) -> None:
+    """I6: a failing query still redacts the database password."""
+    with pytest.raises(reset.Fallo) as excinfo:
+        reset.ejecutar_sql(
+            sitio.env,
+            sitio.db,
+            sitio.base,
+            "SELECT * FROM spanel_tabla_que_no_existe",
+            usuario=sitio.usuario,
+            password=sitio.password,
+        )
+
+    assert sitio.password not in str(excinfo.value)
+    assert "1146" in str(excinfo.value), "el error no vino de la base"
+
+
+def test_el_reset_sigue_funcionando(sitio: Sitio) -> None:
+    """I4: closing the leak did not break the tool."""
+    id_a1 = _ids_de(sitio, "lab_a1")[0]
+    antes = _hashes(sitio, [id_a1])
+
+    resultado = _correr_el_script(sitio, "--usuario", "lab_a1", "--password", PASSWORD_NUEVA)
+
+    assert resultado.returncode == 0, resultado.stderr
+    despues = _hashes(sitio, [id_a1])
+    assert despues[id_a1] != antes[id_a1], "el reset no cambio el hash"
+    assert "El sitio nunca se detuvo." in resultado.stdout
+
+
+# ---------------------------------------------------------------------------
 # Chequeo estatico y limpieza.
 # ---------------------------------------------------------------------------
 
 
 def test_el_update_va_por_id() -> None:
-    lineas = RUTA_DEL_SCRIPT.read_text(encoding="utf-8").splitlines()
+    lineas = (RUTA_DEL_PAQUETE / "reset.py").read_text(encoding="utf-8").splitlines()
 
     updates = [linea for linea in lineas if "UPDATE " in linea and "user_pass" in linea]
     assert len(updates) == 1, f"se esperaba un solo UPDATE de user_pass, hay {len(updates)}"
@@ -637,10 +771,9 @@ def test_el_update_va_por_id() -> None:
 
 def test_listar_solo_lectura_en_el_codigo() -> None:
     """La funcion del listado no puede nombrar un verbo de escritura."""
-    texto = RUTA_DEL_SCRIPT.read_text(encoding="utf-8")
+    texto = (RUTA_DEL_PAQUETE / "database.py").read_text(encoding="utf-8")
     inicio = texto.index("def usuarios_con_rol(")
-    fin = texto.index("def imprimir_usuarios(")
-    cuerpo = texto[inicio:fin].upper()
+    cuerpo = texto[inicio:].upper()
 
     for verbo in ("INSERT ", "UPDATE ", "DELETE ", "REPLACE "):
         assert verbo not in cuerpo, f"la consulta del listado contiene {verbo.strip()}"

@@ -39,6 +39,30 @@ PLUGIN_STATES = {
     "uninstalled",
 }
 
+# A.SPEC 0012: the subset of a plugin's permissions that a tenant administrator
+# must receive, kept next to the manifest synchronisation so the tenant-creation
+# path reads it without parsing plugin.json again. It is repopulated on every
+# boot and on every registry sync, which is what makes an existing tenant pick
+# up a newly declared permission.
+_TENANT_ADMIN_PERMISSIONS: dict[str, tuple[str, ...]] = {}
+
+
+def register_tenant_admin_permissions(plugin_id: str, permissions: list[str]) -> None:
+    """Remember the tenant-admin subset declared by one plugin."""
+    _TENANT_ADMIN_PERMISSIONS[plugin_id] = tuple(dict.fromkeys(permissions))
+
+
+def list_tenant_admin_permissions() -> list[str]:
+    """The union of every installed plugin's tenant-admin permissions."""
+    return sorted(
+        {
+            permission
+            for permissions in _TENANT_ADMIN_PERMISSIONS.values()
+            for permission in permissions
+        }
+    )
+
+
 
 class PluginStateError(AppError):
     def __init__(self, message: str, *, status_code: int = 400) -> None:
@@ -110,6 +134,9 @@ def sync_plugin_registry_state(db: Session, *, registry: PluginManifestRegistry)
             error="plugin not found on filesystem",
         )
         db.add(record)
+
+    for stale_plugin_id in set(_TENANT_ADMIN_PERMISSIONS) - discovered_plugin_ids:
+        _TENANT_ADMIN_PERMISSIONS.pop(stale_plugin_id, None)
 
     db.flush()
 
@@ -487,6 +514,9 @@ def reconcile_loaded_plugins(db: Session, *, runtime: PluginRuntime) -> None:
         record.permissions_json = list(result.manifest.permissions)
         record.events_json = list(result.manifest.events)
         record.description = result.manifest.description
+        register_tenant_admin_permissions(
+            result.manifest.id, result.manifest.tenant_admin_permissions
+        )
 
         if result.status == "enabled":
             latest_migration_version = _latest_migration_version_for_result(
@@ -515,6 +545,7 @@ def _apply_discovered_plugin(record: PluginRegistry, discovered: DiscoveredPlugi
         record.name = discovered.plugin_id
         record.last_error = discovered.error_message
         _set_plugin_state(record, "failed", error=discovered.error_message)
+        register_tenant_admin_permissions(discovered.plugin_id, [])
         return
 
     record.plugin_id = manifest.id
@@ -527,6 +558,7 @@ def _apply_discovered_plugin(record: PluginRegistry, discovered: DiscoveredPlugi
     record.permissions_json = list(manifest.permissions)
     record.events_json = list(manifest.events)
     record.description = manifest.description
+    register_tenant_admin_permissions(manifest.id, manifest.tenant_admin_permissions)
 
     if discovered.error_message is not None:
         _set_plugin_state(record, "failed", error=discovered.error_message)

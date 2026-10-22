@@ -10,7 +10,8 @@ from systutor.core.errors import AppError
 from systutor.kernel.auth.models import User
 from systutor.kernel.auth.security import hash_password
 from systutor.kernel.permissions.models import Permission, Role, RolePermission
-from systutor.kernel.permissions.service import assign_role_to_user
+from systutor.kernel.permissions.service import assign_role_to_user, sync_tenant_admin_role
+from systutor.kernel.plugins.persistent import register_tenant_admin_permissions
 from systutor.kernel.plugins.runtime import LoadedPlugin
 from systutor.kernel.plugins.service import sync_plugin_registry
 from systutor.kernel.tenants.models import Branch, Tenant
@@ -184,6 +185,47 @@ def sync_permissions(
     return all_permission_names
 
 
+def sync_tenant_admin_roles(
+    db: Session,
+    plugins: Sequence[LoadedPlugin],
+) -> list[str]:
+    """Backfill every existing `tenant_admin` role from the installed plugins.
+
+    A.SPEC 0012: a tenant created before a plugin declared a new
+    `tenant_admin_permissions` entry must receive it on the next boot. Only
+    tenants that already have a `tenant_admin` role are touched; this never
+    invents a tenant administrator for the seed tenant.
+
+    Idempotent: the core sync replaces the role's permissions with the exact
+    union, so booting twice neither duplicates nor removes what is declared.
+    """
+    declared: set[str] = set()
+    for plugin in plugins:
+        if plugin.manifest is None:
+            continue
+        register_tenant_admin_permissions(
+            plugin.manifest.id,
+            plugin.manifest.tenant_admin_permissions,
+        )
+        declared.update(plugin.manifest.tenant_admin_permissions)
+
+    tenant_ids = list(
+        db.scalars(
+            select(Role.tenant_id)
+            .where(Role.name == "tenant_admin")
+            .distinct()
+            .order_by(Role.tenant_id.asc())
+        )
+    )
+    for tenant_id in tenant_ids:
+        sync_tenant_admin_role(
+            db,
+            tenant_id=tenant_id,
+            permissions=sorted(declared),
+        )
+    return tenant_ids
+
+
 def ensure_seed(
     db: Session,
     settings: Settings,
@@ -204,6 +246,7 @@ def ensure_seed(
                 code="seed_orphan_admin",
             )
         granted = sync_permissions(db, tenant, plugins)
+        sync_tenant_admin_roles(db, plugins)
         return {
             "status": "permissions_synced",
             "user_email": existing.email,
@@ -228,6 +271,7 @@ def seed_demo_data(
     tenant = _get_or_create_tenant(db, settings)
     branch = _get_or_create_branch(db, tenant, settings)
     sync_permissions(db, tenant, plugins)
+    sync_tenant_admin_roles(db, plugins)
     admin_role = _get_or_create_role(
         db,
         tenant,

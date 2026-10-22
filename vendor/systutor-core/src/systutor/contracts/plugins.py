@@ -20,6 +20,7 @@ class PluginManifestContract(BaseModel):
     backend_entrypoint: str
     frontend_entrypoint: str
     permissions: list[str] = Field(default_factory=list)
+    tenant_admin_permissions: list[str] = Field(default_factory=list)
     events: list[str] = Field(default_factory=list)
     description: str
 
@@ -80,6 +81,18 @@ class PluginManifestContract(BaseModel):
                 raise ValueError("permissions must use <module>.<resource>.<action>")
         return value
 
+    @field_validator("tenant_admin_permissions")
+    @classmethod
+    def validate_tenant_admin_permissions(cls, value: list[str]) -> list[str]:
+        if len(set(value)) != len(value):
+            raise ValueError("tenant_admin_permissions must not contain duplicates")
+        for item in value:
+            if not PERMISSION_PATTERN.match(item):
+                raise ValueError(
+                    "tenant_admin_permissions must use <module>.<resource>.<action>"
+                )
+        return value
+
     @field_validator("events")
     @classmethod
     def validate_events(cls, value: list[str]) -> list[str]:
@@ -98,6 +111,16 @@ class PluginManifestContract(BaseModel):
         for permission in self.permissions:
             if not permission.startswith(expected_namespace):
                 raise ValueError("permissions must use the plugin id namespace")
+        for permission in self.tenant_admin_permissions:
+            if not permission.startswith(expected_namespace):
+                raise ValueError(
+                    "tenant_admin_permissions must use the plugin id namespace"
+                )
+            if permission not in self.permissions:
+                raise ValueError(
+                    "tenant_admin_permissions must be a subset of permissions; "
+                    f"'{permission}' is not declared in permissions"
+                )
         for event_name in self.events:
             if not event_name.startswith(expected_namespace):
                 raise ValueError("events must use the plugin id namespace")

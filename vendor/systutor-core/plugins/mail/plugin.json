@@ -12,6 +12,11 @@
     "mail.accounts.create",
     "mail.account.password"
   ],
+  "tenant_admin_permissions": [
+    "mail.accounts.read",
+    "mail.accounts.create",
+    "mail.account.password"
+  ],
   "events": [
     "mail.account.created",
     "mail.account.password_changed"

@@ -27,12 +27,19 @@ import re
 import sys
 from pathlib import Path
 
-# El modulo bajo prueba vive un nivel arriba y no es un paquete, asi que lo
-# sumamos al path. Esto no lee ningun .env ni abre ninguna conexion.
+# El modulo bajo prueba vive en el paquete extraido del plugin, no en scripts/.
+# Esto no lee ningun .env ni abre ninguna conexion.
 RAIZ_DE_SCRIPTS = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(RAIZ_DE_SCRIPTS))
+RAIZ_DEL_CORE = RAIZ_DE_SCRIPTS.parent / "vendor" / "systutor-core"
+# `systutor` lives in src; `plugins` lives in the core root. Both first, so a
+# stale editable install cannot shadow the checkout under test.
+sys.path.insert(0, str(RAIZ_DEL_CORE / "src"))
+sys.path.insert(0, str(RAIZ_DEL_CORE))
 
-import probe_docker  # noqa: E402
+from plugins.hosting.backend import (  # pyright: ignore[reportMissingImports]
+    discovery,
+    transport,
+)
 
 # ---------------------------------------------------------------------------
 # Fixtures. Son filas literales de `docker ps --format '{{json .}}'`: por eso
@@ -92,7 +99,7 @@ def test_1_imagen_wordpress_running() -> None:
     """
     contenedor = fila_de_ps(Image="wordpress:php8.3-apache", State="running")
 
-    candidato = probe_docker.detectar_capa1(contenedor)
+    candidato = discovery.detectar_capa1(contenedor)
 
     assert candidato.es_sitio is True
     assert candidato.gestionable is True
@@ -108,13 +115,13 @@ def test_2_wordpress_cli_no_es_sitio() -> None:
     """
     contenedor = fila_de_ps(Names="wp-cli-acme", Image="wordpress:cli")
 
-    candidato = probe_docker.detectar_capa1(contenedor)
+    candidato = discovery.detectar_capa1(contenedor)
 
     assert candidato.es_sitio is False
     assert candidato.gestionable is False
     assert "wp-cli" in candidato.por_que
     # Y ni se le gasta un `docker inspect`: ya se sabe que no es un sitio.
-    assert probe_docker.es_prefiltrado(contenedor) is False
+    assert discovery.es_prefiltrado(contenedor) is False
 
 
 def test_3_imagen_custom_con_montaje_es_sitio() -> None:
@@ -122,11 +129,11 @@ def test_3_imagen_custom_con_montaje_es_sitio() -> None:
     contenedor = fila_de_ps(Names="acme", Image="miempresa/wp-custom:1.2")
 
     # La capa 1, sola, no puede saberlo: el nombre de la imagen no dice nada.
-    assert probe_docker.detectar_capa1(contenedor).es_sitio is False
+    assert discovery.detectar_capa1(contenedor).es_sitio is False
     # Pero el contenedor entra al prefiltrado, asi que llega al inspect.
-    assert probe_docker.es_prefiltrado(contenedor) is True
+    assert discovery.es_prefiltrado(contenedor) is True
 
-    candidato = probe_docker.detectar_capa2(contenedor, inspect_con_montaje())
+    candidato = discovery.detectar_capa2(contenedor, inspect_con_montaje())
 
     assert candidato.es_sitio is True
     assert candidato.senal == "montaje"
@@ -140,23 +147,23 @@ def test_4_mariadb_no_es_sitio() -> None:
     """
     contenedor = fila_de_ps(Names="acme-db", Image="mariadb:11")
 
-    candidato = probe_docker.detectar_capa1(contenedor)
+    candidato = discovery.detectar_capa1(contenedor)
 
     assert candidato.es_sitio is False
     assert candidato.gestionable is False
     assert "base de datos" in candidato.por_que
     # Y no se le gasta un `docker inspect`.
-    assert probe_docker.es_prefiltrado(contenedor) is False
+    assert discovery.es_prefiltrado(contenedor) is False
 
 
 def test_5_nginx_con_montaje_es_sitio() -> None:
     """Caso 5: `nginx:alpine` no dice WordPress en ningun lado y aun asi sirve el sitio."""
     contenedor = fila_de_ps(Names="acme-nginx", Image="nginx:alpine")
 
-    assert probe_docker.detectar_capa1(contenedor).es_sitio is False
-    assert probe_docker.es_prefiltrado(contenedor) is True
+    assert discovery.detectar_capa1(contenedor).es_sitio is False
+    assert discovery.es_prefiltrado(contenedor) is True
 
-    candidato = probe_docker.detectar_capa2(contenedor, inspect_con_montaje())
+    candidato = discovery.detectar_capa2(contenedor, inspect_con_montaje())
 
     assert candidato.es_sitio is True
     assert candidato.senal == "montaje"
@@ -166,7 +173,7 @@ def test_6_bitnami_es_sitio() -> None:
     """Caso 6: el prefijo no esta en la posicion 0, pero sigue siendo WordPress."""
     contenedor = fila_de_ps(Names="acme-bitnami", Image="bitnami/wordpress:6")
 
-    candidato = probe_docker.detectar_capa1(contenedor)
+    candidato = discovery.detectar_capa1(contenedor)
 
     assert candidato.es_sitio is True
     assert candidato.senal == "imagen"
@@ -176,7 +183,7 @@ def test_7_etiqueta_spanel_site() -> None:
     """Caso 7: lo pusimos nosotros al provisionar, asi que es nuestro."""
     contenedor = fila_de_ps(Names="acme", Image="miempresa/app:3", Labels="spanel.site=acme")
 
-    candidato = probe_docker.detectar_capa1(contenedor)
+    candidato = discovery.detectar_capa1(contenedor)
 
     assert candidato.es_sitio is True
     assert candidato.gestionable is True
@@ -197,7 +204,7 @@ def test_8_managed_false_saca_el_contenedor_del_alcance() -> None:
         Labels="spanel.site=otro,spanel.managed=false",
     )
 
-    candidato = probe_docker.detectar_capa1(contenedor)
+    candidato = discovery.detectar_capa1(contenedor)
 
     assert candidato.es_sitio is True  # se sigue mostrando, es un sitio
     assert candidato.gestionable is False  # pero queda fuera del alcance
@@ -222,7 +229,7 @@ def test_8b_sin_etiqueta_managed_si_es_gestionable() -> None:
         Labels="",  # ni una sola etiqueta
     )
 
-    candidato = probe_docker.detectar_capa1(contenedor)
+    candidato = discovery.detectar_capa1(contenedor)
 
     assert candidato.es_sitio is True
     assert candidato.gestionable is True
@@ -234,14 +241,14 @@ def test_8c_solo_los_negativos_explicitos_sacan_de_alcance() -> None:
         contenedor = fila_de_ps(
             Names="wp", Image="wordpress:php8.3-apache", Labels=f"spanel.managed={valor}"
         )
-        assert probe_docker.detectar_capa1(contenedor).gestionable is False, valor
+        assert discovery.detectar_capa1(contenedor).gestionable is False, valor
 
     # Y todo lo demas es operable, incluido lo que no tiene sentido.
     for valor in ("true", "1", "yes", "on", "", "quizás", "lo-que-sea"):
         contenedor = fila_de_ps(
             Names="wp", Image="wordpress:php8.3-apache", Labels=f"spanel.managed={valor}"
         )
-        assert probe_docker.detectar_capa1(contenedor).gestionable is True, valor
+        assert discovery.detectar_capa1(contenedor).gestionable is True, valor
 
 
 def test_transporte_local_no_duplica_el_docker() -> None:
@@ -254,7 +261,7 @@ def test_transporte_local_no_duplica_el_docker() -> None:
     """
     env = {"SPANEL_DOCKER_TRANSPORT": "local", "MAIL_SERVER_PASSWORD": "x"}
 
-    argv = probe_docker.build_docker_argv("docker ps -a --format '{{json .}}'", env=env)
+    argv = transport.build_docker_argv("docker ps -a --format '{{json .}}'", env=env)
 
     assert argv == ["docker", "ps", "-a", "--format", "{{json .}}"]
     assert argv.count("docker") == 1
@@ -268,7 +275,7 @@ def test_9_provisioned_es_gestionable() -> None:
         Labels="spanel.managed=true,spanel.site=acme",
     )
 
-    candidato = probe_docker.detectar_capa1(contenedor)
+    candidato = discovery.detectar_capa1(contenedor)
 
     assert candidato.es_sitio is True
     assert candidato.gestionable is True
@@ -283,7 +290,7 @@ def test_10_apagado_sigue_siendo_sitio() -> None:
     """
     contenedor = fila_de_ps(Names="wp-parado", Image="wordpress:php8.3-apache", State="exited")
 
-    candidato = probe_docker.detectar_capa1(contenedor)
+    candidato = discovery.detectar_capa1(contenedor)
 
     assert candidato.es_sitio is True
     assert candidato.senal == "imagen"
@@ -291,22 +298,22 @@ def test_10_apagado_sigue_siendo_sitio() -> None:
 
 def test_11_diccionario_vacio_no_lanza() -> None:
     """Caso 11: `{}`, sin ninguna clave. La diferencia entre un `[]` y un 500."""
-    assert probe_docker.detectar_capa1({}).es_sitio is False
-    assert probe_docker.detectar_capa1({}).senal == ""
-    assert probe_docker.detectar_capa2({}, inspect_sin_nada()).es_sitio is False
+    assert discovery.detectar_capa1({}).es_sitio is False
+    assert discovery.detectar_capa1({}).senal == ""
+    assert discovery.detectar_capa2({}, inspect_sin_nada()).es_sitio is False
 
     # Tampoco con datos de tipos raros, que es lo que de verdad rompe pantallas.
     for raro in (None, [], "wordpress", 42, {"Image": None}, {"Image": ["lista"]}):
-        candidato = probe_docker.detectar_capa2(raro, inspect_sin_nada())
+        candidato = discovery.detectar_capa2(raro, inspect_sin_nada())
         assert candidato.es_sitio is False
         assert isinstance(candidato.por_que, str)
 
 
 def test_12_lista_vacia_no_lanza() -> None:
     """Caso 12: una maquina sin contenedores es una maquina valida."""
-    assert probe_docker.detectar_todos([]) == []
-    assert probe_docker.detectar_todos(None) == []
-    assert probe_docker.detectar_todos("no soy una lista") == []
+    assert discovery.detectar_todos([]) == []
+    assert discovery.detectar_todos(None) == []
+    assert discovery.detectar_todos("no soy una lista") == []
 
 
 # ---------------------------------------------------------------------------
@@ -322,14 +329,14 @@ def test_labels_exact_key_not_substring() -> None:
     """
     negativo = fila_de_ps(Names=" impostor", Image="miempresa/app:3", Labels="xspanel.sitex=1")
 
-    assert "spanel.site" not in probe_docker.parse_labels("xspanel.sitex=1")
-    assert "spanel.site" not in probe_docker.parse_labels("myspanel.site=1")
-    assert probe_docker.detectar_capa1(negativo).es_sitio is False
+    assert "spanel.site" not in discovery.parse_labels("xspanel.sitex=1")
+    assert "spanel.site" not in discovery.parse_labels("myspanel.site=1")
+    assert discovery.detectar_capa1(negativo).es_sitio is False
 
     positivo = fila_de_ps(Names="nuestro", Image="miempresa/app:3", Labels="spanel.site=acme")
 
-    assert probe_docker.parse_labels("spanel.site=acme") == {"spanel.site": "acme"}
-    assert probe_docker.detectar_capa1(positivo).es_sitio is True
+    assert discovery.parse_labels("spanel.site=acme") == {"spanel.site": "acme"}
+    assert discovery.detectar_capa1(positivo).es_sitio is True
 
 
 def test_password_never_in_argv() -> None:
@@ -346,7 +353,7 @@ def test_password_never_in_argv() -> None:
         "MAIL_SERVER_PASSWORD": clave,
     }
 
-    argv = probe_docker.build_docker_argv("docker ps -a --format '{{json .}}'", env=entorno)
+    argv = transport.build_docker_argv("docker ps -a --format '{{json .}}'", env=entorno)
 
     assert clave not in " ".join(argv)
     assert all(clave not in elemento for elemento in argv)
@@ -416,7 +423,7 @@ def test_inspect_solo_para_los_prefiltrados() -> None:
         pedidos.append(nombre)
         return inspect_con_montaje()
 
-    candidatos = probe_docker.detectar_todos(contenedores, inspeccionar)
+    candidatos = discovery.detectar_todos(contenedores, inspeccionar)
 
     # Ni la herramienta ni las dos bases de datos: 2 pedidos por 5 contenedores.
     assert pedidos == ["wp-acme", "acme-nginx"]
@@ -430,7 +437,7 @@ def test_inspect_solo_para_los_prefiltrados() -> None:
 
 
 def test_parse_labels_separa_por_coma() -> None:
-    assert probe_docker.parse_labels("a=1,b=2,spanel.site=acme") == {
+    assert discovery.parse_labels("a=1,b=2,spanel.site=acme") == {
         "a": "1",
         "b": "2",
         "spanel.site": "acme",
@@ -439,7 +446,7 @@ def test_parse_labels_separa_por_coma() -> None:
 
 def test_parse_labels_parte_por_el_primer_igual() -> None:
     """El valor puede contener un `=`: lo que importa es la clave."""
-    assert probe_docker.parse_labels("url=https://acme.test/?a=1") == {
+    assert discovery.parse_labels("url=https://acme.test/?a=1") == {
         "url": "https://acme.test/?a=1"
     }
 
@@ -447,9 +454,9 @@ def test_parse_labels_parte_por_el_primer_igual() -> None:
 def test_parse_labels_no_explota_con_basura() -> None:
     """Un `Labels` que no es texto, o vacio, no puede tirar el script abajo."""
     for basura in (None, "", 42, ["a=1"], {"a": "1"}, "sin_igual", "=sin_clave"):
-        etiquetas = probe_docker.parse_labels(basura)
+        etiquetas = discovery.parse_labels(basura)
         assert isinstance(etiquetas, dict)
     # Un token sin "=" es una etiqueta sin valor, y una sin clave se descarta.
-    assert probe_docker.parse_labels("sin_igual") == {"sin_igual": ""}
-    assert probe_docker.parse_labels("=sin_clave") == {}
-    assert probe_docker.parse_labels("a=1,,b=2") == {"a": "1", "b": "2"}
+    assert discovery.parse_labels("sin_igual") == {"sin_igual": ""}
+    assert discovery.parse_labels("=sin_clave") == {}
+    assert discovery.parse_labels("a=1,,b=2") == {"a": "1", "b": "2"}
