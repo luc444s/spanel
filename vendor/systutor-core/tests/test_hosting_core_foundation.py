@@ -78,6 +78,20 @@ def _role_permission_names(db: Session, role_id: str) -> set[str]:
     return set(db.scalars(stmt))
 
 
+def _declared_tenant_admin_permissions() -> set[str]:
+    """The union the installed manifests declare, without hardcoding plugin names.
+
+    A.SPEC 0013 adds hosting permissions to this set; the test must follow the
+    manifests, not the mail-only list it was written against.
+    """
+    return {
+        permission
+        for plugin in _real_plugins()
+        if plugin.manifest is not None
+        for permission in plugin.manifest.tenant_admin_permissions
+    }
+
+
 def _real_plugins() -> list[LoadedPlugin]:
     loaded: list[LoadedPlugin] = []
     for manifest_path in sorted(PLUGINS_ROOT.glob("*/plugin.json")):
@@ -250,7 +264,9 @@ def test_el_boot_actualiza_tenants_existentes(
     assert _role_permission_names(db_session, role.id) == {"mail.accounts.read"} | TENANT_ADMIN_BASE
 
     sync_tenant_admin_roles(db_session, _real_plugins())
-    assert _role_permission_names(db_session, role.id) == set(MAIL_TENANT_ADMIN) | TENANT_ADMIN_BASE
+    assert _role_permission_names(db_session, role.id) == (
+        _declared_tenant_admin_permissions() | TENANT_ADMIN_BASE
+    )
 
     before = db_session.scalars(
         select(RolePermission).where(RolePermission.role_id == role.id)
@@ -272,7 +288,7 @@ def test_la_sincronizacion_persiste_el_subconjunto_declarado(
     sync_plugin_registry_state(db_session, registry=registry)
 
     declared = set(list_tenant_admin_permissions())
-    assert declared == set(MAIL_TENANT_ADMIN), (
+    assert declared == _declared_tenant_admin_permissions(), (
         "la sincronizacion no recordo exactamente lo que declaran los plugins"
     )
     assert "mail.accounts.all" not in declared
