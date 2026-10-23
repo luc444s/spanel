@@ -54,6 +54,11 @@ def build_db_command(db: str, base: str, *, batch: bool = True) -> str:
     file inside the container.
     """
     flags = " -N -B" if batch else ""
+    # The body is wrapped in single quotes, and that wrapper is what every
+    # shell between here and the container removes. A single quote INSIDE the
+    # body would close it early: `printf '[client]\n...'` arrived as
+    # `[client]nuser=...`, the client ignored the broken file and tried root
+    # without a password. Double quotes here keep the \n for printf.
     return (
         f"docker exec -i {db} sh -c '"
         'if [ -n "${MARIADB_USER:-}" ] && [ -n "${MARIADB_PASSWORD:-}" ]; then '
@@ -62,7 +67,7 @@ def build_db_command(db: str, base: str, *, batch: bool = True) -> str:
         "IFS= read -r spanel_u; IFS= read -r spanel_p; "
         "spanel_f=$(mktemp); "
         "chmod 600 \"$spanel_f\"; "
-        "printf '[client]\\nuser=%s\\npassword=%s\\n' \"$spanel_u\" \"$spanel_p\" "
+        "printf \"[client]\\nuser=%s\\npassword=%s\\n\" \"$spanel_u\" \"$spanel_p\" "
         "> \"$spanel_f\"; "
         f"mariadb --defaults-extra-file=\"$spanel_f\" {base}{flags}; "
         "spanel_rc=$?; rm -f \"$spanel_f\"; exit $spanel_rc"
