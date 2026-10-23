@@ -381,6 +381,10 @@ def test_los_scripts_no_duplican_logica() -> None:
             assert definicion not in texto, f"{script} todavia define {definicion}"
 
 
+@pytest.mark.skipif(
+    not SCRIPTS_ROOT.is_dir(),
+    reason="the operator scripts live in the host checkout, not in the kernel",
+)
 def test_los_scripts_conservan_los_flags() -> None:
     probe = subprocess.run(
         [sys.executable, str(SCRIPTS_ROOT / "probe_docker.py"), "--help"],

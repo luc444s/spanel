@@ -35,6 +35,12 @@ def _role_permission_names(db: Session, role: Role) -> set[str]:
     return set(db.scalars(stmt).all())
 
 
+def _only_user(db: Session) -> User:
+    user = db.scalar(select(User))
+    assert user is not None, "the seeded admin should exist"
+    return user
+
+
 def _admin_role(db: Session, user: User) -> Role:
     role = db.scalar(
         select(Role).where(Role.tenant_id == user.tenant_id, Role.name == "admin")
@@ -72,7 +78,7 @@ def test_kernel_permission_reaches_admin_role_on_second_boot(app, db_session: Se
 
     first = ensure_seed(db_session, settings, plugins)
     assert first["status"] == "seeded"
-    role = _admin_role(db_session, db_session.scalar(select(User)))
+    role = _admin_role(db_session, _only_user(db_session))
     assert NEW_PERMISSION not in _loaded_permissions(db_session, role), (
         "precondition: the permission must not exist before the second boot"
     )
@@ -95,7 +101,7 @@ def test_plugin_permission_reaches_admin_role_on_second_boot(app, db_session: Se
     plugins = app.state.plugin_runtime.list_results()
     ensure_seed(db_session, settings, plugins)
 
-    user = db_session.scalar(select(User))
+    user = _only_user(db_session)
     role = _admin_role(db_session, user)
 
     plugin_permission = "mail.brand.new.thing"
@@ -128,7 +134,7 @@ def test_ensure_seed_is_idempotent(app, db_session: Session):
     plugins = app.state.plugin_runtime.list_results()
 
     ensure_seed(db_session, settings, plugins)
-    user = db_session.scalar(select(User))
+    user = _only_user(db_session)
     role = _admin_role(db_session, user)
     after_first = _loaded_permissions(db_session, role)
 
@@ -191,7 +197,7 @@ def test_seeded_admin_keeps_full_access(app, db_session: Session):
     settings = app.state.settings
     plugins = app.state.plugin_runtime.list_results()
     ensure_seed(db_session, settings, plugins)
-    user = db_session.scalar(select(User))
+    user = _only_user(db_session)
 
     context = build_tenant_context(db_session, user)
     granted = set(BASE_PERMISSIONS)
@@ -271,8 +277,9 @@ def test_ensure_seed_rejects_orphan_admin(app, db_session: Session):
 
 def test_sync_permissions_returns_full_catalog(app, db_session: Session):
     ensure_seed(db_session, app.state.settings, app.state.plugin_runtime.list_results())
-    user = db_session.scalar(select(User))
+    user = _only_user(db_session)
     tenant = db_session.get(Tenant, user.tenant_id)
+    assert tenant is not None
 
     granted = sync_permissions(db_session, tenant, app.state.plugin_runtime.list_results())
 
