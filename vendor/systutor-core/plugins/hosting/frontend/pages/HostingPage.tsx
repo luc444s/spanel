@@ -19,17 +19,12 @@ import { Dialog } from "@systutor/shell/ui/dialog";
 import { toast } from "@systutor/shell/ui/toast";
 import { Input } from "@systutor/shell/ui/input";
 import { useAuthStore } from "../../../../../../apps/web/src/features/auth/store";
+import { SiteCard, stateLabel } from "../components/SiteCard";
 
 type GeneratedPassword = {
   login: string;
   password: string;
 };
-
-function stateLabel(status: string) {
-  if (status === "running") return "En marcha";
-  if (status === "missing") return "No existe";
-  return status;
-}
 
 export default function HostingPage() {
   const queryClient = useQueryClient();
@@ -46,6 +41,7 @@ export default function HostingPage() {
   const [deleteTarget, setDeleteTarget] = useState<HostingSite | null>(null);
   const [confirmation, setConfirmation] = useState("");
   const [logsTarget, setLogsTarget] = useState<HostingSite | null>(null);
+  const [detailSite, setDetailSite] = useState<HostingSite | null>(null);
   const [selectedSite, setSelectedSite] = useState<HostingSite | null>(null);
   const [resetTarget, setResetTarget] = useState<WordPressUser | null>(null);
   const [generated, setGenerated] = useState<GeneratedPassword | null>(null);
@@ -136,6 +132,9 @@ export default function HostingPage() {
 
   const sites = sitesQuery.data?.sites ?? [];
   const users = usersQuery.data?.users ?? [];
+  // The list is the source of truth: after an action we refetch it, and the
+  // open dialog must show the new status without closing and reopening.
+  const detail = detailSite ? sites.find((site) => site.id === detailSite.id) ?? detailSite : null;
 
   return (
     <section className="space-y-4">
@@ -149,51 +148,86 @@ export default function HostingPage() {
           No hay sitios WordPress asignados a este tenant.
         </p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left text-muted-foreground">
-                <th className="pb-2 pr-4">Sitio</th>
-                <th className="pb-2 pr-4">Dominio</th>
-                <th className="pb-2 pr-4">Estado</th>
-                <th className="pb-2 pr-4">Gestionable</th>
-                <th className="pb-2">Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sites.map((site) => (
-                <tr key={site.id} className="border-b border-border/50">
-                  <td className="py-2 pr-4 font-mono text-xs">{site.container_name}</td>
-                  <td className="py-2 pr-4">{site.domain ?? "—"}</td>
-                  <td className="py-2 pr-4">{stateLabel(site.status)}</td>
-                  <td className="py-2 pr-4">{site.managed ? "Sí" : "No"}</td>
-                  <td className="py-2">
-                    {canReadUsers ? <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => setSelectedSite(site)}
-                    >
-                      Ver usuarios
-                    </Button> : null}
-                    <Button size="sm" variant="secondary" onClick={() => setLogsTarget(site)}>
-                      Logs
-                    </Button>
-                    {canManage ? (["start", "stop", "restart"] as const).map((action) => (
-                      <Button key={action} size="sm" variant="secondary"
-                        disabled={!site.managed || operateMutation.isPending}
-                        onClick={() => operateMutation.mutate({ siteId: site.id, action })}>
-                        {{ start: "Iniciar", stop: "Detener", restart: "Reiniciar" }[action]}
-                      </Button>
-                    )) : null}
-                    {canDelete ? <Button size="sm" variant="secondary" disabled={!site.managed}
-                      onClick={() => { setDeleteTarget(site); setConfirmation(""); }}>Eliminar</Button> : null}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {sites.map((site) => (
+            <SiteCard key={site.id} site={site} onOpen={setDetailSite} />
+          ))}
         </div>
       )}
+
+      <Dialog
+        open={Boolean(detail)}
+        title={detail?.container_name ?? ""}
+        description={detail?.domain ?? "Sin dominio"}
+        onClose={() => setDetailSite(null)}
+      >
+        {detail ? (
+          <div className="space-y-4">
+            <dl className="grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <dt className="text-xs text-muted-foreground">Estado</dt>
+                <dd className="text-foreground">{stateLabel(detail.status)}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Gestionable</dt>
+                <dd className="text-foreground">{detail.managed ? "Sí" : "No"}</dd>
+              </div>
+              <div className="col-span-2">
+                <dt className="text-xs text-muted-foreground">ID</dt>
+                <dd className="break-all font-mono text-xs text-foreground">{detail.id}</dd>
+              </div>
+            </dl>
+
+            <div className="grid grid-cols-2 gap-2">
+              {canReadUsers ? (
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setSelectedSite(detail);
+                    setDetailSite(null);
+                  }}
+                >
+                  Ver usuarios
+                </Button>
+              ) : null}
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setLogsTarget(detail);
+                  setDetailSite(null);
+                }}
+              >
+                Logs
+              </Button>
+              {canManage
+                ? (["start", "stop", "restart"] as const).map((action) => (
+                    <Button
+                      key={action}
+                      variant="secondary"
+                      disabled={!detail.managed || operateMutation.isPending}
+                      onClick={() => operateMutation.mutate({ siteId: detail.id, action })}
+                    >
+                      {{ start: "Iniciar", stop: "Detener", restart: "Reiniciar" }[action]}
+                    </Button>
+                  ))
+                : null}
+              {canDelete ? (
+                <Button
+                  variant="secondary"
+                  disabled={!detail.managed}
+                  className="border-destructive/60 text-destructive hover:bg-destructive/10"
+                  onClick={() => {
+                    setDeleteTarget(detail);
+                    setDetailSite(null);
+                  }}
+                >
+                  Eliminar
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+      </Dialog>
 
       {selectedSite ? (
         <div className="space-y-3 rounded-md border border-border bg-card p-4">
