@@ -1,6 +1,6 @@
 # Spanel
 
-Sistema de administración de correos electrónicos multi-tenant basado en Docker Mailserver. Permite gestionar cuentas de correo para múltiples dominios/tenants a través de una interfaz web moderna.
+Sistema de administración multi-tenant de correo electrónico y sitios WordPress sobre Docker. Permite gestionar cuentas de correo y sitios WordPress para múltiples dominios/tenants a través de una interfaz web moderna.
 
 ## Características Principales
 
@@ -10,6 +10,8 @@ Sistema de administración de correos electrónicos multi-tenant basado en Docke
 - **RBAC**: Sistema de permisos por rol (superadmin, admin, usuario)
 - **UI Moderna**: Frontend con React, Tailwind CSS y shadcn/ui
 - **Plugin System**: Arquitectura modular basada en plugins
+- **Hosting WordPress**: sitios, usuarios, configuración, ciclo de vida y adopción de sitios existentes
+- **Acceso a base de datos**: credencial propia del sitio y apertura de phpMyAdmin, sin exponerlo a Internet
 - **Auditoría**: Registro de eventos para trazabilidad
 
 ## Arquitectura
@@ -118,6 +120,11 @@ npm run dev
 | `MAIL_DMS_CONTAINER` | Nombre del container DMS | `mailserver` |
 | `MAIL_ACCOUNTS_CACHE_ENABLED` | Cache Redis de la lista de correos | `true` |
 | `MAIL_ACCOUNTS_CACHE_TTL` | TTL (segundos) de la lista de correos en cache | `60` |
+| `SPANEL_DOCKER_TRANSPORT` | Cómo llega el panel al host Docker (`ssh` o `local`) | `ssh` |
+| `SPANEL_DOCKER_SSH_HOST` | Host Docker para el plugin de hosting | - |
+| `SPANEL_DOCKER_SSH_USER` | Usuario SSH del host Docker | - |
+| `SPANEL_HOSTING_SITES_DIR` | Directorio estable por sitio en el host Docker | `/opt/spanel/sites` |
+| `SPANEL_PHPMYADMIN_URL` | URL de phpMyAdmin que abre el botón `Base de datos` (opcional) | - |
 
 ### Configuración del Servidor de Correo
 
@@ -173,6 +180,55 @@ Gestión de tenants (solo superadmin).
 - `tenant.tenants.read` - Ver tenants
 - `tenant.tenants.manage` - Gestionar tenants
 
+### Plugin de Hosting (`hosting`)
+
+Gestiona sitios WordPress que viven en contenedores Docker en un host remoto
+(SSH) o local. La propiedad es una fila de `hosting_sites`, no una etiqueta de
+Docker: otro tenant ve 404, igual que si el sitio no existiera.
+
+**Endpoints** (todos con `TenantContext` y guard de propiedad):
+
+- `GET /api/v1/plugins/hosting/sites` — `hosting.sites.read`
+- `POST /api/v1/plugins/hosting/sites` — `hosting.sites.create`
+- `POST /api/v1/plugins/hosting/sites/{id}/{start|stop|restart}` — `hosting.sites.manage`
+- `GET /api/v1/plugins/hosting/sites/{id}/logs` — `hosting.sites.read`
+- `GET|PATCH /api/v1/plugins/hosting/sites/{id}/config` — `hosting.sites.read` / `manage`
+- `POST /api/v1/plugins/hosting/sites/{id}/secrets/salts` — `hosting.sites.manage`
+- `GET /api/v1/plugins/hosting/sites/{id}/users` — `hosting.users.read`
+- `POST /api/v1/plugins/hosting/sites/{id}/users/{wp_user_id}/password` — `hosting.users.password`
+- `POST /api/v1/plugins/hosting/sites/{id}/database` — `hosting.sites.manage`
+- `DELETE /api/v1/plugins/hosting/sites/{id}` — `hosting.sites.delete` (plataforma)
+
+Sitios existentes se adoptan con un CLI de operador, nunca por HTTP:
+
+```bash
+python3 scripts/hosting_adopt.py --container spanel-demowp-wp --tenant demo --dry-run
+```
+
+#### Base de datos
+
+El botón `Base de datos` del diálogo del sitio revela la credencial **propia del
+sitio** (el usuario que ya usa WordPress, no root) y ofrece abrir phpMyAdmin.
+La respuesta va con `Cache-Control: no-store`, el host se valida como
+contenedor y la contraseña nunca aparece en la URL, el log ni la auditoría. Si
+`SPANEL_PHPMYADMIN_URL` está vacío, la credencial se muestra igual y solo se
+deshabilita el enlace.
+
+phpMyAdmin se levanta aparte, apuntando a un MariaDB que ya existe:
+
+```bash
+./scripts/phpmyadmin_up.sh --host spanel-lab-mariadb --network mariadb_internal
+./scripts/phpmyadmin_up.sh --host spanel-lab-mariadb --dry-run
+./scripts/phpmyadmin_up.sh --down --yes
+```
+
+El script solo agrega (o quita) el contenedor de phpMyAdmin: no crea bases, no
+toca volúmenes ni otros contenedores, y siempre publica en `127.0.0.1`. Cada
+usuario de base ve solo su propia base. Para entrar desde otra máquina usá un
+túnel SSH o `tailscale serve`; nunca publiques el puerto en `0.0.0.0` ni lo
+expongas con Traefik. `SPANEL_PHPMYADMIN_URL` debe coincidir con la URL que ve
+el navegador (es también `PMA_ABSOLUTE_URI`).
+
 ## Desarrollo
 
 ### Estructura del Proyecto
@@ -186,20 +242,12 @@ spanel/
 │       │   ├── pages/          # Páginas
 │       │   └── shared/         # Layout, hooks, utils
 │       └── package.json
-├── plugins/
-│   ├── mail/                   # Plugin de correo
-│   │   ├── backend/            # API routes, service, schemas
-│   │   ├── frontend/           # Páginas React
-│   │   ├── migrations/         # Migraciones DB
-│   │   └── permissions/        # Definición de permisos
-│   └── tenant/                 # Plugin de tenants
-│       ├── backend/
-│       ├── frontend/
-│       └── permissions/
+├── scripts/                    # CLIs de operador (adopción, phpMyAdmin, reset)
 ├── vendor/
 │   └── systutor-core/          # Core del framework
-│       ├── src/systutor/       # Código fuente del SDK
-│       └── app/                # FastAPI app
+│       ├── src/systutor/       # SDK / kernel
+│       ├── app/                # FastAPI app
+│       └── plugins/            # mail, tenant, hosting (backend + frontend)
 ├── docker-compose.yml
 ├── Dockerfile
 └── entrypoint.sh
@@ -219,6 +267,12 @@ npm run services
 
 # Base de datos
 npm run db
+
+# Adoptar un sitio WordPress existente (operador)
+python3 scripts/hosting_adopt.py --container spanel-demowp-wp --tenant demo --dry-run
+
+# phpMyAdmin interno, apuntando a un MariaDB existente
+./scripts/phpmyadmin_up.sh --host <mariadb> --network <red> --dry-run
 ```
 
 ### Testing
@@ -274,6 +328,10 @@ curl -X PUT -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"password": "<new-mailbox-password>"}' \
   http://localhost:3000/api/v1/plugins/mail/mail/accounts/ventas@example.com/password
+
+# Credencial propia del sitio para phpMyAdmin (POST explícito, no-store)
+curl -X POST -H "Authorization: Bearer $TOKEN" \
+  http://localhost:3000/api/v1/plugins/hosting/sites/<site-id>/database
 ```
 
 ## Seguridad
@@ -281,7 +339,9 @@ curl -X PUT -H "Authorization: Bearer $TOKEN" \
 - **Passwords**: Nunca se almacenan en PostgreSQL, solo en DMS
 - **Passwords**: Nunca se loguean ni aparecen en respuestas HTTP
 - **Passwords**: Se envían vía stdin de SSH, nunca como argumentos CLI
-- **Multi-tenant**: Cada tenant solo ve/edita sus propias cuentas
+- **Base de datos**: el panel revela la credencial propia del sitio (nunca root) con `no-store`; el host de la base se valida como contenedor y la contraseña no se escribe en logs ni en auditoría
+- **phpMyAdmin**: escucha solo en `127.0.0.1`, en una red interna, sin autologin; el acceso remoto va por túnel SSH o tailnet, nunca por una URL pública
+- **Multi-tenant**: Cada tenant solo ve/edita sus propias cuentas y sitios
 - **RBAC**: Permisos verificados en cada endpoint
 - **JWT**: Tokens de acceso con expiración configurable
 - **CORS**: Orígenes configurables
