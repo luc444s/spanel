@@ -9,6 +9,7 @@ import { Alert } from "@systutor/shell/ui/alert";
 import { Button } from "@systutor/shell/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@systutor/shell/ui/card";
 import { Input } from "@systutor/shell/ui/input";
+import { GithubLink } from "../../shared/layout/GithubLink";
 
 type LocationState = {
   from?: {
@@ -108,6 +109,7 @@ export function LoginPage() {
           </form>
         </CardContent>
       </Card>
+      <GithubLink />
     </main>
   );
 }

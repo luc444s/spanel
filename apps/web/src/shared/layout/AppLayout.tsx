@@ -7,6 +7,7 @@ import { useLogoutAction } from "../../features/auth/useLogoutAction";
 import { useAuthStore } from "../../features/auth/store";
 import { Sidebar } from "./Sidebar";
 import { ShellHeader } from "./ShellHeader";
+import { GithubLink } from "./GithubLink";
 import { Button } from "@systutor/shell/ui/button";
 import { ThemeToggle } from "./theme-toggle";
 
@@ -104,6 +105,8 @@ export function AppLayout() {
           <Outlet />
         </main>
       </div>
+
+      <GithubLink />
     </div>
   );
 }
