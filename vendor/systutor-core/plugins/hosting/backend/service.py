@@ -11,8 +11,10 @@ plugin and never written to the audit row or a log line.
 
 from __future__ import annotations
 
+import re
 import secrets
 import shlex
+from urllib.parse import quote
 
 from sqlalchemy import Select, select
 from sqlalchemy.exc import IntegrityError
@@ -23,7 +25,7 @@ from systutor.kernel.audit.service import record_audit
 from systutor.kernel.tenants.context import TenantContext
 from systutor.kernel.tenants.models import Tenant
 
-from .config import ENV_WHITELIST, RawAdapter, site_dir
+from .config import ENV_WHITELIST, RawAdapter, env_of, site_dir
 from .database import (
     conexion_de_la_base,
     filas_de_usuarios,
@@ -43,6 +45,7 @@ from .schemas import (
     ResetPasswordResponse,
     SecretRotationResponse,
     SiteConfigResponse,
+    SiteDatabaseResponse,
     SiteLogsResponse,
     WordPressUserListResponse,
     WordPressUserSummary,
@@ -82,6 +85,60 @@ def estado_del_contenedor(info: dict) -> str:
     state = state if isinstance(state, dict) else {}
     status = state.get("Status")
     return status.strip() if isinstance(status, str) and status.strip() else "unknown"
+
+
+# A Docker network alias: the WordPress env names its database container, and
+# phpMyAdmin resolves that same name. A scheme, a path or an IP is not a name
+# this plugin will send anybody to.
+_DOCKER_NAME = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,62}$")
+
+
+def database_credentials(info: dict) -> tuple[str, str, str, str]:
+    """The four values WordPress already uses, validated as a Docker target.
+
+    The host must be a container name: a scheme, `localhost` and an IP are
+    rejected because phpMyAdmin cannot resolve them and the panel will not send
+    a credential to something that is not the site's database container.
+    """
+    env = env_of(info)
+    host = env.get("WORDPRESS_DB_HOST", "").strip()
+    database = env.get("WORDPRESS_DB_NAME", "").strip()
+    user = env.get("WORDPRESS_DB_USER", "").strip()
+    password = env.get("WORDPRESS_DB_PASSWORD", "").strip()
+    if not all((host, database, user, password)):
+        raise AppError(
+            "El sitio no declara su base de datos en el entorno",
+            status_code=409,
+            code="hosting_database_unavailable",
+        )
+    if "://" in host:
+        raise AppError(
+            f"WORDPRESS_DB_HOST no apunta a un contenedor ({host!r})",
+            status_code=409,
+            code="hosting_database_unavailable",
+        )
+    name = host.split(":", 1)[0].strip()
+    if not _DOCKER_NAME.fullmatch(name) or name in {"localhost", "127.0.0.1", "::1"}:
+        raise AppError(
+            f"WORDPRESS_DB_HOST no apunta a un contenedor ({host!r})",
+            status_code=409,
+            code="hosting_database_unavailable",
+        )
+    return name, database, user, password
+
+
+def phpmyadmin_url(base: str, host: str) -> str | None:
+    """The phpMyAdmin login page, or `None` when the panel has no URL.
+
+    The password is never part of this URL. A deployment with a fixed
+    `PMA_HOST` uses the base as-is; one with `PMA_ARBITRARY=1` can write
+    `?server={server}` (or any other shape) and the database host is encoded
+    into the placeholder.
+    """
+    base = base.strip()
+    if not base or not re.match(r"^https?://", base, re.IGNORECASE):
+        return None
+    return base.replace("{server}", quote(host, safe=""))
 
 
 class HostingService:
@@ -338,6 +395,45 @@ class HostingService:
             editable_env=config.editable,
             secret_names=list(config.secrets),
             editable_keys=sorted(ENV_WHITELIST),
+        )
+
+    def site_database(
+        self, site: HostingSite, tenant_context: TenantContext
+    ) -> SiteDatabaseResponse:
+        """The site's own database credential and the phpMyAdmin link.
+
+        Read-only toward the database: the only side effect is an audit row
+        that names the database and the host, never the password.
+        """
+        info, _managed = self._require_site(site)
+        host, database, user, password = database_credentials(info)
+        db_info = self._inspect(host)
+        if db_info is None:
+            raise AppError(
+                f"El contenedor {host} no existe o no responde",
+                status_code=409,
+                code="hosting_database_unavailable",
+            )
+        if estado_del_contenedor(db_info) != "running":
+            raise AppError(
+                f"La base de datos {host} no está en marcha",
+                status_code=409,
+                code="hosting_database_stopped",
+            )
+        self._audit_site(
+            site,
+            tenant_context,
+            "database_access",
+            {"database": database, "host": host},
+        )
+        return SiteDatabaseResponse(
+            site_id=site.id,
+            container_name=site.container_name,
+            host=host,
+            database=database,
+            user=user,
+            password=password,
+            url=phpmyadmin_url(self._settings.phpmyadmin_url, host),
         )
 
     def update_site_config(

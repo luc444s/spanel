@@ -263,8 +263,12 @@ def test_transporte_local_no_duplica_el_docker() -> None:
 
     argv = transport.build_docker_argv("docker ps -a --format '{{json .}}'", env=env)
 
-    assert argv == ["docker", "ps", "-a", "--format", "{{json .}}"]
-    assert argv.count("docker") == 1
+    # `sh -c` keeps the same shell semantics as the SSH transport, so callers
+    # can also pass `&&` and redirections (the env-file writes need them).
+    assert argv == ["sh", "-c", "docker ps -a --format '{{json .}}'"]
+    assert argv[2].count("docker") == 1
+    assert "docker" not in argv
+    assert "sshpass" not in argv
 
 
 def test_9_provisioned_es_gestionable() -> None:

@@ -75,6 +75,22 @@ class SecretRotationResponse(BaseModel):
     rotated: list[str]
 
 
+class SiteDatabaseResponse(BaseModel):
+    """The site's own database credential, returned by an explicit POST.
+
+    It is the user WordPress already uses, scoped to this site's database. The
+    route sends `no-store`; the password never reaches an audit row or a URL.
+    """
+
+    site_id: str
+    container_name: str
+    host: str
+    database: str
+    user: str
+    password: str
+    url: str | None
+
+
 class HostingSiteSummary(BaseModel):
     id: str
     container_name: str

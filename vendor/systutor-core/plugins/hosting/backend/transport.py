@@ -55,7 +55,14 @@ def build_docker_argv(
         # ["docker", "docker", "ps"], which exits 0 with empty stdout: the
         # worst possible failure, because it looks like there are no
         # containers.
-        return shlex.split(remote_command)
+        #
+        # It goes through `sh -c` because callers also pass shell syntax
+        # (`&&`, `>`, `umask`) to write the per-site env files. Splitting with
+        # shlex turned that into argv elements, so the binary received `&&`
+        # and `>` as arguments and the write silently did nothing. Over SSH the
+        # remote shell already interprets the line; this keeps both transports
+        # equivalent.
+        return ["sh", "-c", remote_command]
 
     if not env.get("MAIL_SERVER_PASSWORD"):
         raise ValueError("falta MAIL_SERVER_PASSWORD en el .env")

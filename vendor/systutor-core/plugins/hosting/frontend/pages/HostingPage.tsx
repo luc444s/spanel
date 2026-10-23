@@ -7,8 +7,10 @@ import {
   operateHostingSite,
   deleteHostingSite,
   listHostingSites,
+  openHostingSiteDatabase,
   resetUserPassword,
   type HostingSite,
+  type HostingSiteDatabase,
   type WordPressUser,
 } from "../api";
 import { Alert } from "@systutor/shell/ui/alert";
@@ -19,6 +21,7 @@ import { Input } from "@systutor/shell/ui/input";
 import { useAuthStore } from "../../../../../../apps/web/src/features/auth/store";
 import { SiteCard, stateLabel } from "../components/SiteCard";
 import { SiteConfigDialog } from "../components/SiteConfigDialog";
+import { DatabaseDialog } from "../components/DatabaseDialog";
 import { LogsDialog, UsersDialog } from "../components/SiteDataDialogs";
 
 type GeneratedPassword = {
@@ -55,6 +58,7 @@ export default function HostingPage() {
   const [confirmation, setConfirmation] = useState("");
   const [logsTarget, setLogsTarget] = useState<HostingSite | null>(null);
   const [configTarget, setConfigTarget] = useState<HostingSite | null>(null);
+  const [databaseAccess, setDatabaseAccess] = useState<HostingSiteDatabase | null>(null);
   const [detailSite, setDetailSite] = useState<HostingSite | null>(null);
   const [selectedSite, setSelectedSite] = useState<HostingSite | null>(null);
   const [operateTarget, setOperateTarget] = useState<{
@@ -98,10 +102,23 @@ export default function HostingPage() {
     onSuccess: async () => {
       setDeleteTarget(null); setConfirmation(""); setSelectedSite(null); setLogsTarget(null);
       setConfigTarget(null); setDetailSite(null); setOperateTarget(null);
+      setDatabaseAccess(null);
       await queryClient.invalidateQueries({ queryKey: hostingKeys.sites });
     },
     onError: (error: Error) => toast.error(error.message),
   });
+
+  const databaseMutation = useMutation({
+    mutationFn: openHostingSiteDatabase,
+    onSuccess: (data) => setDatabaseAccess(data),
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  /** Closing drops the credential from state AND from the mutation cache. */
+  function closeDatabase() {
+    setDatabaseAccess(null);
+    databaseMutation.reset();
+  }
 
   const resetMutation = useMutation({
     mutationFn: ({ siteId, userId }: { siteId: string; userId: number }) =>
@@ -171,7 +188,10 @@ export default function HostingPage() {
         open={Boolean(detail)}
         title={detail?.container_name ?? ""}
         description={detail?.domain ?? "Sin dominio"}
-        onClose={() => setDetailSite(null)}
+        onClose={() => {
+          setDetailSite(null);
+          setDatabaseAccess(null);
+        }}
       >
         {detail ? (
           <div className="space-y-4">
@@ -206,6 +226,15 @@ export default function HostingPage() {
               >
                 Configuración
               </Button>
+              {canManage ? (
+                <Button
+                  variant="secondary"
+                  disabled={detail.status === "missing" || databaseMutation.isPending}
+                  onClick={() => databaseMutation.mutate(detail.id)}
+                >
+                  {databaseMutation.isPending ? "Leyendo..." : "Base de datos"}
+                </Button>
+              ) : null}
               {canManage
                 ? (["start", "stop", "restart"] as const).map((action) => (
                     <Button
@@ -320,6 +349,8 @@ export default function HostingPage() {
         canManage={canManage}
         onClose={() => setConfigTarget(null)}
       />
+
+      <DatabaseDialog access={databaseAccess} onClose={() => setDatabaseAccess(null)} />
 
       <Dialog
         open={Boolean(resetTarget)}

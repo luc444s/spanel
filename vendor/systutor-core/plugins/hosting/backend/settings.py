@@ -61,6 +61,9 @@ class HostingSettings(BaseModel):
     # Stable, per-site directory on the Docker host. Secrets used to live in
     # /tmp, which a reboot wipes; this is where the panel can read them again.
     sites_dir: str = "/opt/spanel/sites"
+    # Optional. The database dialog still reveals the credential when this is
+    # empty; only the "open phpMyAdmin" link disappears.
+    phpmyadmin_url: str = ""
 
 
 def _int_env(name: str, default: int) -> int:
@@ -95,6 +98,7 @@ def register_hosting_settings() -> HostingSettings:
         log_lines=min(1000, max(1, _int_env("SPANEL_HOSTING_LOG_LINES", 200))),
         sites_dir=os.getenv("SPANEL_HOSTING_SITES_DIR", "/opt/spanel/sites").strip()
         or "/opt/spanel/sites",
+        phpmyadmin_url=os.getenv("SPANEL_PHPMYADMIN_URL", "").strip(),
     )
     _hosting_settings = settings
     return settings

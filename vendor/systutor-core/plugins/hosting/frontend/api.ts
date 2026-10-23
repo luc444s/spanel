@@ -51,6 +51,18 @@ export type SecretRotationResponse = {
   rotated: string[];
 };
 
+export type HostingSiteDatabase = {
+  site_id: string;
+  container_name: string;
+  /** Docker container of the database, derived from the owned site. */
+  host: string;
+  database: string;
+  user: string;
+  password: string;
+  /** phpMyAdmin login page, or null when the panel has no URL configured. */
+  url: string | null;
+};
+
 export const hostingKeys = {
   sites: ["hosting", "sites"] as const,
   users: (siteId: string) => ["hosting", siteId, "users"] as const,
@@ -108,6 +120,17 @@ export function updateHostingSiteConfig(siteId: string, env: Record<string, stri
 export function rotateHostingSiteSalts(siteId: string) {
   return apiRequest<SecretRotationResponse>(
     `/api/v1/plugins/hosting/sites/${encodeURIComponent(siteId)}/secrets/salts`,
+    { method: "POST" }
+  );
+}
+
+/**
+ * Reveal the site's own database credential. It is a POST on purpose: the
+ * password must not live in a cache, and the URL must not carry it.
+ */
+export function openHostingSiteDatabase(siteId: string) {
+  return apiRequest<HostingSiteDatabase>(
+    `/api/v1/plugins/hosting/sites/${encodeURIComponent(siteId)}/database`,
     { method: "POST" }
   );
 }

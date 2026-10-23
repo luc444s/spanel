@@ -50,6 +50,13 @@ All three routes require the kernel `TenantContext`:
   `wp config shuffle-salts`. The salts live in `wp-config.php` inside the site
   volume and PHP reads them per request, so this needs no restart and no
   recreate. The response says what was rotated, never the new value.
+- `POST /api/v1/plugins/hosting/sites/{site_id}/database` — `hosting.sites.manage`;
+  returns the site's **own** WordPress database credential (`host`, `database`,
+  `user`, `password`) and the phpMyAdmin URL, with `Cache-Control: no-store`.
+  The host comes from the container environment and must be a Docker container
+  name (a shared MariaDB or a per-site one); a scheme, `localhost` or an IP is
+  409. The password is audited as `hosting.site.database_access` without the
+  value.
 
 The request schemas forbid extra fields: a client cannot send `tenant_id`, a
 container name, or any other Docker selector. A site that belongs to another
@@ -61,8 +68,19 @@ The site detail dialog has a `Configuración` action. It opens the editable
 environment and the names of the secrets; values are never shown. Without
 `hosting.sites.manage`, or on a site with `spanel.managed=false`, it is
 read-only. Saving sends only changed, non-empty values and recreates the
-container, so the dialog warns about the brief downtime. `Rotar sales` asks for
+container, so the dialog warns about the brief downtime. `Rotar claves de seguridad` asks for
 confirmation first, because rotating the salts closes every WordPress session.
+
+## Database access
+
+`Base de datos`, next to `Configuración` and visible only with
+`hosting.sites.manage`, reveals the site's own WordPress database user and
+opens phpMyAdmin in a new tab. It is the credential the site already uses, so
+there is no new SQL user, no grant and no migration; phpMyAdmin sees exactly one
+database. The host is derived from the owned site and validated against
+`spanel-<slug>-db`. `SPANEL_PHPMYADMIN_URL` is optional: without it the dialog
+still shows the credential, only the link is disabled. The password is never
+put in the URL and is not stored by the panel.
 
 The container name is resolved from the owned row and then used with the proven
 Docker/WordPress core from A.SPEC 0012 (`discovery`, `database`, `passwords`,
@@ -97,6 +115,8 @@ The Docker transport comes from the core `.env`:
   directory on the Docker host. The config route writes `wp.env` there with mode
   600, so the WordPress database secret survives a reboot and can be read again.
   Before this, the env files lived in `/tmp` and were deleted after provisioning.
+- `SPANEL_PHPMYADMIN_URL` (optional): base URL of the phpMyAdmin instance. It
+  may contain `{server}`, or the database host is appended as `?server=`.
 
 Provisioning creates two labeled containers and two labeled volumes, installs
 WordPress using `wordpress:cli` and only then records ownership. A failed

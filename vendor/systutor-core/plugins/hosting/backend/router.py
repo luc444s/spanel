@@ -27,6 +27,7 @@ from .schemas import (
     SecretRotationResponse,
     SiteConfigResponse,
     SiteConfigUpdateRequest,
+    SiteDatabaseResponse,
     SiteLogsResponse,
     WordPressUserListResponse,
 )
@@ -130,6 +131,23 @@ def update_site_config(
 ) -> SiteConfigResponse:
     result = service.update_site_config(site, tenant_context, body.env)
     db.commit()
+    return result
+
+
+@router.post("/{site_id}/database", response_model=SiteDatabaseResponse)
+def site_database(
+    response: Response,
+    site: HostingSite = Depends(get_owned_site),
+    tenant_context: TenantContext = Depends(get_current_tenant_context),
+    _current_user: User = Depends(require_permission("hosting.sites.manage")),
+    service: HostingService = Depends(_get_hosting_service),
+    db: Session = Depends(get_db_session),
+) -> SiteDatabaseResponse:
+    """Reveal the site's own database credential and the phpMyAdmin link."""
+    result = service.site_database(site, tenant_context)
+    db.commit()
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Pragma"] = "no-cache"
     return result
 
 
