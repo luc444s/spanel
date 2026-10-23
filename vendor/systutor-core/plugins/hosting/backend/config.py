@@ -26,7 +26,7 @@ import re
 
 from systutor.core.errors import AppError
 
-from .inspection import inspect_container
+from .inspection import candidato_de, inspect_container
 from .models import HostingSite
 from .provisioner import Provisioner
 from .settings import HostingSettings, docker_env
@@ -239,6 +239,17 @@ class RawAdapter:
             )
         return info
 
+    def _inspect_managed(self, site: HostingSite) -> dict:
+        """The inspect payload, or 409 when `spanel.managed=false` forbids writes."""
+        info = self._inspect(site)
+        if not candidato_de(info).gestionable:
+            raise AppError(
+                f"El sitio {site.container_name} no es gestionable (spanel.managed=false)",
+                status_code=409,
+                code="hosting_site_not_managed",
+            )
+        return info
+
     def read_config(self, site: HostingSite) -> HostingConfig:
         env = env_of(self._inspect(site))
         return HostingConfig(
@@ -257,7 +268,7 @@ class RawAdapter:
     def update_config(self, site: HostingSite, updates: dict[str, str]) -> HostingConfig:
         """Merge whitelisted changes into the stable env file and recreate."""
         cleaned = validate_env_updates(updates)
-        info = self._inspect(site)
+        info = self._inspect_managed(site)
         env = env_of(info)
         env.update(cleaned)
 
@@ -281,7 +292,7 @@ class RawAdapter:
         request already uses the new keys. This is the safe secret rotation;
         the database password is deliberately a different, harder operation.
         """
-        info = self._inspect(site)
+        info = self._inspect_managed(site)
         path = self._ensure_env_file(site, info)
         # `wordpress:cli` runs as its own www-data (uid 82), but the volume is
         # owned by the Apache image's www-data (uid 33). Copying the file as 82

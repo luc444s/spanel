@@ -244,6 +244,47 @@ def test_otro_tenant_no_lee_ni_escribe(lab) -> None:
     )
 
 
+def test_managed_false_no_permite_editar(lab) -> None:
+    api, provisioner, _, _ = lab
+    other = SiteNames("lab-" + secrets.token_hex(4))
+    provisioner.command(
+        "create",
+        "--name",
+        other.wp,
+        "--network",
+        provisioner.settings.network,
+        "--label",
+        f"spanel.site={other.slug}",
+        "--label",
+        "spanel.managed=false",
+        "--label",
+        f"spanel.tenant={api.tenant_a_id}",
+        provisioner.settings.wp_image,
+    )
+    try:
+        with api.app.state.session_factory() as db:
+            site = HostingSite(tenant_id=api.tenant_a_id, container_name=other.wp)
+            db.add(site)
+            db.commit()
+            site_id = site.id
+        try:
+            response = api.client.patch(
+                f"{URL}/{site_id}/config",
+                headers=_headers(api.token_a),
+                json={"env": {"WP_DEBUG": "true"}},
+            )
+            assert response.status_code == 409, response.text
+        finally:
+            with api.app.state.session_factory() as db:
+                row = db.get(HostingSite, site_id)
+                if row:
+                    db.delete(row)
+                    db.commit()
+    finally:
+        if provisioner._owned("container", other.wp, other, api.tenant_a_id):
+            provisioner.command("rm", "-f", other.wp)
+
+
 def test_delete_borra_el_archivo_de_secretos(lab) -> None:
     api, provisioner, names, site_id = lab
     path = env_path(provisioner.settings, names.wp)
