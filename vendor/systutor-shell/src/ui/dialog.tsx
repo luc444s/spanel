@@ -43,21 +43,9 @@ export function Dialog({
         )}
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-border p-5">
-          <div className="space-y-1">
-            <h2 className="text-lg font-semibold text-card-foreground">{title}</h2>
-            {description ? <p className="text-sm text-muted-foreground">{description}</p> : null}
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className={cn(
-              "rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground",
-              "hover:bg-accent hover:text-accent-foreground transition"
-            )}
-          >
-            Cerrar
-          </button>
+        <div className="space-y-1 border-b border-border p-5">
+          <h2 className="text-lg font-semibold text-card-foreground">{title}</h2>
+          {description ? <p className="text-sm text-muted-foreground">{description}</p> : null}
         </div>
         <div className="overflow-y-auto p-5">{children}</div>
         {actions ? <div className="border-t border-border p-5">{actions}</div> : null}

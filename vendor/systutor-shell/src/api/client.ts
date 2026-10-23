@@ -118,8 +118,17 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
       window.dispatchEvent(new CustomEvent(AUTH_UNAUTHORIZED_EVENT));
     }
     const detail = payload?.detail;
+    // The kernel serializes every AppError as {"error": {"code", "message"}}.
+    // Without this branch the UI only ever showed "HTTP 409 ...".
+    const errorPayload = payload?.error;
     let message: string;
-    if (Array.isArray(detail)) {
+    if (
+      typeof errorPayload === "object" &&
+      errorPayload !== null &&
+      "message" in errorPayload
+    ) {
+      message = String((errorPayload as Record<string, unknown>).message);
+    } else if (Array.isArray(detail)) {
       message = (detail as Array<{ msg?: string; loc?: unknown[] }>)
         .map((error) => error.msg)
         .filter(Boolean)
