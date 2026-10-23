@@ -34,9 +34,27 @@ export type ResetPasswordResponse = {
   password: string | null;
 };
 
+export type HostingSiteConfig = {
+  site_id: string;
+  container_name: string;
+  /** Values of the whitelisted keys. Never contains a secret. */
+  editable_env: Record<string, string>;
+  /** Names of the secrets present. Their values are never returned. */
+  secret_names: string[];
+  /** The whitelist the server accepts, so the UI does not hardcode it. */
+  editable_keys: string[];
+};
+
+export type SecretRotationResponse = {
+  site_id: string;
+  container_name: string;
+  rotated: string[];
+};
+
 export const hostingKeys = {
   sites: ["hosting", "sites"] as const,
   users: (siteId: string) => ["hosting", siteId, "users"] as const,
+  config: (siteId: string) => ["hosting", siteId, "config"] as const,
 };
 
 export function createHostingSite(payload: { name: string; domain: string; admin_email: string }) {
@@ -71,6 +89,26 @@ export function listHostingSites() {
 export function listSiteUsers(siteId: string) {
   return apiRequest<WordPressUserListResponse>(
     `/api/v1/plugins/hosting/sites/${encodeURIComponent(siteId)}/users`
+  );
+}
+
+export function getHostingSiteConfig(siteId: string) {
+  return apiRequest<HostingSiteConfig>(
+    `/api/v1/plugins/hosting/sites/${encodeURIComponent(siteId)}/config`
+  );
+}
+
+export function updateHostingSiteConfig(siteId: string, env: Record<string, string>) {
+  return apiRequest<HostingSiteConfig>(
+    `/api/v1/plugins/hosting/sites/${encodeURIComponent(siteId)}/config`,
+    { method: "PATCH", body: JSON.stringify({ env }) }
+  );
+}
+
+export function rotateHostingSiteSalts(siteId: string) {
+  return apiRequest<SecretRotationResponse>(
+    `/api/v1/plugins/hosting/sites/${encodeURIComponent(siteId)}/secrets/salts`,
+    { method: "POST" }
   );
 }
 

@@ -55,6 +55,15 @@ The request schemas forbid extra fields: a client cannot send `tenant_id`, a
 container name, or any other Docker selector. A site that belongs to another
 tenant is indistinguishable from a missing site and returns 404.
 
+## Configuration UI
+
+The site detail dialog has a `Configuración` action. It opens the editable
+environment and the names of the secrets; values are never shown. Without
+`hosting.sites.manage`, or on a site with `spanel.managed=false`, it is
+read-only. Saving sends only changed, non-empty values and recreates the
+container, so the dialog warns about the brief downtime. `Rotar sales` asks for
+confirmation first, because rotating the salts closes every WordPress session.
+
 The container name is resolved from the owned row and then used with the proven
 Docker/WordPress core from A.SPEC 0012 (`discovery`, `database`, `passwords`,
 `reset`). A container that no longer exists is listed as `missing`; the users

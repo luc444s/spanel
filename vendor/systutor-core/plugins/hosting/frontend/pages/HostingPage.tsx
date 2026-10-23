@@ -18,6 +18,7 @@ import { toast } from "@systutor/shell/ui/toast";
 import { Input } from "@systutor/shell/ui/input";
 import { useAuthStore } from "../../../../../../apps/web/src/features/auth/store";
 import { SiteCard, stateLabel } from "../components/SiteCard";
+import { SiteConfigDialog } from "../components/SiteConfigDialog";
 import { LogsDialog, UsersDialog } from "../components/SiteDataDialogs";
 
 type GeneratedPassword = {
@@ -53,6 +54,7 @@ export default function HostingPage() {
   const [deleteTarget, setDeleteTarget] = useState<HostingSite | null>(null);
   const [confirmation, setConfirmation] = useState("");
   const [logsTarget, setLogsTarget] = useState<HostingSite | null>(null);
+  const [configTarget, setConfigTarget] = useState<HostingSite | null>(null);
   const [detailSite, setDetailSite] = useState<HostingSite | null>(null);
   const [selectedSite, setSelectedSite] = useState<HostingSite | null>(null);
   const [operateTarget, setOperateTarget] = useState<{
@@ -95,7 +97,7 @@ export default function HostingPage() {
     mutationFn: deleteHostingSite,
     onSuccess: async () => {
       setDeleteTarget(null); setConfirmation(""); setSelectedSite(null); setLogsTarget(null);
-      setDetailSite(null); setOperateTarget(null);
+      setConfigTarget(null); setDetailSite(null); setOperateTarget(null);
       await queryClient.invalidateQueries({ queryKey: hostingKeys.sites });
     },
     onError: (error: Error) => toast.error(error.message),
@@ -196,6 +198,13 @@ export default function HostingPage() {
               ) : null}
               <Button variant="secondary" onClick={() => setLogsTarget(detail)}>
                 Logs
+              </Button>
+              <Button
+                variant="secondary"
+                disabled={detail.status === "missing"}
+                onClick={() => setConfigTarget(detail)}
+              >
+                Configuración
               </Button>
               {canManage
                 ? (["start", "stop", "restart"] as const).map((action) => (
@@ -305,6 +314,12 @@ export default function HostingPage() {
       </Dialog>
 
       <LogsDialog site={logsTarget} onClose={() => setLogsTarget(null)} />
+
+      <SiteConfigDialog
+        site={configTarget}
+        canManage={canManage}
+        onClose={() => setConfigTarget(null)}
+      />
 
       <Dialog
         open={Boolean(resetTarget)}
