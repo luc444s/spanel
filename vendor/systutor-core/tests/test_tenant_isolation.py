@@ -15,6 +15,7 @@ from systutor.kernel.auth.service import get_user_by_id, get_user_for_tenant
 from systutor.kernel.events.service import emit_event, record_event
 from systutor.kernel.permissions.models import Permission, Role, RolePermission, UserRole
 from systutor.kernel.permissions.service import assign_role_to_user, list_user_permissions
+from systutor.kernel.tenants.context import PLATFORM_PERMISSION, TenantContext
 from systutor.kernel.tenants.models import Branch, Tenant
 from systutor.kernel.tenants.service import (
     TenantScopeError,
@@ -26,6 +27,9 @@ from systutor.kernel.tenants.service import (
 
 MANAGE_USERS_PERMISSION = "core.user.manage"
 MANAGE_USERS_REQUIREMENT = Depends(require_permission(MANAGE_USERS_PERMISSION))
+PLATFORM_REQUIREMENT = Depends(
+    require_permission(MANAGE_USERS_PERMISSION, platform_only=True)
+)
 
 
 def login(client, email: str, password: str):
@@ -119,6 +123,86 @@ def add_manage_users_probe(app) -> None:
     @app.get("/api/v1/test/tenant-permissions")
     def tenant_permissions_probe(_: User = MANAGE_USERS_REQUIREMENT):
         return {"status": "ok"}
+
+
+def add_platform_probe(app) -> None:
+    if any(
+        getattr(route, "path", None) == "/api/v1/test/platform-permissions"
+        for route in app.router.routes
+    ):
+        return
+
+    @app.get("/api/v1/test/platform-permissions")
+    def platform_permissions_probe(_: User = PLATFORM_REQUIREMENT):
+        return {"status": "ok"}
+
+
+def test_tenant_context_is_platform_only_with_the_kernel_capability() -> None:
+    common = {
+        "current_tenant_id": "tenant-a",
+        "current_branch_id": None,
+        "current_user_id": "user-a",
+        "current_warehouse_ids": None,
+    }
+
+    tenant_user = TenantContext(
+        current_permissions=(MANAGE_USERS_PERMISSION,),
+        **common,
+    )
+    platform_user = TenantContext(
+        current_permissions=(PLATFORM_PERMISSION,),
+        **common,
+    )
+
+    assert tenant_user.is_platform is False
+    assert platform_user.is_platform is True
+
+
+def test_platform_only_guard_denies_even_with_the_route_permission(
+    app,
+    db_session: Session,
+    seeded_demo: dict[str, str],
+) -> None:
+    add_platform_probe(app)
+    tenant = db_session.get(Tenant, seeded_demo["tenant_id"])
+    assert tenant is not None
+    branch = db_session.get(Branch, seeded_demo["branch_id"])
+    assert branch is not None
+
+    user = create_user(
+        db_session,
+        tenant=tenant,
+        branch=branch,
+        email="tenant-delete-manager@example.com",
+        password="Manager123!",
+        full_name="Tenant Delete Manager",
+    )
+    role = create_role(db_session, tenant=tenant, name="delete-manager")
+    assign_permission_to_role(
+        db_session,
+        role=role,
+        permission=get_permission(db_session, MANAGE_USERS_PERMISSION),
+    )
+    assign_role_to_user(db_session, user=user, role=role)
+    db_session.commit()
+
+    token = build_token(app, user)
+    with TestClient(app) as client:
+        headers = {"Authorization": f"Bearer {token}"}
+        denied = client.get("/api/v1/test/platform-permissions", headers=headers)
+        assert denied.status_code == 403
+
+        assign_permission_to_role(
+            db_session,
+            role=role,
+            permission=get_permission(db_session, PLATFORM_PERMISSION),
+        )
+        db_session.commit()
+
+        allowed = client.get("/api/v1/test/platform-permissions", headers=headers)
+
+    assert allowed.status_code == 200
+    assert allowed.json()["status"] == "ok"
 
 
 def test_user_from_tenant_a_cannot_resolve_user_from_tenant_b(

@@ -121,6 +121,8 @@ ALLOWED_UNGUARDED = {
     "core.event.read",  # Event surfaces are not exposed as guarded endpoints yet.
     "core.role.manage",  # Legacy alias of core.roles.manage, kept for compatibility.
     "core.user.manage",  # Legacy alias of core.users.manage, kept for compatibility.
+    "core.platform.admin",  # Capability read by TenantContext.is_platform and
+    # require_permission(..., platform_only=True); never a route guard itself.
 }
 
 

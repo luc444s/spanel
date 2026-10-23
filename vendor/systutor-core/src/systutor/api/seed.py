@@ -34,6 +34,7 @@ BASE_PERMISSIONS = [
     "core.roles.read",
     "core.roles.manage",
     "core.permission.manage",
+    "core.platform.admin",
     "core.branches.read",
     "core.branches.manage",
     "core.documents.read",

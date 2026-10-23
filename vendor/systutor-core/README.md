@@ -11,6 +11,9 @@ The kernel provides:
 - **Authentication**: JWT issuance and validation, user management,
   password hashing.
 - **RBAC**: declarative permission catalog with per-tenant roles.
+  Platform-wide capabilities are `core.platform.admin`, granted only to the
+  platform administrator; `require_permission(..., platform_only=True)`
+  requires it in addition to the named permission.
 - **Multi-tenancy**: active isolation by `tenant_id` and `branch_id`.
 - **Audit**: persistent `audit_log` with actor, entity, result, and
   correlation identifiers.

@@ -8,6 +8,12 @@ from systutor.kernel.auth.models import User
 from systutor.kernel.permissions.service import list_user_permissions
 from systutor.kernel.tenants.service import list_user_warehouse_ids
 
+# The one kernel capability that means "this user operates across tenants".
+# It is granted only to the platform administrator role by the seed, never to
+# `tenant_admin`, so plugins can ask for a platform-only action without
+# checking a role name or a boolean.
+PLATFORM_PERMISSION = "core.platform.admin"
+
 
 @dataclass(slots=True, frozen=True)
 class TenantContext:
@@ -19,6 +25,11 @@ class TenantContext:
 
     def has_permission(self, permission_name: str) -> bool:
         return permission_name in self.current_permissions
+
+    @property
+    def is_platform(self) -> bool:
+        """True only for the platform administrator, resolved from RBAC."""
+        return self.has_permission(PLATFORM_PERMISSION)
 
     def has_warehouse_access(self, warehouse_id: str) -> bool:
         return self.current_warehouse_ids is None or warehouse_id in self.current_warehouse_ids
