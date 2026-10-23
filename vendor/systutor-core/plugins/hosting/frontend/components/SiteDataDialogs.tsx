@@ -37,7 +37,11 @@ export function UsersDialog({ site, canReset, onClose, onReset }: UsersDialogPro
       {usersQuery.isLoading ? (
         <p className="text-sm text-muted-foreground">Cargando usuarios...</p>
       ) : usersQuery.error ? (
-        <Alert title="Error">No se pudieron cargar los usuarios del sitio.</Alert>
+        <Alert title="No se pudieron cargar los usuarios">
+          {usersQuery.error instanceof Error
+            ? usersQuery.error.message
+            : "Error desconocido al consultar el sitio."}
+        </Alert>
       ) : users.length === 0 ? (
         <p className="text-sm text-muted-foreground">El sitio no tiene usuarios.</p>
       ) : (
@@ -99,7 +103,11 @@ export function LogsDialog({ site, onClose }: LogsDialogProps) {
       maxWidthClassName="max-w-3xl"
     >
       {logsQuery.error ? (
-        <Alert title="Error">No se pudieron leer los logs.</Alert>
+        <Alert title="No se pudieron leer los logs">
+          {logsQuery.error instanceof Error
+            ? logsQuery.error.message
+            : "Error desconocido al consultar el sitio."}
+        </Alert>
       ) : (
         <pre className="max-h-80 overflow-auto whitespace-pre-wrap text-xs">
           {logsQuery.data?.logs ?? "Cargando..."}

@@ -6,6 +6,7 @@ export default {
     "./index.html",
     "./src/**/*.{ts,tsx}",
     "../../plugins/*/frontend/**/*.{ts,tsx}",
+    "../../vendor/systutor-core/plugins/*/frontend/**/*.{ts,tsx}",
     "../../vendor/systutor-shell/src/**/*.{ts,tsx}",
   ],
   theme: {
