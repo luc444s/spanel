@@ -38,7 +38,7 @@ Falsable today, and today **fails**: the hosting site dialog has no `Configuraci
    - one input per key in `editable_keys` (a `Select` for the boolean and core-update keys, an
      `Input` for the rest); the value is prefilled from `editable_env`;
    - a secrets section that lists `secret_names` with a lock and “valor oculto”, never a value;
-   - `Guardar` sends only the changed, non-empty values; `Rotar sales` opens a confirmation;
+   - `Guardar` sends only the changed, non-empty values; `Rotar claves de seguridad` opens a confirmation;
    - read-only rendering when the user lacks `hosting.sites.manage` or the site is not managed;
    - after a save, invalidate `hostingKeys.config` and `hostingKeys.sites`.
 3. `plugins/hosting/frontend/pages/HostingPage.tsx`:
@@ -69,11 +69,11 @@ Falsable today, and today **fails**: the hosting site dialog has no `Configuraci
 - Opening the dialog issues one `GET /config` for the selected site and renders the whitelist the
   server returned. Secret values are absent from the DOM and from the network response.
 - Without `hosting.sites.manage` (or on a non-managed site) every field is read-only and there is no
-  `Guardar` or `Rotar sales`.
+  `Guardar` or `Rotar claves de seguridad`.
 - `Guardar` sends only keys whose trimmed value is non-empty and differs from the loaded value. A
   field cleared to empty is not sent, so the server keeps the current value.
 - On success, the config and the site list are invalidated; the toast says the change was saved.
-- `Rotar sales` requires an explicit confirmation that states every WordPress session closes; the
+- `Rotar claves de seguridad` requires an explicit confirmation that states every WordPress session closes; the
   request is sent only after the user confirms.
 - A 422 from the whitelist (a key the client should not have sent) surfaces as an error toast; no
   field is reset.
@@ -83,7 +83,7 @@ Falsable today, and today **fails**: the hosting site dialog has no `Configuraci
 Open a lab site's detail dialog, click `Configuración`, change `PHP_MEMORY_LIMIT`, save, and see the
 new value after the dialog refetches, with the secret names still hidden. Log in as a user without
 `hosting.sites.manage`: the same dialog is readable and has no save or rotate controls. Click
-`Rotar sales`: the confirmation appears and no request is sent until it is accepted.
+`Rotar claves de seguridad`: the confirmation appears and no request is sent until it is accepted.
 
 ## INVARIANTS
 
@@ -141,7 +141,7 @@ Manual, against the lab:
 1. Open a lab site, click `Configuración`: the dialog lists the editable keys and the secret names.
 2. Change `PHP_MEMORY_LIMIT`, save: toast “Configuración guardada”, the value is still there after
    the refetch, and the green status returns.
-3. Open `Rotar sales`: the confirmation appears; cancel sends nothing.
+3. Open `Rotar claves de seguridad`: the confirmation appears; cancel sends nothing.
 4. Log in as a tenant user without `hosting.sites.manage`: the dialog is read-only.
 
 | Check | Invariant | What it falsifies |

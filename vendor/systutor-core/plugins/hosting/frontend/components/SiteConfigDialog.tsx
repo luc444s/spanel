@@ -89,7 +89,7 @@ export function SiteConfigDialog({ site, canManage, onClose }: SiteConfigDialogP
     mutationFn: (siteId: string) => rotateHostingSiteSalts(siteId),
     onSuccess: () => {
       setSaltsOpen(false);
-      toast.success("Sales rotadas");
+      toast.success("Claves de seguridad rotadas");
     },
     onError: (error: Error) => {
       setSaltsOpen(false);
@@ -121,7 +121,7 @@ export function SiteConfigDialog({ site, canManage, onClose }: SiteConfigDialogP
                 disabled={saltsMutation.isPending}
                 onClick={() => setSaltsOpen(true)}
               >
-                Rotar sales
+                Rotar claves de seguridad
               </Button>
             ) : null}
           </div>
@@ -236,7 +236,7 @@ export function SiteConfigDialog({ site, canManage, onClose }: SiteConfigDialogP
 
       <Dialog
         open={saltsOpen}
-        title="Rotar sales de WordPress"
+        title="Rotar claves de seguridad de WordPress"
         description={site?.container_name}
         onClose={() => setSaltsOpen(false)}
         zIndexClassName="z-[1200]"
@@ -259,14 +259,14 @@ export function SiteConfigDialog({ site, canManage, onClose }: SiteConfigDialogP
                 saltsMutation.mutate(site.id);
               }}
             >
-              {saltsMutation.isPending ? "Procesando..." : "Rotar sales"}
+              {saltsMutation.isPending ? "Procesando..." : "Rotar claves de seguridad"}
             </Button>
           </div>
         }
       >
         <p className="text-sm text-muted-foreground">
-          Se generarán sales nuevas. Todos los usuarios de WordPress cerrarán sesión y tendrán que
-          volver a entrar.
+          Se generarán claves de seguridad nuevas. Todos los usuarios de WordPress cerrarán sesión y
+          tendrán que volver a entrar.
         </p>
       </Dialog>
     </Dialog>
