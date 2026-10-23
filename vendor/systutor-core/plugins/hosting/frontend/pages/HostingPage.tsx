@@ -27,6 +27,12 @@ type GeneratedPassword = {
 
 const OPERATE_LABELS = { start: "Iniciar", stop: "Detener", restart: "Reiniciar" } as const;
 
+/** Only the action that makes sense for the current state stays enabled. */
+function actionAllowed(status: string, action: "start" | "stop" | "restart") {
+  if (action === "start") return status !== "running";
+  return status === "running";
+}
+
 export default function HostingPage() {
   const queryClient = useQueryClient();
   const permissions = useAuthStore((state) => state.permissions);
@@ -191,7 +197,11 @@ export default function HostingPage() {
                     <Button
                       key={action}
                       variant="secondary"
-                      disabled={!detail.managed || operateMutation.isPending}
+                      disabled={
+                        !detail.managed ||
+                        operateMutation.isPending ||
+                        !actionAllowed(detail.status, action)
+                      }
                       onClick={() => setOperateTarget({ site: detail, action })}
                     >
                       {OPERATE_LABELS[action]}
