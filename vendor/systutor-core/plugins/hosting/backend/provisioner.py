@@ -13,9 +13,8 @@ from .inspection import inspect_container
 from .settings import HostingSettings, docker_env
 from .transport import (
     Fallo,
-    borrar_archivo_remoto,
     build_docker_argv,
-    escribir_archivo_remoto,
+    escribir_archivo_remoto_en,
     run,
 )
 
@@ -109,28 +108,28 @@ class Provisioner:
         db_name = "wp_" + secrets.token_hex(5)
         db_user = "wp_" + secrets.token_hex(5)
         labels = self._labels(names, tenant_id)
-        files: list[str] = []
+        # The secrets live in a stable, mode-600 directory from the first
+        # second: a reboot no longer wipes the only copy the panel can read.
+        # Keyed by the container name, the same key `config.env_path` uses, so
+        # creation and the config route always agree on the directory.
+        stable_dir = f"{self.settings.sites_dir.rstrip('/')}/{names.wp}"
+        db_file = f"{stable_dir}/db.env"
+        wp_file = f"{stable_dir}/wp.env"
         created: list[tuple[str, str]] = []
         try:
-            db_file = escribir_archivo_remoto(
+            escribir_archivo_remoto_en(
                 self.env,
-                (
-                    f"MYSQL_DATABASE={db_name}\nMYSQL_USER={db_user}\n"
-                    f"MYSQL_PASSWORD={db_password}\nMYSQL_ROOT_PASSWORD={root_password}\n"
-                ),
-                "hosting-db",
+                db_file,
+                f"MYSQL_DATABASE={db_name}\nMYSQL_USER={db_user}\n"
+                f"MYSQL_PASSWORD={db_password}\nMYSQL_ROOT_PASSWORD={root_password}\n",
             )
-            files.append(db_file)
-            wp_file = escribir_archivo_remoto(
+            escribir_archivo_remoto_en(
                 self.env,
-                (
-                    f"WORDPRESS_DB_HOST={names.db}\nWORDPRESS_DB_USER={db_user}\n"
-                    f"WORDPRESS_DB_PASSWORD={db_password}\nWORDPRESS_DB_NAME={db_name}\n"
-                    f"MYSQL_PWD={db_password}\n"
-                ),
-                "hosting-wp",
+                wp_file,
+                f"WORDPRESS_DB_HOST={names.db}\nWORDPRESS_DB_USER={db_user}\n"
+                f"WORDPRESS_DB_PASSWORD={db_password}\nWORDPRESS_DB_NAME={db_name}\n"
+                f"MYSQL_PWD={db_password}\n",
             )
-            files.append(wp_file)
             for name in (names.db, names.wp):
                 created.append(("volume", name))
                 self.command("volume", "create", *labels, name)
@@ -238,11 +237,14 @@ class Provisioner:
             return password
         except Exception as exc:
             failures = self.cleanup(names, tenant_id, created)
+            # A failed attempt leaves no stable copy of a secret it generated.
+            run(
+                build_docker_argv(f"rm -rf {shlex.quote(stable_dir)}", env=self.env),
+                env=self.env,
+            )
             if failures:
                 raise Fallo(f"{exc}; limpieza incompleta: {'; '.join(failures)}") from exc
             raise
-        finally:
-            borrar_archivo_remoto(self.env, *files)
 
     def _owned(self, kind: str, name: str, names: SiteNames, tenant_id: str) -> bool:
         if kind == "container":

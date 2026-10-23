@@ -12,6 +12,7 @@ plugin and never written to the audit row or a log line.
 from __future__ import annotations
 
 import secrets
+import shlex
 
 from sqlalchemy import Select, select
 from sqlalchemy.exc import IntegrityError
@@ -22,6 +23,7 @@ from systutor.kernel.audit.service import record_audit
 from systutor.kernel.tenants.context import TenantContext
 from systutor.kernel.tenants.models import Tenant
 
+from .config import ENV_WHITELIST, RawAdapter, site_dir
 from .database import (
     conexion_de_la_base,
     filas_de_usuarios,
@@ -39,12 +41,14 @@ from .schemas import (
     HostingSiteListResponse,
     HostingSiteSummary,
     ResetPasswordResponse,
+    SecretRotationResponse,
+    SiteConfigResponse,
     SiteLogsResponse,
     WordPressUserListResponse,
     WordPressUserSummary,
 )
 from .settings import HostingSettings, docker_env, get_hosting_settings
-from .transport import Fallo
+from .transport import Fallo, build_docker_argv, run
 
 PASSWORD_GENERATED_BYTES = 12
 
@@ -284,6 +288,10 @@ class HostingService:
         failures = provisioner.cleanup(names, site.tenant_id)
         if failures:
             raise AppError("; ".join(failures), status_code=409, code="hosting_delete_failed")
+        # The stable env file holds the site's database secret. A deletion that
+        # leaves it behind leaks the secret of a site that no longer exists.
+        stable = site_dir(self._settings, site.container_name)
+        run(build_docker_argv(f"rm -rf {shlex.quote(stable)}", env=self._env), env=self._env)
         self._audit_site(site, tenant_context, "delete", {"missing": missing})
         self._db.delete(site)
 
@@ -320,6 +328,46 @@ class HostingService:
                 )
             )
         return HostingSiteListResponse(sites=summaries)
+
+    def get_site_config(self, site: HostingSite) -> SiteConfigResponse:
+        """The editable env and the NAMES of the secrets. Values never leak."""
+        config = RawAdapter(self._settings).read_config(site)
+        return SiteConfigResponse(
+            site_id=config.site_id,
+            container_name=config.container_name,
+            editable_env=config.editable,
+            secret_names=list(config.secrets),
+            editable_keys=sorted(ENV_WHITELIST),
+        )
+
+    def update_site_config(
+        self,
+        site: HostingSite,
+        tenant_context: TenantContext,
+        env: dict[str, str],
+    ) -> SiteConfigResponse:
+        """Persist whitelisted env changes and recreate the owned container."""
+        config = RawAdapter(self._settings).update_config(site, env)
+        self._audit_site(site, tenant_context, "config_update", {"keys": sorted(env)})
+        return SiteConfigResponse(
+            site_id=config.site_id,
+            container_name=config.container_name,
+            editable_env=config.editable,
+            secret_names=list(config.secrets),
+            editable_keys=sorted(ENV_WHITELIST),
+        )
+
+    def rotate_site_salts(
+        self, site: HostingSite, tenant_context: TenantContext
+    ) -> SecretRotationResponse:
+        """Rotate WordPress auth salts. Audited; no secret value is recorded."""
+        RawAdapter(self._settings).rotate_salts(site)
+        self._audit_site(site, tenant_context, "secrets_rotated", {"kind": "salts"})
+        return SecretRotationResponse(
+            site_id=site.id,
+            container_name=site.container_name,
+            rotated=["salts"],
+        )
 
     def _credentials(self, info: dict) -> tuple[dict[str, str], str, str]:
         """Resolve the WordPress DB container, credentials and table prefix."""

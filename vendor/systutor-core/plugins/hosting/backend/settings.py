@@ -58,6 +58,9 @@ class HostingSettings(BaseModel):
     traefik: bool = True
     install_timeout: int = 180
     log_lines: int = 200
+    # Stable, per-site directory on the Docker host. Secrets used to live in
+    # /tmp, which a reboot wipes; this is where the panel can read them again.
+    sites_dir: str = "/opt/spanel/sites"
 
 
 def _int_env(name: str, default: int) -> int:
@@ -90,6 +93,8 @@ def register_hosting_settings() -> HostingSettings:
         traefik=os.getenv("SPANEL_HOSTING_TRAEFIK", "true").lower() not in {"false", "0", "no"},
         install_timeout=_int_env("SPANEL_HOSTING_INSTALL_TIMEOUT", 180),
         log_lines=min(1000, max(1, _int_env("SPANEL_HOSTING_LOG_LINES", 200))),
+        sites_dir=os.getenv("SPANEL_HOSTING_SITES_DIR", "/opt/spanel/sites").strip()
+        or "/opt/spanel/sites",
     )
     _hosting_settings = settings
     return settings

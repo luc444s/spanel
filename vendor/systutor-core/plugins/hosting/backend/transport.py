@@ -176,6 +176,34 @@ def escribir_archivo_remoto(env: dict[str, str], contenido: str, etiqueta: str) 
     return ruta
 
 
+def escribir_archivo_remoto_en(env: dict[str, str], ruta: str, contenido: str) -> None:
+    """Write content to a STABLE path, mode 600, creating the directory.
+
+    Unlike `escribir_archivo_remoto` (a random `/tmp` file that the caller
+    deletes), this one is for files the panel must read again later: the
+    per-site env file that holds the WordPress DB secret. The path is quoted,
+    and the content travels over stdin so it never lands in the argv.
+    """
+    directorio = ruta.rsplit("/", 1)[0] if "/" in ruta else "."
+    comando = (
+        f"mkdir -p {shlex.quote(directorio)} && umask 077 && "
+        f"cat > {shlex.quote(ruta)} && chmod 600 {shlex.quote(ruta)}"
+    )
+    r = run(build_docker_argv(comando, env=env), env=env, input=contenido)
+    if r.returncode != 0:
+        raise Fallo(
+            f"no se pudo escribir en {ruta}: {(r.stderr or '').strip()[:200]}"
+        )
+
+
+def leer_archivo_remoto(env: dict[str, str], ruta: str) -> str | None:
+    """Read a stable file, or None when it does not exist."""
+    r = run(build_docker_argv(f"cat {shlex.quote(ruta)}", env=env), env=env)
+    if r.returncode != 0:
+        return None
+    return r.stdout
+
+
 def borrar_archivo_remoto(env: dict[str, str], *rutas: str) -> None:
     for ruta in rutas:
         run(build_docker_argv(f"rm -f {ruta}", env=env), env=env)

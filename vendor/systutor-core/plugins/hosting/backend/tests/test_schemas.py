@@ -9,6 +9,7 @@ from plugins.hosting.backend.schemas import (
     HostingSiteSummary,
     ResetPasswordRequest,
     ResetPasswordResponse,
+    SiteConfigUpdateRequest,
     WordPressUserSummary,
 )
 
@@ -36,6 +37,20 @@ def test_reset_schema_rechaza_tenant_id() -> None:
     with pytest.raises(ValidationError, match="tenant_id"):
         ResetPasswordRequest.model_validate(
             {"password": "una-clave-larga", "tenant_id": "otro-tenant"}
+        )
+
+
+def test_config_update_rechaza_container_name() -> None:
+    with pytest.raises(ValidationError, match="container_name"):
+        SiteConfigUpdateRequest.model_validate(
+            {"env": {"WP_DEBUG": "true"}, "container_name": "mailserver"}
+        )
+
+
+def test_config_update_no_tiene_tenant_id() -> None:
+    with pytest.raises(ValidationError, match="tenant_id"):
+        SiteConfigUpdateRequest.model_validate(
+            {"env": {}, "tenant_id": "otro-tenant"}
         )
 
 

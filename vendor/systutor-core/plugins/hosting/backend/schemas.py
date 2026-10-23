@@ -49,6 +49,32 @@ class SiteLogsResponse(BaseModel):
     logs: str
 
 
+class SiteConfigResponse(BaseModel):
+    """The editable configuration plus the NAMES of the secrets that exist.
+
+    Secret values are never returned. `editable_env` only carries whitelisted
+    keys, so the client cannot echo back the database credentials.
+    """
+
+    site_id: str
+    container_name: str
+    editable_env: dict[str, str]
+    secret_names: list[str]
+    editable_keys: list[str]
+
+
+class SiteConfigUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    env: dict[str, str] = Field(default_factory=dict)
+
+
+class SecretRotationResponse(BaseModel):
+    site_id: str
+    container_name: str
+    rotated: list[str]
+
+
 class HostingSiteSummary(BaseModel):
     id: str
     container_name: str

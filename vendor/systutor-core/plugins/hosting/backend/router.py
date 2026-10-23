@@ -24,6 +24,9 @@ from .schemas import (
     HostingSiteSummary,
     ResetPasswordRequest,
     ResetPasswordResponse,
+    SecretRotationResponse,
+    SiteConfigResponse,
+    SiteConfigUpdateRequest,
     SiteLogsResponse,
     WordPressUserListResponse,
 )
@@ -105,6 +108,42 @@ def site_logs(
     service: HostingService = Depends(_get_hosting_service),
 ) -> SiteLogsResponse:
     return service.site_logs(site, lines)
+
+
+@router.get("/{site_id}/config", response_model=SiteConfigResponse)
+def get_site_config(
+    site: HostingSite = Depends(get_owned_site),
+    _current_user: User = Depends(require_permission("hosting.sites.read")),
+    service: HostingService = Depends(_get_hosting_service),
+) -> SiteConfigResponse:
+    return service.get_site_config(site)
+
+
+@router.patch("/{site_id}/config", response_model=SiteConfigResponse)
+def update_site_config(
+    body: SiteConfigUpdateRequest,
+    site: HostingSite = Depends(get_owned_site),
+    tenant_context: TenantContext = Depends(get_current_tenant_context),
+    _current_user: User = Depends(require_permission("hosting.sites.manage")),
+    service: HostingService = Depends(_get_hosting_service),
+    db: Session = Depends(get_db_session),
+) -> SiteConfigResponse:
+    result = service.update_site_config(site, tenant_context, body.env)
+    db.commit()
+    return result
+
+
+@router.post("/{site_id}/secrets/salts", response_model=SecretRotationResponse)
+def rotate_site_salts(
+    site: HostingSite = Depends(get_owned_site),
+    tenant_context: TenantContext = Depends(get_current_tenant_context),
+    _current_user: User = Depends(require_permission("hosting.sites.manage")),
+    service: HostingService = Depends(_get_hosting_service),
+    db: Session = Depends(get_db_session),
+) -> SecretRotationResponse:
+    result = service.rotate_site_salts(site, tenant_context)
+    db.commit()
+    return result
 
 
 @router.delete("/{site_id}", status_code=204)

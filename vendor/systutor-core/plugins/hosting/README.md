@@ -36,6 +36,20 @@ All three routes require the kernel `TenantContext`:
 - `GET /api/v1/plugins/hosting/sites/{site_id}/logs?lines=200` — `hosting.sites.read`
 - `DELETE /api/v1/plugins/hosting/sites/{site_id}` — `hosting.sites.delete`
   (platform permission only; permanently removes the site's containers and data).
+- `GET /api/v1/plugins/hosting/sites/{site_id}/config` — `hosting.sites.read`;
+  returns the editable environment, the list of editable keys and the NAMES of
+  the secrets that exist. Secret values are never returned.
+- `PATCH /api/v1/plugins/hosting/sites/{site_id}/config` — `hosting.sites.manage`;
+  accepts `{"env": {"KEY": "value"}}` for whitelisted keys only. The change is
+  written to the site's stable env file and applied by recreating the container
+  from its own `docker inspect`, reusing the named volumes and labels. The
+  database keys (`WORDPRESS_DB_*`, `MYSQL_PWD`) are rejected: a tenant that
+  could rewrite them could point its site at another tenant's database.
+- `POST /api/v1/plugins/hosting/sites/{site_id}/secrets/salts` —
+  `hosting.sites.manage`; rotates the WordPress authentication salts with
+  `wp config shuffle-salts`. The salts live in `wp-config.php` inside the site
+  volume and PHP reads them per request, so this needs no restart and no
+  recreate. The response says what was rotated, never the new value.
 
 The request schemas forbid extra fields: a client cannot send `tenant_id`, a
 container name, or any other Docker selector. A site that belongs to another
@@ -70,6 +84,10 @@ The Docker transport comes from the core `.env`:
   (`mariadb:11`), `SPANEL_HOSTING_NETWORK` (`proxy`, must already exist)
 - `SPANEL_HOSTING_TRAEFIK` (`true`), `SPANEL_HOSTING_INSTALL_TIMEOUT` (180 s),
   `SPANEL_HOSTING_LOG_LINES` (200, capped at 1000)
+- `SPANEL_HOSTING_SITES_DIR` (`/opt/spanel/sites`): the stable, per-site
+  directory on the Docker host. The config route writes `wp.env` there with mode
+  600, so the WordPress database secret survives a reboot and can be read again.
+  Before this, the env files lived in `/tmp` and were deleted after provisioning.
 
 Provisioning creates two labeled containers and two labeled volumes, installs
 WordPress using `wordpress:cli` and only then records ownership. A failed
