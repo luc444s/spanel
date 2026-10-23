@@ -22,6 +22,10 @@ export function UsersDialog({ site, canReset, onClose, onReset }: UsersDialogPro
     queryKey: hostingKeys.users(site?.id ?? ""),
     queryFn: () => listSiteUsers(site!.id),
     enabled: Boolean(site),
+    // Reading users costs five Docker commands over SSH; reopening the dialog
+    // within this window reuses the cached rows instead of paying for them
+    // again. Only WordPress changes this list, so a short window is safe.
+    staleTime: 60_000,
   });
   const users = usersQuery.data?.users ?? [];
 
