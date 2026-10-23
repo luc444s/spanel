@@ -111,7 +111,9 @@ def site_logs(
 def delete_site(
     site: HostingSite = Depends(get_owned_site),
     tenant_context: TenantContext = Depends(get_current_tenant_context),
-    _current_user: User = Depends(require_permission("hosting.sites.delete")),
+    _current_user: User = Depends(
+        require_permission("hosting.sites.delete", platform_only=True)
+    ),
     service: HostingService = Depends(_get_hosting_service),
     db: Session = Depends(get_db_session),
 ) -> None:

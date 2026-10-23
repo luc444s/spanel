@@ -38,7 +38,12 @@ export default function HostingPage() {
   const permissions = useAuthStore((state) => state.permissions);
   const canCreate = permissions.includes("hosting.sites.create");
   const canManage = permissions.includes("hosting.sites.manage");
-  const canDelete = permissions.includes("hosting.sites.delete");
+  // Deleting a site is a platform capability, not a tenant one. The kernel
+  // grants core.platform.admin only to the platform administrator, so the
+  // button never appears for a normal tenant user.
+  const canDelete =
+    permissions.includes("core.platform.admin") &&
+    permissions.includes("hosting.sites.delete");
   const canReadUsers = permissions.includes("hosting.users.read");
   const canReset = permissions.includes("hosting.users.password");
   const [createOpen, setCreateOpen] = useState(false);
