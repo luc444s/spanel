@@ -82,6 +82,16 @@ database. The host is derived from the owned site and validated against
 still shows the credential, only the link is disabled. The password is never
 put in the URL and is not stored by the panel.
 
+The four values are read from the container environment (`WORDPRESS_DB_*`)
+first. When the environment does not declare them, the plugin reads
+`/var/www/html/wp-config.php` as **text** and extracts the literal `DB_HOST`,
+`DB_NAME`, `DB_USER` and `DB_PASSWORD` definitions. It does not execute PHP and
+does not modify the file, the container or the database. A database container
+outside WordPress is supported, including a custom port such as
+`mariadb:3306`; the container name is validated the same way as the
+environment path. The user list and the password reset use the same two
+sources.
+
 The container name is resolved from the owned row and then used with the proven
 Docker/WordPress core from A.SPEC 0012 (`discovery`, `database`, `passwords`,
 `reset`). A container that no longer exists is listed as `missing`; the users

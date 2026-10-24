@@ -25,15 +25,16 @@ from systutor.kernel.audit.service import record_audit
 from systutor.kernel.tenants.context import TenantContext
 from systutor.kernel.tenants.models import Tenant
 
-from .config import ENV_WHITELIST, RawAdapter, env_of, site_dir
+from .config import ENV_WHITELIST, RawAdapter, site_dir
 from .database import (
-    conexion_de_la_base,
     filas_de_usuarios,
     prefijo_de_tablas,
     roles_desde_capacidades,
     usuarios_con_rol,
 )
-from .inspection import candidato_de, database_container, inspect_container
+from .database_binding import database_binding
+from .database_binding import database_credentials as _database_credentials
+from .inspection import candidato_de, inspect_container
 from .models import HostingSite
 from .passwords import hash_de_password
 from .provisioner import Provisioner, SiteNames, slug_for
@@ -52,6 +53,7 @@ from .schemas import (
 )
 from .settings import HostingSettings, docker_env, get_hosting_settings
 from .transport import Fallo, build_docker_argv, run
+from .wpconfig import read_wp_config
 
 PASSWORD_GENERATED_BYTES = 12
 
@@ -87,44 +89,15 @@ def estado_del_contenedor(info: dict) -> str:
     return status.strip() if isinstance(status, str) and status.strip() else "unknown"
 
 
-# A Docker network alias: the WordPress env names its database container, and
-# phpMyAdmin resolves that same name. A scheme, a path or an IP is not a name
-# this plugin will send anybody to.
-_DOCKER_NAME = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,62}$")
-
-
-def database_credentials(info: dict) -> tuple[str, str, str, str]:
+def database_credentials(
+    info: dict, *, wp_config: str | None = None
+) -> tuple[str, str, str, str]:
     """The four values WordPress already uses, validated as a Docker target.
 
-    The host must be a container name: a scheme, `localhost` and an IP are
-    rejected because phpMyAdmin cannot resolve them and the panel will not send
-    a credential to something that is not the site's database container.
+    Kept as a thin re-export of `database_binding` so the existing service API
+    and its tests do not depend on the new module's location.
     """
-    env = env_of(info)
-    host = env.get("WORDPRESS_DB_HOST", "").strip()
-    database = env.get("WORDPRESS_DB_NAME", "").strip()
-    user = env.get("WORDPRESS_DB_USER", "").strip()
-    password = env.get("WORDPRESS_DB_PASSWORD", "").strip()
-    if not all((host, database, user, password)):
-        raise AppError(
-            "El sitio no declara su base de datos en el entorno",
-            status_code=409,
-            code="hosting_database_unavailable",
-        )
-    if "://" in host:
-        raise AppError(
-            f"WORDPRESS_DB_HOST no apunta a un contenedor ({host!r})",
-            status_code=409,
-            code="hosting_database_unavailable",
-        )
-    name = host.split(":", 1)[0].strip()
-    if not _DOCKER_NAME.fullmatch(name) or name in {"localhost", "127.0.0.1", "::1"}:
-        raise AppError(
-            f"WORDPRESS_DB_HOST no apunta a un contenedor ({host!r})",
-            status_code=409,
-            code="hosting_database_unavailable",
-        )
-    return name, database, user, password
+    return _database_credentials(info, wp_config=wp_config)
 
 
 def phpmyadmin_url(base: str, host: str) -> str | None:
@@ -183,6 +156,22 @@ class HostingService:
                 code="hosting_site_unavailable",
             )
         return info, candidato.gestionable
+
+    def _database_binding_for(
+        self, site: HostingSite, info: dict
+    ) -> tuple[str, str, str, str, str]:
+        """Environment first; `wp-config.php` only when the environment fails."""
+        try:
+            return database_binding(info)
+        except AppError:
+            wp_config = read_wp_config(
+                self._env,
+                site.container_name,
+                timeout=self._settings.command_timeout,
+            )
+            if wp_config is None:
+                raise
+            return database_binding(info, wp_config=wp_config)
 
     def _managed_site(self, site: HostingSite) -> dict:
         info, managed = self._require_site(site)
@@ -406,7 +395,7 @@ class HostingService:
         that names the database and the host, never the password.
         """
         info, _managed = self._require_site(site)
-        host, database, user, password = database_credentials(info)
+        _raw_host, host, database, user, password = self._database_binding_for(site, info)
         db_info = self._inspect(host)
         if db_info is None:
             raise AppError(
@@ -465,17 +454,26 @@ class HostingService:
             rotated=["salts"],
         )
 
-    def _credentials(self, info: dict) -> tuple[dict[str, str], str, str]:
-        """Resolve the WordPress DB container, credentials and table prefix."""
+    def _credentials(
+        self, site: HostingSite, info: dict
+    ) -> tuple[dict[str, str], str, str]:
+        """Resolve the WordPress DB container, credentials and table prefix.
+
+        The same environment-first, `wp-config.php`-second rule used by the
+        database dialog feeds the user list and the password reset. The raw
+        host (port included) is kept for the throwaway env file; the container
+        name without the port is the one `docker exec` can use.
+        """
+        raw_host, db_container, database, user, password = self._database_binding_for(
+            site, info
+        )
         try:
-            credenciales = conexion_de_la_base(info)
-            db_container = database_container(info)
             prefijo = prefijo_de_tablas(
                 self._env,
                 db_container,
-                credenciales["usuario"],
-                credenciales["_password"],
-                credenciales["base"],
+                user,
+                password,
+                database,
             )
         except Fallo as exc:
             raise AppError(
@@ -483,11 +481,24 @@ class HostingService:
                 status_code=409,
                 code="hosting_site_unavailable",
             ) from exc
+        credenciales = {
+            "host": raw_host,
+            "usuario": user,
+            "password": password,
+            "base": database,
+            "_password": password,
+            "_contenido": (
+                f"WORDPRESS_DB_HOST={raw_host}\n"
+                f"WORDPRESS_DB_USER={user}\n"
+                f"WORDPRESS_DB_PASSWORD={password}\n"
+                f"WORDPRESS_DB_NAME={database}\n"
+            ),
+        }
         return credenciales, db_container, prefijo
 
     def list_users(self, site: HostingSite) -> WordPressUserListResponse:
         info, _managed = self._require_site(site)
-        credenciales, db_container, prefijo = self._credentials(info)
+        credenciales, db_container, prefijo = self._credentials(site, info)
         try:
             rows = usuarios_con_rol(
                 self._env,
@@ -539,7 +550,7 @@ class HostingService:
                 code="hosting_site_not_managed",
             )
 
-        credenciales, db_container, prefijo = self._credentials(info)
+        credenciales, db_container, prefijo = self._credentials(site, info)
         try:
             # The selector is the numeric WordPress ID, never the login: a
             # duplicate login is legal in the schema and must not be touched.
