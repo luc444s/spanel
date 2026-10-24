@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import asyncio
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from types import SimpleNamespace
 from urllib.parse import parse_qs
 
 import pytest
+from starlette.requests import ClientDisconnect
 
-from plugins.hosting.backend.phpmyadmin_proxy import PmaClient, proxy_response
+from plugins.hosting.backend.phpmyadmin_proxy import PmaClient, PmaStreamingResponse, proxy_response
 from systutor.core.errors import AppError
 
 
@@ -81,8 +84,15 @@ def test_server_side_login_and_proxy(client: PmaClient) -> None:
     assert "x-frame-options" not in response.headers
     assert "set-cookie" not in response.headers
     guard, _, _ = proxy_response(
-        client, "GET", "js/dist/cross_framing_protection.js", "v=5.2.3",
-        b"", {}, cookies, "", "/proxy",
+        client,
+        "GET",
+        "js/dist/cross_framing_protection.js",
+        "v=5.2.3",
+        b"",
+        {},
+        cookies,
+        "",
+        "/proxy",
     )
     assert b"top.location" not in guard.body
     assert b"framed through SPanel" in guard.body
@@ -99,3 +109,85 @@ def test_rejected_login_and_expired_cookie(client: PmaClient) -> None:
         client, "GET", "", "", b"", {}, {"pma": "expired"}, "", "/proxy"
     )
     assert expired and response.status_code == 401
+
+
+def test_socket_is_closed_if_upstream_read_fails() -> None:
+    class Connection:
+        closed = False
+
+        def close(self) -> None:
+            self.closed = True
+
+    class BrokenResponse:
+        status = 200
+
+        def getheaders(self):
+            return [("Content-Type", "text/html")]
+
+        def getheader(self, name: str, default: str = "") -> str:
+            return "text/html" if name == "Content-Type" else default
+
+        def read(self, _size: int) -> bytes:
+            raise OSError("upstream disconnected")
+
+    conn = Connection()
+    client = SimpleNamespace(base="http://internal", request=lambda *_: (conn, BrokenResponse()))
+    with pytest.raises(OSError):
+        proxy_response(client, "GET", "", "", b"", {}, {}, "", "/proxy")  # type: ignore[arg-type]
+    assert conn.closed
+
+
+def test_socket_is_closed_if_client_disconnects_before_streaming() -> None:
+    class Connection:
+        closed = False
+
+        def close(self) -> None:
+            self.closed = True
+
+    class BinaryResponse:
+        status = 200
+
+        def getheaders(self):
+            return [("Content-Type", "application/octet-stream")]
+
+        def getheader(self, name: str, default: str = "") -> str:
+            return "application/octet-stream" if name == "Content-Type" else default
+
+        def read(self, _size: int) -> bytes:
+            raise AssertionError("client disconnected before the first chunk")
+
+    conn = Connection()
+    client = SimpleNamespace(base="http://internal", request=lambda *_: (conn, BinaryResponse()))
+    response, _, _ = proxy_response(
+        client,  # type: ignore[arg-type]
+        "GET",
+        "asset.bin",
+        "",
+        b"",
+        {},
+        {},
+        "",
+        "/proxy",
+    )
+    assert isinstance(response, PmaStreamingResponse)
+
+    async def disconnect() -> None:
+        async def receive():
+            return {"type": "http.disconnect"}
+
+        async def send(_message):
+            raise ConnectionError("client disconnected")
+
+        scope = {
+            "type": "http",
+            "asgi": {"version": "3.0", "spec_version": "2.4"},
+            "http_version": "1.1",
+            "method": "GET",
+            "path": "/proxy/asset.bin",
+            "headers": [],
+        }
+        with pytest.raises(ClientDisconnect):
+            await response(scope, receive, send)  # type: ignore[arg-type]
+
+    asyncio.run(disconnect())
+    assert conn.closed

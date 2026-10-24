@@ -28,8 +28,8 @@ from .phpmyadmin_proxy import PmaClient, proxy_response, validate_url
 from .phpmyadmin_session import (
     COOKIE,
     PmaSession,
+    authorize_proxy_session,
     create_session,
-    get_phpmyadmin_session,
     invalidate,
     load_session,
     proxy_base,
@@ -164,6 +164,9 @@ def site_database(
     db: Session = Depends(get_db_session),
 ) -> SiteDatabaseResponse:
     """Reveal the site's own database credential and the phpMyAdmin link."""
+    # Owned-site/RBAC dependencies have already run. Release their read
+    # transaction before the Docker inspections in site_database().
+    db.commit()
     result = service.site_database(site, tenant_context)
     db.commit()
     response.headers["Cache-Control"] = "no-store"
@@ -180,21 +183,26 @@ def create_phpmyadmin_session(
     service: HostingService = Depends(_get_hosting_service),
     db: Session = Depends(get_db_session),
 ) -> PhpMyAdminSessionResponse:
+    user_id = current_user.id
+    site_id = site.id
+    # The dependencies checked ownership and permissions; their read
+    # transaction must not hold a pool connection during Docker or HTTP login.
+    db.commit()
     settings = get_hosting_settings()
     client = PmaClient(validate_url(settings.phpmyadmin_internal_url), settings.phpmyadmin_timeout)
     cookies = service.phpmyadmin_login_credentials(site, tenant_context, client)
     db.commit()
     _, ticket = create_session(
-        current_user.id,
+        user_id,
         tenant_context.current_tenant_id,
-        site.id,
+        site_id,
         cookies,
         settings.phpmyadmin_session_ttl,
     )
     response.headers["Cache-Control"] = "no-store"
     response.headers["Pragma"] = "no-cache"
     return PhpMyAdminSessionResponse(
-        url=f"{proxy_base(site.id)}/?ticket={ticket}", expires_in=settings.phpmyadmin_session_ttl
+        url=f"{proxy_base(site_id)}/?ticket={ticket}", expires_in=settings.phpmyadmin_session_ttl
     )
 
 
@@ -223,16 +231,15 @@ async def phpmyadmin_proxy(
     request: Request,
     site_id: str,
     path: str = "",
-    db: Session = Depends(get_db_session),
 ) -> Response:
     base = proxy_base(site_id)
     try:
-        session: PmaSession = get_phpmyadmin_session(request, site_id, db)
+        session: PmaSession = await run_in_threadpool(authorize_proxy_session, request, site_id)
     except HTTPException as exc:
         if exc.status_code != 401:
             raise
         return HTMLResponse(
-            "La sesión de phpMyAdmin expiró; volvé a abrir el modal",
+            "La sesión de phpMyAdmin expiró; volvé a abrir phpMyAdmin",
             status_code=401,
             headers={"Cache-Control": "no-store"},
         )

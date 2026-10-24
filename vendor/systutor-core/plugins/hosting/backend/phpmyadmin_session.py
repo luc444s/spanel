@@ -1,4 +1,4 @@
-"""Opaque, site-scoped phpMyAdmin sessions and one-time iframe tickets."""
+"""Opaque, site-scoped phpMyAdmin sessions and one-time tab tickets."""
 
 from __future__ import annotations
 
@@ -8,12 +8,12 @@ import threading
 import time
 from dataclasses import dataclass
 
-from fastapi import Depends, HTTPException, Request
+from fastapi import HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from systutor.api.deps import get_db_session
 from systutor.core.cache import KEY_PREFIX, RedisCacheBackend, cache
+from systutor.core.lifecycle import ensure_session_factory
 from systutor.kernel.auth.models import User
 from systutor.kernel.tenants.context import build_tenant_context
 from systutor.kernel.tenants.service import validate_user_branch_scope
@@ -21,7 +21,7 @@ from systutor.kernel.tenants.service import validate_user_branch_scope
 from .models import HostingSite
 
 COOKIE = "spanel_pma"
-MESSAGE = "La sesión de phpMyAdmin expiró; volvé a abrir el modal"
+MESSAGE = "La sesión de phpMyAdmin expiró; volvé a abrir phpMyAdmin"
 _ticket_lock = threading.Lock()
 
 
@@ -103,9 +103,7 @@ def secure_request(request: Request) -> bool:
     )
 
 
-def get_phpmyadmin_session(
-    request: Request, site_id: str, db: Session = Depends(get_db_session)
-) -> PmaSession:
+def get_phpmyadmin_session(request: Request, site_id: str, db: Session) -> PmaSession:
     ticket = request.query_params.get("ticket")
     exchange = bool(
         ticket and request.method == "GET" and request.url.path.rstrip("/") == proxy_base(site_id)
@@ -145,3 +143,13 @@ def get_phpmyadmin_session(
     request.state.current_tenant_id = session.tenant_id
     request.state.pma_ticket_exchange = exchange
     return session
+
+
+def authorize_proxy_session(request: Request, site_id: str) -> PmaSession:
+    """Finish all DB work before an upstream request or streaming can begin.
+
+    Called in a worker thread by the async proxy route. Neither the returned
+    cache record nor request.state retains a Session or an ORM instance.
+    """
+    with ensure_session_factory(request.app)() as db:
+        return get_phpmyadmin_session(request, site_id, db)

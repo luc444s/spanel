@@ -11,6 +11,7 @@ from http.cookies import SimpleCookie
 from urllib.parse import urlencode, urlsplit
 
 from fastapi.responses import Response, StreamingResponse
+from starlette.types import Receive, Scope, Send
 
 from systutor.core.errors import AppError
 
@@ -34,6 +35,27 @@ HOP = {
     "content-length",
 }
 LIMIT = 2 * 1024 * 1024
+
+
+class PmaStreamingResponse(StreamingResponse):
+    """Close upstream even if the client disconnects before iteration starts."""
+
+    def __init__(
+        self,
+        chunks: Iterator[bytes],
+        connection: http.client.HTTPConnection,
+        *,
+        status_code: int,
+        headers: dict[str, str],
+    ) -> None:
+        super().__init__(chunks, status_code=status_code, headers=headers)
+        self._upstream_connection = connection
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            self._upstream_connection.close()
 
 
 def validate_url(value: str) -> str:
@@ -273,9 +295,28 @@ def proxy_response(
     proxy: str,
 ) -> tuple[Response, dict[str, str], bool]:
     conn, upstream = client.request(method, path, query, body, headers, cookies)
+    try:
+        return _proxy_response_with_connection(
+            conn, upstream, path, cookies, client.base, legacy, proxy
+        )
+    except BaseException:
+        # No StreamingResponse owns the socket if response construction failed.
+        conn.close()
+        raise
+
+
+def _proxy_response_with_connection(
+    conn: http.client.HTTPConnection,
+    upstream: http.client.HTTPResponse,
+    path: str,
+    cookies: dict[str, str],
+    internal: str,
+    legacy: str,
+    proxy: str,
+) -> tuple[Response, dict[str, str], bool]:
     raw_headers = upstream.getheaders()
     updated = merge_cookies(cookies, raw_headers)
-    outgoing = filtered_headers(raw_headers, client.base, legacy, proxy)
+    outgoing = filtered_headers(raw_headers, internal, legacy, proxy)
     content_type = upstream.getheader("Content-Type", "").split(";", 1)[0].lower()
     length = upstream.getheader("Content-Length", "")
     # Login pages must not be rendered, including when an upstream session expires.
@@ -309,7 +350,7 @@ def proxy_response(
                 text = data.decode(encoding)
                 if content_type == "text/html":
                     text = remove_frame_breakout(text)
-                data = rewrite(text, client.base, legacy, proxy).encode(encoding)
+                data = rewrite(text, internal, legacy, proxy).encode(encoding)
             except (UnicodeError, LookupError):
                 pass
             return Response(data, status_code=upstream.status, headers=outgoing), updated, False
@@ -327,7 +368,7 @@ def proxy_response(
             conn.close()
 
     return (
-        StreamingResponse(chunks(), status_code=upstream.status, headers=outgoing),
+        PmaStreamingResponse(chunks(), conn, status_code=upstream.status, headers=outgoing),
         updated,
         False,
     )
