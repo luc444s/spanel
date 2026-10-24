@@ -1,0 +1,6 @@
+{
+  "permissions": [
+    {"name": "filemanager.files.read", "description": "Browse and download files in an authorized target"},
+    {"name": "filemanager.files.manage", "description": "Upload, edit and manage files in an authorized target"}
+  ]
+}

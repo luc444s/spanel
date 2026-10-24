@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
 
 import {
   hostingKeys,
@@ -38,8 +39,13 @@ function actionAllowed(status: string, action: "start" | "stop" | "restart") {
 }
 
 export default function HostingPage() {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const permissions = useAuthStore((state) => state.permissions);
+  const filemanagerEnabled = useAuthStore((state) => state.enabledPlugins.some(
+    (plugin) => plugin.plugin_id === "filemanager"
+  ));
+  const canBrowseFiles = filemanagerEnabled && permissions.includes("filemanager.files.read");
   const canCreate = permissions.includes("hosting.sites.create");
   const canManage = permissions.includes("hosting.sites.manage");
   // Deleting a site is a platform capability, not a tenant one. The kernel
@@ -219,6 +225,11 @@ export default function HostingPage() {
               <Button variant="secondary" onClick={() => setLogsTarget(detail)}>
                 Logs
               </Button>
+              {canBrowseFiles && detail.status === "running" ? (
+                <Button variant="secondary" onClick={() => navigate(`/app/filemanager/hosting/${encodeURIComponent(detail.id)}`)}>
+                  Gestor de archivos
+                </Button>
+              ) : null}
               <Button
                 variant="secondary"
                 disabled={detail.status === "missing"}

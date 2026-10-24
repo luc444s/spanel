@@ -67,6 +67,7 @@ class HostingSettings(BaseModel):
     phpmyadmin_internal_url: str = "http://spanel-phpmyadmin:8080"
     phpmyadmin_session_ttl: int = 1500
     phpmyadmin_timeout: int = 15
+    files_root: str = "/var/www/html"
 
 
 def _int_env(name: str, default: int) -> int:
@@ -107,6 +108,7 @@ def register_hosting_settings() -> HostingSettings:
         ).strip(),
         phpmyadmin_session_ttl=min(3600, max(1, _int_env("SPANEL_PHPMYADMIN_SESSION_TTL", 1500))),
         phpmyadmin_timeout=max(1, _int_env("SPANEL_PHPMYADMIN_TIMEOUT", 15)),
+        files_root=os.getenv("SPANEL_HOSTING_FILES_ROOT", "/var/www/html").strip(),
     )
     _hosting_settings = settings
     return settings

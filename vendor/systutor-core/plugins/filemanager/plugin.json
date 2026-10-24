@@ -1,0 +1,13 @@
+{
+  "id": "filemanager",
+  "name": "Gestor de archivos",
+  "version": "0.1.0",
+  "api_version": "1",
+  "requires": [],
+  "backend_entrypoint": "backend.register:register",
+  "frontend_entrypoint": "frontend/register.ts",
+  "permissions": ["filemanager.files.read", "filemanager.files.manage"],
+  "tenant_admin_permissions": ["filemanager.files.read", "filemanager.files.manage"],
+  "events": [],
+  "description": "Explorador de archivos para destinos autorizados"
+}

@@ -29,7 +29,10 @@ The kernel provides:
 - **SDK** (`systutor.sdk`): plugin context, permission/event/route
   registration.
 - **Contracts** (`systutor.contracts`): shared event, audit, and plugin
-  contracts.
+  contracts. `systutor.contracts.file_targets` exposes an application-local
+  file target resolver registry: providers register a callable that resolves
+  a tenant-owned resource to a trusted container/root; the filemanager plugin
+  never accepts a container or absolute root from the browser.
 
 The kernel deliberately contains no business domain logic. Business
 modules are external plugins that declare identity, version, permissions,

@@ -136,6 +136,9 @@ The Docker transport comes from the core `.env`:
   server-only upstream on a network shared by phpMyAdmin and the app.
 - `SPANEL_PHPMYADMIN_SESSION_TTL` (1500 s, capped at 3600),
   `SPANEL_PHPMYADMIN_TIMEOUT` (15 s).
+- `SPANEL_HOSTING_FILES_ROOT` (`/var/www/html`): server-side root that Hosting
+  supplies to the `filemanager` plugin for an owned running site. The client
+  never chooses the container or an absolute path.
 
 Provisioning creates two labeled containers and two labeled volumes, installs
 WordPress using `wordpress:cli` and only then records ownership. A failed

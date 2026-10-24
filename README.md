@@ -128,6 +128,7 @@ npm run dev
 | `SPANEL_PHPMYADMIN_INTERNAL_URL` | URL interna de phpMyAdmin, accesible desde el contenedor de la app en una red Docker compartida | `http://spanel-phpmyadmin:8080` |
 | `SPANEL_PHPMYADMIN_SESSION_TTL` | Duración de la sesión de la pestaña (segundos, máximo 3600) | `1500` |
 | `SPANEL_PHPMYADMIN_TIMEOUT` | Timeout HTTP al servicio interno (segundos) | `15` |
+| `SPANEL_HOSTING_FILES_ROOT` | Raíz interna autorizada para el gestor de archivos de sitios | `/var/www/html` |
 
 ### Configuración del Servidor de Correo
 
@@ -251,6 +252,23 @@ networks:
 Configurá `SPANEL_PHPMYADMIN_INTERNAL_URL=http://<nombre-del-contenedor>:8080`
 en el entorno de la app. En despliegues con Docker local usá
 `SPANEL_DOCKER_TRANSPORT=local`; no hace falta publicar otro puerto.
+
+#### Gestor de archivos
+
+Habilitá el plugin `filemanager` y asigná `filemanager.files.read` (explorar y
+descargar) o `filemanager.files.manage` (subir, editar, crear, renombrar,
+borrar, comprimir y extraer). El detalle de un sitio WordPress en marcha muestra
+**Gestor de archivos**. El plugin y Hosting comprueban en cada operación el
+usuario, tenant, permisos y propiedad del sitio; el navegador solo envía rutas
+relativas. La raíz de WordPress es configurable con
+`SPANEL_HOSTING_FILES_ROOT` (por defecto `/var/www/html`) y nunca se elige desde
+el cliente. Las subidas por botón o arrastrando, las descargas, ZIP y el editor
+mínimo usan un canal binario local/SSH hacia el contenedor. El editor rechaza
+cambios concurrentes y no abre binarios. Los ZIP se validan contra rutas
+absolutas, `..`, enlaces y límites de tamaño antes de extraer.
+
+Los contenedores WordPress deben incluir la extensión PHP `zip` (la imagen
+oficial la trae). No se modifican permisos de MariaDB ni otros contenedores.
 
 ## Desarrollo
 
