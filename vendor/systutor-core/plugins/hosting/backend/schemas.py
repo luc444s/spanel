@@ -91,6 +91,11 @@ class SiteDatabaseResponse(BaseModel):
     url: str | None
 
 
+class PhpMyAdminSessionResponse(BaseModel):
+    url: str
+    expires_in: int
+
+
 class HostingSiteSummary(BaseModel):
     id: str
     container_name: str

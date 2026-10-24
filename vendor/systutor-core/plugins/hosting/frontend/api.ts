@@ -63,6 +63,22 @@ export type HostingSiteDatabase = {
   url: string | null;
 };
 
+export type PhpMyAdminSessionResponse = { url: string; expires_in: number };
+
+export function createPhpMyAdminSession(siteId: string) {
+  return apiRequest<PhpMyAdminSessionResponse>(
+    `/api/v1/plugins/hosting/sites/${encodeURIComponent(siteId)}/phpmyadmin/session`,
+    { method: "POST" }
+  );
+}
+
+export function closePhpMyAdminSession(siteId: string) {
+  return apiRequest<void>(
+    `/api/v1/plugins/hosting/sites/${encodeURIComponent(siteId)}/phpmyadmin/session`,
+    { method: "DELETE" }
+  );
+}
+
 export const hostingKeys = {
   sites: ["hosting", "sites"] as const,
   users: (siteId: string) => ["hosting", siteId, "users"] as const,

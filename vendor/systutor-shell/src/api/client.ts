@@ -53,7 +53,16 @@ function isLoopbackHost(hostname: string) {
 }
 
 export function getApiBaseUrl() {
-  const configuredBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? DEFAULT_API_BASE_URL).replace(/\/$/, "");
+  const explicitBaseUrl = import.meta.env.VITE_API_BASE_URL;
+
+  // The panel and its API share an origin in Docker, and Vite proxies /api in
+  // development. A localhost page must not send its credentials to another
+  // process on port 8000 simply because the browser itself is on loopback.
+  if (typeof window !== "undefined" && !explicitBaseUrl) {
+    return window.location.origin;
+  }
+
+  const configuredBaseUrl = (explicitBaseUrl ?? DEFAULT_API_BASE_URL).replace(/\/$/, "");
 
   if (typeof window === "undefined") {
     return configuredBaseUrl;

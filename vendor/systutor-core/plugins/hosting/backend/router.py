@@ -7,21 +7,40 @@ name is always read from an owned row.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query, Request, Response
+import re
+import time
+from urllib.parse import parse_qs
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from systutor.api.deps import get_db_session
+from systutor.core.errors import AppError
 from systutor.kernel.auth.dependencies import get_current_tenant_context, require_permission
 from systutor.kernel.auth.models import User
 from systutor.kernel.tenants.context import TenantContext
 
 from .guard import get_owned_site
 from .models import HostingSite
+from .phpmyadmin_proxy import PmaClient, proxy_response, validate_url
+from .phpmyadmin_session import (
+    COOKIE,
+    PmaSession,
+    create_session,
+    get_phpmyadmin_session,
+    invalidate,
+    load_session,
+    proxy_base,
+    secure_request,
+)
 from .schemas import (
     CreateSiteRequest,
     CreateSiteResponse,
     HostingSiteListResponse,
     HostingSiteSummary,
+    PhpMyAdminSessionResponse,
     ResetPasswordRequest,
     ResetPasswordResponse,
     SecretRotationResponse,
@@ -32,6 +51,7 @@ from .schemas import (
     WordPressUserListResponse,
 )
 from .service import HostingService
+from .settings import get_hosting_settings
 
 router = APIRouter(prefix="/sites", tags=["hosting"])
 
@@ -151,6 +171,138 @@ def site_database(
     return result
 
 
+@router.post("/{site_id}/phpmyadmin/session", response_model=PhpMyAdminSessionResponse)
+def create_phpmyadmin_session(
+    response: Response,
+    site: HostingSite = Depends(get_owned_site),
+    tenant_context: TenantContext = Depends(get_current_tenant_context),
+    current_user: User = Depends(require_permission("hosting.sites.manage")),
+    service: HostingService = Depends(_get_hosting_service),
+    db: Session = Depends(get_db_session),
+) -> PhpMyAdminSessionResponse:
+    settings = get_hosting_settings()
+    client = PmaClient(validate_url(settings.phpmyadmin_internal_url), settings.phpmyadmin_timeout)
+    cookies = service.phpmyadmin_login_credentials(site, tenant_context, client)
+    db.commit()
+    _, ticket = create_session(
+        current_user.id,
+        tenant_context.current_tenant_id,
+        site.id,
+        cookies,
+        settings.phpmyadmin_session_ttl,
+    )
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Pragma"] = "no-cache"
+    return PhpMyAdminSessionResponse(
+        url=f"{proxy_base(site.id)}/?ticket={ticket}", expires_in=settings.phpmyadmin_session_ttl
+    )
+
+
+@router.delete("/{site_id}/phpmyadmin/session", status_code=204)
+def close_phpmyadmin_session(
+    request: Request,
+    response: Response,
+    site: HostingSite = Depends(get_owned_site),
+    _current_user: User = Depends(require_permission("hosting.sites.manage")),
+) -> None:
+    session = load_session(request.cookies.get(COOKIE))
+    if session and session.site_id == site.id:
+        invalidate(session)
+    response.delete_cookie(COOKIE, path=proxy_base(site.id))
+    response.headers["Cache-Control"] = "no-store"
+
+
+@router.api_route(
+    "/{site_id}/phpmyadmin", methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+)
+@router.api_route(
+    "/{site_id}/phpmyadmin/{path:path}",
+    methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+)
+async def phpmyadmin_proxy(
+    request: Request,
+    site_id: str,
+    path: str = "",
+    db: Session = Depends(get_db_session),
+) -> Response:
+    base = proxy_base(site_id)
+    try:
+        session: PmaSession = get_phpmyadmin_session(request, site_id, db)
+    except HTTPException as exc:
+        if exc.status_code != 401:
+            raise
+        return HTMLResponse(
+            "La sesión de phpMyAdmin expiró; volvé a abrir el modal",
+            status_code=401,
+            headers={"Cache-Control": "no-store"},
+        )
+    if getattr(request.state, "pma_ticket_exchange", False):
+        redirect = RedirectResponse(base + "/", status_code=303)
+        redirect.set_cookie(
+            COOKIE,
+            session.id,
+            path=base,
+            httponly=True,
+            samesite="strict",
+            secure=secure_request(request),
+            max_age=max(1, int(session.expires_at - time.time())),
+        )
+        redirect.headers["Referrer-Policy"] = "no-referrer"
+        redirect.headers["Cache-Control"] = "no-store"
+        return redirect
+    body = await request.body()
+    if request.method == "POST":
+        content_type = request.headers.get("content-type", "").lower()
+        forbidden = False
+        if content_type.startswith("application/x-www-form-urlencoded"):
+            fields = parse_qs(body.decode("utf-8", errors="replace"), keep_blank_values=True)
+            forbidden = "pma_username" in fields or "pma_password" in fields
+        elif content_type.startswith("multipart/form-data"):
+            forbidden = bool(
+                re.search(
+                    rb'content-disposition:[^\r\n]*\bname="pma_(?:username|password)"', body, re.I
+                )
+            )
+        if forbidden:
+            raise AppError(
+                "Login deshabilitado", status_code=403, code="hosting_phpmyadmin_login_disabled"
+            )
+    settings = get_hosting_settings()
+    client = PmaClient(validate_url(settings.phpmyadmin_internal_url), settings.phpmyadmin_timeout)
+    excluded = {
+        "host",
+        "cookie",
+        "authorization",
+        "connection",
+        "content-length",
+        "accept-encoding",
+        "x-forwarded-host",
+        "x-forwarded-proto",
+        "x-forwarded-for",
+    }
+    headers = {k: v for k, v in request.headers.items() if k.lower() not in excluded}
+    result, cookies, expired = await run_in_threadpool(
+        proxy_response,
+        client,
+        request.method,
+        path,
+        request.url.query,
+        body,
+        headers,
+        session.cookies,
+        settings.phpmyadmin_url,
+        base,
+    )
+    if expired:
+        invalidate(session)
+        result.delete_cookie(COOKIE, path=base)
+    else:
+        session.cookies = cookies
+        session.save()
+    result.headers["Cache-Control"] = "no-store"
+    return result
+
+
 @router.post("/{site_id}/secrets/salts", response_model=SecretRotationResponse)
 def rotate_site_salts(
     site: HostingSite = Depends(get_owned_site),
@@ -168,9 +320,7 @@ def rotate_site_salts(
 def delete_site(
     site: HostingSite = Depends(get_owned_site),
     tenant_context: TenantContext = Depends(get_current_tenant_context),
-    _current_user: User = Depends(
-        require_permission("hosting.sites.delete", platform_only=True)
-    ),
+    _current_user: User = Depends(require_permission("hosting.sites.delete", platform_only=True)),
     service: HostingService = Depends(_get_hosting_service),
     db: Session = Depends(get_db_session),
 ) -> None:

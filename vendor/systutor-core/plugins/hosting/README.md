@@ -75,12 +75,17 @@ confirmation first, because rotating the salts closes every WordPress session.
 
 `Base de datos`, next to `Configuración` and visible only with
 `hosting.sites.manage`, reveals the site's own WordPress database user and
-opens phpMyAdmin in a new tab. It is the credential the site already uses, so
+opens phpMyAdmin in a new same-origin tab. It is the credential the site already
+uses, so
 there is no new SQL user, no grant and no migration; phpMyAdmin sees exactly one
-database. The host is derived from the owned site and validated against
-`spanel-<slug>-db`. `SPANEL_PHPMYADMIN_URL` is optional: without it the dialog
-still shows the credential, only the link is disabled. The password is never
-put in the URL and is not stored by the panel.
+database. The host is derived from the owned site and validated as a Docker
+container name. The proxy uses `SPANEL_PHPMYADMIN_INTERNAL_URL` over a
+shared internal Docker network; the app container must resolve that address.
+A Bearer-authenticated POST logs in server-side as the site's own WordPress DB
+user and returns a 30-second one-time tab ticket. An opaque site-scoped
+cookie authorizes subsequent proxy requests. No database password appears in
+the tab URL, proxy cookie or session cache. `SPANEL_PHPMYADMIN_URL` remains
+only in the legacy database response and is no longer followed by the UI.
 
 The four values are read from the container environment (`WORDPRESS_DB_*`)
 first. When the environment does not declare them, the plugin reads
@@ -126,7 +131,11 @@ The Docker transport comes from the core `.env`:
   600, so the WordPress database secret survives a reboot and can be read again.
   Before this, the env files lived in `/tmp` and were deleted after provisioning.
 - `SPANEL_PHPMYADMIN_URL` (optional): base URL of the phpMyAdmin instance. It
-  may contain `{server}`, or the database host is appended as `?server=`.
+  may contain `{server}`; retained for compatibility in the database response.
+- `SPANEL_PHPMYADMIN_INTERNAL_URL` (default `http://spanel-phpmyadmin:8080`):
+  server-only upstream on a network shared by phpMyAdmin and the app.
+- `SPANEL_PHPMYADMIN_SESSION_TTL` (1500 s, capped at 3600),
+  `SPANEL_PHPMYADMIN_TIMEOUT` (15 s).
 
 Provisioning creates two labeled containers and two labeled volumes, installs
 WordPress using `wordpress:cli` and only then records ownership. A failed

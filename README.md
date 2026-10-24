@@ -124,7 +124,10 @@ npm run dev
 | `SPANEL_DOCKER_SSH_HOST` | Host Docker para el plugin de hosting | - |
 | `SPANEL_DOCKER_SSH_USER` | Usuario SSH del host Docker | - |
 | `SPANEL_HOSTING_SITES_DIR` | Directorio estable por sitio en el host Docker | `/opt/spanel/sites` |
-| `SPANEL_PHPMYADMIN_URL` | URL de phpMyAdmin que abre el botón `Base de datos` (opcional) | - |
+| `SPANEL_PHPMYADMIN_URL` | URL legada incluida en la respuesta de credenciales (la UI ya no la usa) | - |
+| `SPANEL_PHPMYADMIN_INTERNAL_URL` | URL interna de phpMyAdmin, accesible desde el contenedor de la app en una red Docker compartida | `http://spanel-phpmyadmin:8080` |
+| `SPANEL_PHPMYADMIN_SESSION_TTL` | Duración de la sesión de la pestaña (segundos, máximo 3600) | `1500` |
+| `SPANEL_PHPMYADMIN_TIMEOUT` | Timeout HTTP al servicio interno (segundos) | `15` |
 
 ### Configuración del Servidor de Correo
 
@@ -211,8 +214,12 @@ El botón `Base de datos` del diálogo del sitio revela la credencial **propia d
 sitio** (el usuario que ya usa WordPress, no root) y ofrece abrir phpMyAdmin.
 La respuesta va con `Cache-Control: no-store`, el host se valida como
 contenedor y la contraseña nunca aparece en la URL, el log ni la auditoría. Si
-`SPANEL_PHPMYADMIN_URL` está vacío, la credencial se muestra igual y solo se
-deshabilita el enlace.
+`SPANEL_PHPMYADMIN_URL` está vacío, la credencial se muestra igual. El botón
+abre una pestaña nueva bajo el origen del panel: el servidor inicia sesión con
+el usuario propio del sitio y emite un ticket de un solo uso.
+`SPANEL_PHPMYADMIN_INTERNAL_URL` debe ser accesible desde el contenedor de la
+app (red interna Docker compartida con phpMyAdmin). Si no es accesible, el
+diálogo muestra un error controlado. No se publica un puerto ni un subdominio nuevo.
 
 phpMyAdmin se levanta aparte, apuntando a un MariaDB que ya existe:
 
@@ -226,8 +233,24 @@ El script solo agrega (o quita) el contenedor de phpMyAdmin: no crea bases, no
 toca volúmenes ni otros contenedores, y siempre publica en `127.0.0.1`. Cada
 usuario de base ve solo su propia base. Para entrar desde otra máquina usá un
 túnel SSH o `tailscale serve`; nunca publiques el puerto en `0.0.0.0` ni lo
-expongas con Traefik. `SPANEL_PHPMYADMIN_URL` debe coincidir con la URL que ve
-el navegador (es también `PMA_ABSOLUTE_URI`).
+expongas con Traefik. `SPANEL_PHPMYADMIN_URL` se conserva solo por compatibilidad;
+el proxy usa `SPANEL_PHPMYADMIN_INTERNAL_URL` y la pestaña no contacta el puerto
+de phpMyAdmin directamente. Ambos contenedores deben compartir una red Docker
+existente. Si phpMyAdmin está en `mariadb_internal`, por ejemplo, la app puede
+sumarse con un `docker-compose.override.yml` de despliegue:
+
+```yaml
+services:
+  app:
+    networks: [default, proxy, mariadb_internal]
+networks:
+  mariadb_internal:
+    external: true
+```
+
+Configurá `SPANEL_PHPMYADMIN_INTERNAL_URL=http://<nombre-del-contenedor>:8080`
+en el entorno de la app. En despliegues con Docker local usá
+`SPANEL_DOCKER_TRANSPORT=local`; no hace falta publicar otro puerto.
 
 ## Desarrollo
 

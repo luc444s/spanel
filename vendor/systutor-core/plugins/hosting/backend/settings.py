@@ -64,6 +64,9 @@ class HostingSettings(BaseModel):
     # Optional. The database dialog still reveals the credential when this is
     # empty; only the "open phpMyAdmin" link disappears.
     phpmyadmin_url: str = ""
+    phpmyadmin_internal_url: str = "http://spanel-phpmyadmin:8080"
+    phpmyadmin_session_ttl: int = 1500
+    phpmyadmin_timeout: int = 15
 
 
 def _int_env(name: str, default: int) -> int:
@@ -99,6 +102,11 @@ def register_hosting_settings() -> HostingSettings:
         sites_dir=os.getenv("SPANEL_HOSTING_SITES_DIR", "/opt/spanel/sites").strip()
         or "/opt/spanel/sites",
         phpmyadmin_url=os.getenv("SPANEL_PHPMYADMIN_URL", "").strip(),
+        phpmyadmin_internal_url=os.getenv(
+            "SPANEL_PHPMYADMIN_INTERNAL_URL", "http://spanel-phpmyadmin:8080"
+        ).strip(),
+        phpmyadmin_session_ttl=min(3600, max(1, _int_env("SPANEL_PHPMYADMIN_SESSION_TTL", 1500))),
+        phpmyadmin_timeout=max(1, _int_env("SPANEL_PHPMYADMIN_TIMEOUT", 15)),
     )
     _hosting_settings = settings
     return settings

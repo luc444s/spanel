@@ -37,6 +37,7 @@ from .database_binding import database_credentials as _database_credentials
 from .inspection import candidato_de, inspect_container
 from .models import HostingSite
 from .passwords import hash_de_password
+from .phpmyadmin_proxy import PmaClient
 from .provisioner import Provisioner, SiteNames, slug_for
 from .reset import actualizar_hash, leer_hash
 from .schemas import (
@@ -89,9 +90,7 @@ def estado_del_contenedor(info: dict) -> str:
     return status.strip() if isinstance(status, str) and status.strip() else "unknown"
 
 
-def database_credentials(
-    info: dict, *, wp_config: str | None = None
-) -> tuple[str, str, str, str]:
+def database_credentials(info: dict, *, wp_config: str | None = None) -> tuple[str, str, str, str]:
     """The four values WordPress already uses, validated as a Docker target.
 
     Kept as a thin re-export of `database_binding` so the existing service API
@@ -425,6 +424,36 @@ class HostingService:
             url=phpmyadmin_url(self._settings.phpmyadmin_url, host),
         )
 
+    def phpmyadmin_login_credentials(
+        self, site: HostingSite, tenant_context: TenantContext, client: PmaClient
+    ) -> dict[str, str]:
+        """Log in upstream here; the HTTP route never receives the DB password."""
+        try:
+            info, _ = self._require_site(site)
+            _, host, database, user, password = self._database_binding_for(site, info)
+        except AppError as exc:
+            raise AppError(
+                "Sitio o base de datos no disponible",
+                status_code=409,
+                code="hosting_phpmyadmin_unavailable",
+            ) from exc
+        if estado_del_contenedor(info) != "running":
+            raise AppError(
+                "Sitio no disponible", status_code=409, code="hosting_phpmyadmin_unavailable"
+            )
+        db_info = self._inspect(host)
+        if db_info is None or estado_del_contenedor(db_info) != "running":
+            raise AppError(
+                "Base de datos no disponible",
+                status_code=409,
+                code="hosting_phpmyadmin_unavailable",
+            )
+        cookies = client.login(user, password)
+        self._audit_site(
+            site, tenant_context, "phpmyadmin_access", {"database": database, "host": host}
+        )
+        return cookies
+
     def update_site_config(
         self,
         site: HostingSite,
@@ -454,9 +483,7 @@ class HostingService:
             rotated=["salts"],
         )
 
-    def _credentials(
-        self, site: HostingSite, info: dict
-    ) -> tuple[dict[str, str], str, str]:
+    def _credentials(self, site: HostingSite, info: dict) -> tuple[dict[str, str], str, str]:
         """Resolve the WordPress DB container, credentials and table prefix.
 
         The same environment-first, `wp-config.php`-second rule used by the
@@ -464,9 +491,7 @@ class HostingService:
         host (port included) is kept for the throwaway env file; the container
         name without the port is the one `docker exec` can use.
         """
-        raw_host, db_container, database, user, password = self._database_binding_for(
-            site, info
-        )
+        raw_host, db_container, database, user, password = self._database_binding_for(site, info)
         try:
             prefijo = prefijo_de_tablas(
                 self._env,

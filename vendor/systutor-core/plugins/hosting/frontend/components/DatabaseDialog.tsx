@@ -2,8 +2,9 @@ import { Alert } from "@systutor/shell/ui/alert";
 import { Button } from "@systutor/shell/ui/button";
 import { Dialog } from "@systutor/shell/ui/dialog";
 import { toast } from "@systutor/shell/ui/toast";
+import { useState } from "react";
 
-import type { HostingSiteDatabase } from "../api";
+import { createPhpMyAdminSession, type HostingSiteDatabase } from "../api";
 
 type DatabaseDialogProps = {
   access: HostingSiteDatabase | null;
@@ -25,9 +26,34 @@ async function copy(label: string, value: string) {
  * password only lives in this component's props and disappears on close.
  */
 export function DatabaseDialog({ access, onClose }: DatabaseDialogProps) {
-  function openPhpMyAdmin() {
-    if (!access?.url) return;
-    window.open(access.url, "_blank", "noopener,noreferrer");
+  const [opening, setOpening] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function close() {
+    setError(null);
+    onClose();
+  }
+
+  async function openPhpMyAdmin() {
+    if (!access || opening) return;
+    // Opening before awaiting the Bearer-authenticated POST avoids popup blockers.
+    const tab = window.open("about:blank", "_blank");
+    if (!tab) {
+      setError("Permití las ventanas emergentes para abrir phpMyAdmin.");
+      return;
+    }
+    tab.opener = null;
+    setError(null);
+    setOpening(true);
+    try {
+      const session = await createPhpMyAdminSession(access.site_id);
+      if (!tab.closed) tab.location.replace(new URL(session.url, window.location.origin).href);
+    } catch (reason) {
+      tab.close();
+      setError(reason instanceof Error ? reason.message : "No se pudo abrir phpMyAdmin.");
+    } finally {
+      setOpening(false);
+    }
   }
 
   return (
@@ -35,22 +61,23 @@ export function DatabaseDialog({ access, onClose }: DatabaseDialogProps) {
       open={Boolean(access)}
       title={`Base de datos de ${access?.container_name ?? ""}`}
       description="Credencial propia del sitio, con acceso solo a su base de datos."
-      onClose={onClose}
+      onClose={close}
       zIndexClassName="z-[1100]"
       maxWidthClassName="max-w-xl"
       actions={
         <div className="flex flex-wrap justify-end gap-2">
-          <Button variant="secondary" onClick={onClose}>
+          <Button variant="secondary" onClick={close}>
             Cerrar
           </Button>
-          <Button onClick={openPhpMyAdmin} disabled={!access?.url}>
-            Abrir phpMyAdmin
+          <Button onClick={openPhpMyAdmin} disabled={opening}>
+            {opening ? "Conectando..." : "Abrir phpMyAdmin"}
           </Button>
         </div>
       }
     >
       {access ? (
         <div className="space-y-4">
+          {error ? <Alert title="No se pudo abrir phpMyAdmin">{error}</Alert> : null}
           <dl className="grid gap-3 text-sm">
             <div className="grid grid-cols-[8rem_1fr] items-center gap-2">
               <dt className="text-muted-foreground">Servidor</dt>
@@ -93,18 +120,6 @@ export function DatabaseDialog({ access, onClose }: DatabaseDialogProps) {
               </dd>
             </div>
           </dl>
-
-          {access.url ? (
-            <p className="text-xs text-muted-foreground">
-              phpMyAdmin abre en una pestaña nueva. Pega el usuario y la contraseña allí: el
-              panel no los envía en la URL.
-            </p>
-          ) : (
-            <Alert title="phpMyAdmin no está configurado">
-              Define SPANEL_PHPMYADMIN_URL para que este botón pueda abrir la consola. La
-              credencial de arriba funciona igual.
-            </Alert>
-          )}
         </div>
       ) : null}
     </Dialog>
