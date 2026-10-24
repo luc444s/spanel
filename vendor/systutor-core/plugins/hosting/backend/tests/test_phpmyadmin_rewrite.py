@@ -88,3 +88,17 @@ def test_rewrites_origins_root_paths_and_headers() -> None:
     assert "X-Hop" not in headers
     assert headers["Location"] == BASE + "/index.php"
     assert headers["Content-Security-Policy"] == "default-src 'self'; frame-ancestors 'self'"
+
+
+def test_markup_rewrite_keeps_inline_javascript_regular_expressions() -> None:
+    html = (
+        '<a href="/index.php?route=/database/structure">wp_demowp</a>'
+        "<script>const escaped = value.replace(/'/g, 'escaped')"
+        ".replace(/checkbox_tbl_/, 'x');</script>"
+        "<style>.icon { background: url(/themes/dot.gif); }</style>"
+    )
+    result = rewrite(html, "http://internal:8080", "", BASE)
+    assert f'href="{BASE}/index.php?route=/database/structure"' in result
+    assert f"url({BASE}/themes/dot.gif)" in result
+    assert "replace(/'/g" in result
+    assert "replace(/checkbox_tbl_/" in result

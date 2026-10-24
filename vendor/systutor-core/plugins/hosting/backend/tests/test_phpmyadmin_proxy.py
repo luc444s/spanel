@@ -18,7 +18,19 @@ class Upstream(BaseHTTPRequestHandler):
         pass
 
     def do_GET(self) -> None:
-        if self.path.startswith("/js/dist/cross_framing_protection.js"):
+        if self.path.startswith("/js/dist/functions.js"):
+            body = (
+                b"Functions.getPostData = function () { return this.attr('data-post'); };\n"
+                b"jQuery.fn.getPostData = Functions.getPostData;\n"
+                b"return unsafe.replace(/'/g, '&#039;').replace(/checkbox_tbl_/, 'x');\n"
+            )
+            self.send_response(200)
+            self.send_header("Content-Type", "text/javascript")
+        elif self.path.startswith("/js/dist/ajax.js"):
+            body = b"var dataPost = AJAX.source.getPostData();\n"
+            self.send_response(200)
+            self.send_header("Content-Type", "application/javascript")
+        elif self.path.startswith("/js/dist/cross_framing_protection.js"):
             body = b"top.location = self.location;"
             self.send_response(200)
             self.send_header("Content-Type", "application/javascript")
@@ -98,6 +110,27 @@ def test_server_side_login_and_proxy(client: PmaClient) -> None:
     assert b"framed through SPanel" in guard.body
     _, upstream = client.request("GET", "assets/a")
     assert upstream.read() == b"\x00\x01\x02"
+
+
+def test_ajax_navigation_scripts_are_served_unmodified(client: PmaClient) -> None:
+    """functions.js must register getPostData before ajax.js calls it."""
+    for script in ("functions.js", "ajax.js"):
+        path = f"js/dist/{script}"
+        conn, upstream = client.request("GET", path, cookies={"pma": "valid"})
+        original = upstream.read()
+        conn.close()
+        response, _, expired = proxy_response(
+            client, "GET", path, "v=5.2.3", b"", {}, {"pma": "valid"}, "", "/proxy"
+        )
+        assert not expired
+        assert response.status_code == 200
+        assert response.headers["content-type"] in ("text/javascript", "application/javascript")
+        assert response.body == original
+        if script == "functions.js":
+            assert b"jQuery.fn.getPostData = Functions.getPostData" in response.body
+            assert b"replace(/'/g" in response.body
+        else:
+            assert b"AJAX.source.getPostData()" in response.body
 
 
 def test_rejected_login_and_expired_cookie(client: PmaClient) -> None:
