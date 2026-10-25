@@ -609,7 +609,12 @@ Implementado en esta rama:
   sondeo de certificado sin `verify=False`.
 - **E2.** Página `/app/domains` con lista, dueño, conflicto, certificado por
   fila, buzones leídos de `mail` y diálogos de alta y baja.
-- **E3.** `scripts/tests/test_domains_api_live.py` escrito para el laboratorio.
+- **E3.** `scripts/tests/test_domains_api_live.py` escrito y **ejecutado** en
+  `lucas-ThinkPad-E570` contra el laboratorio real: 3 casos, 3 pasan (alta,
+  router en Traefik, certificado interno verificado, baja, guard de Hosting y
+  primario protegido). Escrito un checkout limpio sin `.git`, el test acepta
+  `SPANEL_LIVE_PROXY_DIR`, `SPANEL_LIVE_PROXY_CA` y `SPANEL_LIVE_DNS_HOSTS`
+  para apuntar a los directorios que Traefik tiene montados.
 
 Puertas ejecutadas en este entorno (Termux, sin Docker ni laboratorio):
 
@@ -622,9 +627,21 @@ apps/web: tsc --noEmit              -> sin errores
 apps/web: vite build                -> ok
 ```
 
-No ejecutado acá: `ruff`, `pyright` (no instalados en Termux) y la suite live
-`test_domains_api_live.py` (requiere `SPANEL_LIVE_TESTS=1` y el laboratorio).
-Implementación en `9639db3`.
+Live en el ThinkPad (2026-10-25), contenedor `spanel-lab-domains-wp` en
+`spanel-traefik-lab`, `nginx:alpine`:
+
+```text
+SPANEL_LIVE_TESTS=1 python3 -m pytest scripts/tests/test_domains_api_live.py -q
+  -> 3 passed
+```
+
+La corrida encontró dos defectos del propio test, ya corregidos: el directorio
+dinámico debía poder apuntarse al mount real del laboratorio (commit `b860e79`)
+y la baja del router es asíncrona, así que hay que esperarla (`35a29ae`). El
+código del plugin no necesitó cambios.
+
+No ejecutado acá: `ruff` y `pyright` (no instalados en Termux).
+Implementación en `9639db3`; tests live en `b860e79` y `35a29ae`.
 
 ## Traceability
 
@@ -633,8 +650,9 @@ Implementación en `9639db3`.
 - owner: luc444s
 - approver:
 - Commit: 9639db3
-- Deployment: laboratorio Docker (`spanel-*`, `com.spanel.lab=true`) y luego
-  el host de producción con el plugin habilitado.
+- Deployment: laboratorio Docker del ThinkPad verificado (`spanel-lab-*`,
+  `com.spanel.lab=true`); el host de producción queda pendiente de habilitar el
+  plugin con `SPANEL_PROXY_SSH_HOST` o el mount del directorio dinámico.
 
 ## Definition of Done
 
