@@ -575,18 +575,54 @@ def delivered_state(settings: Settings, info: dict) -> dict:
     }
 
 
-def delivery_matches(settings: Settings, info: dict) -> bool:
+def delivery_matches(settings: Settings, info: dict, meta: dict) -> bool:
     state = delivered_state(settings, info)
-    return (
+    if not (
         state["ssl_type"] == "manual"
         and state["cert_path"] == f"{settings.source_dir}/fullchain.crt"
         and state["key_path"] == f"{settings.source_dir}/privkey.key"
         and state["mount"] == str(settings.cert_dir)
         and state["mount_ro"] is True
-    )
+    ):
+        return False
+    # La configuración puede coincidir y aun así el proceso estar sirviendo un
+    # certificado anterior (DMS copia el archivo en el arranque). Manda el serial
+    # que realmente presenta el puerto 993.
+    try:
+        return _presented_serial(settings) == meta.get("serial")
+    except MailCertError:
+        return False
 
 
-def deliver(settings: Settings, *, dry_run: bool = False, assume_yes: bool = False) -> dict:
+def snapshot_cert_files(settings: Settings) -> Path | None:
+    """Copia los archivos de certificado actuales para poder restaurarlos."""
+    names = ("leaf.crt", "fullchain.crt", "privkey.key", "meta.json")
+    present = [name for name in names if (settings.cert_dir / name).exists()]
+    if not present:
+        return None
+    stamp = now_utc().strftime("%Y%m%dT%H%M%SZ")
+    destination = settings.cert_dir / "backups" / f"{stamp}-cert"
+    destination.mkdir(parents=True, exist_ok=True)
+    os.chmod(destination.parent, 0o700)
+    for name in present:
+        shutil.copy2(settings.cert_dir / name, destination / name)
+    return destination
+
+
+def restore_cert_files(settings: Settings, backup: Path) -> None:
+    for name in ("leaf.crt", "fullchain.crt", "privkey.key", "meta.json"):
+        source = backup / name
+        if source.exists():
+            shutil.copy2(source, settings.cert_dir / name)
+
+
+def deliver(
+    settings: Settings,
+    *,
+    dry_run: bool = False,
+    assume_yes: bool = False,
+    cert_on_failure: Path | None = None,
+) -> dict:
     info = inspect_container(settings.container)
     assert_supported(info)
     meta_path = settings.cert_dir / "meta.json"
@@ -601,7 +637,20 @@ def deliver(settings: Settings, *, dry_run: bool = False, assume_yes: bool = Fal
     if dry_run:
         print("\n".join(_shell_lines(argv)))
         return {"dry_run": True}
-    if delivery_matches(settings, info):
+    if delivery_matches(settings, info, meta):
+        record_path = settings.cert_dir / "deliveries" / "mail.json"
+        record = json.loads(record_path.read_text()) if record_path.exists() else {}
+        if record.get("cert_sha256") != meta["sha256_fullchain"]:
+            # El contenedor ya sirve este certificado (DMS recarga solo), pero el
+            # registro quedó de una emisión anterior: se reescribe sin reiniciar.
+            verified = True
+            for port in settings.ports:
+                try:
+                    tls_check(settings, port)
+                except MailCertError:
+                    verified = False
+            _write_delivery_record(settings, info, meta, verified=verified)
+            return {"changed": False, "reason": "certificado ya en uso; registro actualizado"}
         return {"changed": False, "reason": "el contenedor ya usa este certificado"}
     if not assume_yes and not sys.stdin.isatty():
         raise MailCertError("la entrega recrea el contenedor; repetir con --yes", EXIT_VALIDATION)
@@ -624,6 +673,10 @@ def deliver(settings: Settings, *, dry_run: bool = False, assume_yes: bool = Fal
     def rollback(reason: str) -> MailCertError:
         subprocess.run(["docker", "rm", "-f", settings.container], capture_output=True)
         subprocess.run(["docker", "rename", previous_container, settings.container], capture_output=True)
+        # Restaurar el certificado ANTES de arrancar: DMS copia el archivo al
+        # iniciar, así que el orden decide qué certificado termina sirviendo.
+        if cert_on_failure is not None:
+            restore_cert_files(settings, cert_on_failure)
         subprocess.run(["docker", "start", settings.container], capture_output=True)
         try:
             wait_tls(settings, 993, 60)
@@ -656,6 +709,13 @@ def deliver(settings: Settings, *, dry_run: bool = False, assume_yes: bool = Fal
         raise rollback(str(exc)) from exc
 
     docker("rm", "-f", previous_container)
+    record = _write_delivery_record(settings, info, meta, verified=True)
+    return {"changed": True, **record}
+
+
+def _write_delivery_record(
+    settings: Settings, info: dict, meta: dict, *, verified: bool
+) -> dict:
     deliveries = settings.cert_dir / "deliveries"
     deliveries.mkdir(exist_ok=True)
     record = {
@@ -669,25 +729,35 @@ def deliver(settings: Settings, *, dry_run: bool = False, assume_yes: bool = Fal
         "host_mount": f"{settings.cert_dir} -> {settings.source_dir} (ro)",
         "cert_sha256": meta["sha256_fullchain"],
         "serial": meta["serial"],
-        "verified": {f"port_{port}": True for port in settings.ports},
+        "verified": {f"port_{port}": verified for port in settings.ports},
         "delivered_at": now_utc().isoformat(timespec="seconds"),
     }
     (deliveries / "mail.json").write_text(json.dumps(record, indent=2) + "\n")
-    return {"changed": True, **record}
+    return record
 
 
-def _presented_serial(settings: Settings) -> str:
-    proc = subprocess.run(
-        ["openssl", "s_client", "-connect", f"{settings.host}:993", "-servername", settings.domain],
-        input=b"", capture_output=True,
-    )
-    with tempfile.NamedTemporaryFile("wb", suffix=".pem", delete=False) as tmp:
-        tmp.write(proc.stdout)
-        path = Path(tmp.name)
-    try:
-        return cert_serial(path)
-    finally:
-        path.unlink(missing_ok=True)
+def _presented_serial(settings: Settings, attempts: int = 3) -> str:
+    """Serial que el puerto 993 presenta de verdad (con reintentos: tras un
+    reinicio el servidor tarda unos segundos en quedar listo)."""
+    last: MailCertError | None = None
+    for attempt in range(attempts):
+        proc = subprocess.run(
+            ["openssl", "s_client", "-showcerts",
+             "-connect", f"{settings.host}:993", "-servername", settings.domain],
+            input=b"", capture_output=True,
+        )
+        with tempfile.NamedTemporaryFile("wb", suffix=".pem", delete=False) as tmp:
+            tmp.write(proc.stdout)
+            path = Path(tmp.name)
+        try:
+            return cert_serial(path)
+        except MailCertError as exc:
+            last = exc
+        finally:
+            path.unlink(missing_ok=True)
+        if attempt + 1 < attempts:
+            time.sleep(2)
+    raise last or MailCertError("no se pudo leer el certificado presentado", EXIT_VERIFY)
 
 
 def _shell_lines(argv: list[str]) -> list[str]:
@@ -764,12 +834,18 @@ def cmd_check(settings: Settings) -> int:
             print("aviso certificado por debajo del umbral de renovación")
     try:
         info = inspect_container(settings.container)
-        if delivery_matches(settings, info):
-            print(f"ok   {settings.container} usa este certificado (montaje :ro)")
+        if delivery_matches(settings, info, meta):
+            print(f"ok   {settings.container} sirve el certificado actual (serial {meta['serial']})")
         else:
+            presented = "desconocido"
+            try:
+                presented = _presented_serial(settings)
+            except MailCertError:
+                pass
             problems.append(
-                f"{settings.container} no usa este certificado: "
-                f"{json.dumps(delivered_state(settings, info), ensure_ascii=False)}"
+                f"{settings.container} no sirve el certificado actual: "
+                f"presenta serial {presented}, en disco {meta['serial']} "
+                f"(re-ejecutar: issue --deliver mail --yes)"
             )
     except MailCertError as exc:
         problems.append(str(exc))
@@ -790,6 +866,7 @@ def cmd_check(settings: Settings) -> int:
 
 def cmd_issue(settings: Settings, args: argparse.Namespace) -> int:
     leaf = settings.cert_dir / "leaf.crt"
+    previous_cert: Path | None = None
     fresh = bool(
         leaf.exists()
         and not renew_needed(settings, leaf)
@@ -806,6 +883,7 @@ def cmd_issue(settings: Settings, args: argparse.Namespace) -> int:
     else:
         settings.cert_dir.mkdir(parents=True, exist_ok=True)
         os.chmod(settings.cert_dir, 0o700)
+        previous_cert = snapshot_cert_files(settings)
         emit(settings)
         meta = json.loads((settings.cert_dir / "meta.json").read_text())
         print(f"emitido {settings.domain} serial {meta['serial']} hasta {meta['not_after']}")
@@ -816,7 +894,22 @@ def cmd_issue(settings: Settings, args: argparse.Namespace) -> int:
         print("\nrecrearía el contenedor con:")
         print("\n".join(_shell_lines(container_run_args(inspect_container(settings.container), settings))))
         return EXIT_OK
-    result = deliver(settings, assume_yes=args.yes)
+    try:
+        result = deliver(
+            settings, assume_yes=args.yes, cert_on_failure=previous_cert
+        )
+    except MailCertError as exc:
+        # Emitir y entregar es una sola operación: si la entrega falla después de
+        # emitir, se restaura el certificado anterior para que el disco y el
+        # contenedor no queden contando cosas distintas.
+        if previous_cert is not None:
+            restore_cert_files(settings, previous_cert)
+            raise MailCertError(
+                f"{exc}. Se restauró el certificado anterior "
+                f"(serial {cert_serial(leaf)})",
+                exc.code,
+            ) from exc
+        raise
     if result.get("changed"):
         print(f"entregado a {settings.container} ({result['container_id'][:12]})")
     else:

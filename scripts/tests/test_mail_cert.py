@@ -266,3 +266,63 @@ def test_meta_y_delivery_se_escriben_en_el_directorio_esperado(settings) -> None
     assert settings.cert_dir.name == "mail.lucas.spanel"
     assert settings.cert_dir.parent == settings.certs_dir
     assert json.dumps(settings.sans) == '["mail.lucas.spanel", "mail.spanel.local"]'
+
+
+def test_snapshot_y_restore_de_certificado(settings) -> None:
+    settings.cert_dir.mkdir(parents=True)
+    (settings.cert_dir / "leaf.crt").write_text("hoja-vieja")
+    (settings.cert_dir / "fullchain.crt").write_text("cadena-vieja")
+    (settings.cert_dir / "privkey.key").write_text("clave-vieja")
+    (settings.cert_dir / "meta.json").write_text('{"serial": "VIEJO"}')
+
+    backup = mail_cert.snapshot_cert_files(settings)
+    assert backup is not None and (backup / "leaf.crt").read_text() == "hoja-vieja"
+
+    (settings.cert_dir / "leaf.crt").write_text("hoja-nueva")
+    (settings.cert_dir / "meta.json").write_text('{"serial": "NUEVO"}')
+    mail_cert.restore_cert_files(settings, backup)
+    assert (settings.cert_dir / "leaf.crt").read_text() == "hoja-vieja"
+    assert (settings.cert_dir / "meta.json").read_text() == '{"serial": "VIEJO"}'
+
+
+def test_sin_certificado_no_hay_snapshot(settings) -> None:
+    settings.cert_dir.mkdir(parents=True)
+    assert mail_cert.snapshot_cert_files(settings) is None
+
+
+def test_delivery_matches_exige_el_serial_que_presenta_el_puerto(settings, monkeypatch) -> None:
+    info = inspect_fixture()
+    info["Config"]["Env"] += [
+        "SSL_TYPE=manual",
+        f"SSL_CERT_PATH={settings.source_dir}/fullchain.crt",
+        f"SSL_KEY_PATH={settings.source_dir}/privkey.key",
+    ]
+    info["Mounts"].append(
+        {"Type": "bind", "Source": str(settings.cert_dir), "Destination": settings.source_dir, "RW": False}
+    )
+    meta = {"serial": "AA11"}
+
+    monkeypatch.setattr(mail_cert, "_presented_serial", lambda st: "AA11")
+    assert mail_cert.delivery_matches(settings, info, meta) is True
+
+    # Misma configuración, pero el proceso sigue sirviendo el certificado viejo.
+    monkeypatch.setattr(mail_cert, "_presented_serial", lambda st: "BB22")
+    assert mail_cert.delivery_matches(settings, info, meta) is False
+
+
+def test_delivery_matches_falla_si_no_responden_los_puertos(settings, monkeypatch) -> None:
+    info = inspect_fixture()
+    info["Config"]["Env"] += [
+        "SSL_TYPE=manual",
+        f"SSL_CERT_PATH={settings.source_dir}/fullchain.crt",
+        f"SSL_KEY_PATH={settings.source_dir}/privkey.key",
+    ]
+    info["Mounts"].append(
+        {"Type": "bind", "Source": str(settings.cert_dir), "Destination": settings.source_dir, "RW": False}
+    )
+
+    def boom(st):
+        raise mail_cert.MailCertError("sin TLS", 8)
+
+    monkeypatch.setattr(mail_cert, "_presented_serial", boom)
+    assert mail_cert.delivery_matches(settings, info, {"serial": "AA11"}) is False

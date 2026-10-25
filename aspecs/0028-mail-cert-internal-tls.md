@@ -643,6 +643,8 @@ python3 scripts/mail_cert.py check
 Criterio: el comando detecta el fallo, restaura el contenedor anterior (mismo
 ID), el correo vuelve a responder, `check` sale 0 y el proceso sale con 7 u 8
 (I8). No dejar `SPANEL_MAIL_PORTS` alterado en el entorno persistente.
+Resultado obtenido el 2026-10-25: `exit 7`, mismo ID, certificado anterior
+restaurado y `check` en OK (ver §Simulacro de rollback ejecutado).
 
 ### T13 — Aislamiento y superficie
 
@@ -731,6 +733,37 @@ Mientras el timer no esté instalado, la renovación es manual pero ya determini
 ```bash
 cd /home/lucas/mailadmin && python3 scripts/mail_cert.py renew --all --yes
 ```
+
+### Simulacro de rollback ejecutado (T12)
+
+```bash
+SPANEL_MAIL_PORTS=993,465,587,9999 python3 scripts/mail_cert.py issue --force --yes
+```
+
+Salida real:
+
+```text
+emitido mail.lucas.spanel serial E271049AA113E6098BB0338C54C89BF0 hasta 2026-11-24T06:34:30+00:00
+error: puerto 9999: sin handshake. Se restauró el contenedor anterior.
+       Se restauró el certificado anterior (serial AA7F4769716504ADE3B4F76A0D2EBDC0)
+exit=7
+```
+
+Estado después: **mismo container ID** (`788d1ea7…`), certificado anterior en
+disco y en uso, sin contenedores `.pre-mailtls` huérfanos, `check` en OK.
+
+El simulacro encontró dos defectos que ya están corregidos:
+
+1. `deliver` declaraba `sin cambios` mirando solo env y montaje, aunque el proceso
+   siguiera sirviendo el certificado anterior. Ahora compara el **serial que
+   presenta el puerto 993** contra `meta.json`; si difiere, entrega.
+2. El rollback arrancaba el contenedor antes de restaurar los archivos de
+   certificado, así que DMS copiaba el certificado nuevo al iniciar y el
+   "rollback" dejaba disco y contenedor en desacuerdo. Ahora restaura el
+   certificado **antes** del `docker start`, y `issue --deliver` revierte también
+   la emisión (es una sola operación).
+3. `check` ahora informa qué serial sirve el contenedor y cuál está en disco, en
+   vez de dar OK con un certificado desincronizado.
 
 Pendiente: `scripts/tests/test_mail_cert_live.py` (la prueba de T8 como test
 repetible).
