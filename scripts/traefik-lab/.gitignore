@@ -1,0 +1,4 @@
+# Artefactos de ejecución del laboratorio; el único archivo versionado es README.md.
+traefik.yml
+dynamic/
+data/
