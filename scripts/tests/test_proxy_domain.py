@@ -268,3 +268,15 @@ def test_cli_accepts_profile_before_and_after_command() -> None:
     after = parser.parse_args(["status", "--domain", "a.example.com", "--profile", "public"])
     assert before.profile == "public"
     assert after.profile == "public"
+
+
+def test_update_wordpress_passes_env_without_argv_secrets(tmp_path: Path) -> None:
+    settings = make_settings(tmp_path)
+    runner = FakeRunner()
+    ops = ProxyOperations(settings, runner)
+    ops._update_wordpress("spanel-lucas-wp", "lucas.spanel")
+    script = runner.calls[-1][2]
+    assert "--env-file" in script
+    assert "option update home" in script
+    assert "option update siteurl" in script
+    assert "WORDPRESS_DB_PASSWORD" not in script

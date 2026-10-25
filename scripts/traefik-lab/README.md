@@ -81,6 +81,10 @@ echo "127.0.0.1 lucas.spanel" | sudo tee -a /etc/hosts
 `/etc/hosts`, el comando `curl` verificado y el recordatorio de confiar en la
 CA. Con el puerto 443 libre, el link es limpio: `https://lucas.spanel`.
 
+`--set-wordpress-url` actualiza `home` y `siteurl` con un `wordpress:cli`
+efímero que hereda el entorno del sitio por un archivo temporal `0600`, así
+funciona también cuando `wp-config.php` toma la BD de variables de entorno.
+
 ## Puertos
 
 `up` decide el puerto HTTPS automáticamente:

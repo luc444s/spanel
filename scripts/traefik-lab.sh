@@ -153,11 +153,12 @@ validate_email() {
 }
 
 container_exists() {
-  docker inspect "$LAB_NAME" >/dev/null 2>&1
+  # --type container: el nombre del contenedor coincide con el de la red.
+  docker inspect --type container "$LAB_NAME" >/dev/null 2>&1
 }
 
 named_container_exists() {
-  docker inspect "$1" >/dev/null 2>&1
+  docker inspect --type container "$1" >/dev/null 2>&1
 }
 
 network_exists() {
@@ -749,7 +750,7 @@ count_yaml() {
 adopt() {
   require_docker
 
-  if ! docker inspect "$REAL_CONTAINER" >/dev/null 2>&1; then
+  if ! docker inspect --type container "$REAL_CONTAINER" >/dev/null 2>&1; then
     fail "no existe el contenedor '${REAL_CONTAINER}' (configurá SPANEL_PROXY_TRAEFIK_CONTAINER)"
   fi
 

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 import shlex
+import socket
+import ssl
 import sys
 import time
 from collections.abc import Sequence
@@ -449,46 +451,83 @@ class ProxyOperations:
         return EXIT_OK
 
     def _wait_for_certificate(self, domain: str, seconds: int) -> None:
-        port = self.https_port()
-        host = self.probe_host()
         deadline = time.monotonic() + max(1, seconds)
         last = None
+        last_code = None
         while time.monotonic() < deadline:
-            last = probe_certificate(domain, host, port, self.settings.ca_file)
+            last = probe_certificate(
+                domain, self.probe_host(), self.https_port(), self.settings.ca_file
+            )
             if last.state == "active":
-                self.say(f"certificado: emitido por {last.issuer}")
-                return
+                last_code = self._route_code(domain)
+                if last_code is not None and last_code not in (404, 503):
+                    self.say(f"certificado: emitido por {last.issuer}")
+                    self.say(f"ruta:       HTTP {last_code} en {self.link_for(domain)}")
+                    return
             time.sleep(2)
-        detail = last.error if last else "sin respuesta"
+        if last is None or last.state != "active":
+            detail = last.error if last else "sin respuesta"
+            raise ProxyError(
+                f"el certificado para {domain} no quedó activo en {seconds}s ({detail})",
+                EXIT_CERT,
+            )
         raise ProxyError(
-            f"el certificado para {domain} no quedó activo en {seconds}s ({detail})",
+            f"el certificado está activo pero la ruta {domain} responde HTTP "
+            f"{last_code or 'sin respuesta'} en {seconds}s",
             EXIT_CERT,
         )
 
+    def _route_code(self, domain: str) -> int | None:
+        """Código HTTP de `GET /` hablando TLS directo al proxy con SNI del dominio."""
+        context = ssl.create_default_context()
+        if self.settings.ca_file:
+            context.load_verify_locations(cafile=str(self.settings.ca_file))
+        try:
+            with (
+                socket.create_connection((self.probe_host(), self.https_port()), timeout=5) as raw,
+                context.wrap_socket(raw, server_hostname=domain) as tls,
+            ):
+                request = (
+                    f"GET / HTTP/1.1\r\nHost: {domain}\r\n"
+                    "Connection: close\r\nUser-Agent: spanel-proxy-domain\r\n\r\n"
+                )
+                tls.sendall(request.encode())
+                data = tls.recv(128)
+        except (OSError, ssl.SSLError):
+            return None
+        line = data.split(b"\r\n", 1)[0].split()
+        if len(line) < 2 or not line[1].isdigit():
+            return None
+        return int(line[1])
+
     def _update_wordpress(self, site: str, domain: str) -> None:
         url = self.link_for(domain)
+        # El wp-cli corre en un contenedor efímero que comparte la red del sitio.
+        # Las variables de entorno (incluida la BD) se pasan por archivo temporal
+        # 0600, nunca por argv ni por logs.
+        script = (
+            "umask 077\n"
+            "f=$(mktemp)\n"
+            f'docker inspect -f {shlex.quote("{{range .Config.Env}}{{println .}}{{end}}")} '
+            f'{shlex.quote(site)} > "$f" || {{ rm -f "$f"; exit 4; }}\n'
+            "rc=0\n"
+        )
         for option in ("home", "siteurl"):
-            result = self.docker(
-                "run",
-                "--rm",
-                "--volumes-from",
-                site,
-                "--network",
-                f"container:{site}",
-                self.settings.wp_image,
-                "option",
-                "update",
-                option,
-                url,
-                f"--path={self.settings.wp_root}",
-                "--allow-root",
-                check=False,
+            script += (
+                "docker run --rm --volumes-from "
+                f"{shlex.quote(site)} --network container:{shlex.quote(site)} "
+                f'--env-file "$f" {shlex.quote(self.settings.wp_image)} '
+                f"option update {option} {shlex.quote(url)} "
+                f"--path={shlex.quote(self.settings.wp_root)} --allow-root || rc=$?\n"
             )
-            if not result.ok:
-                raise ProxyError(
-                    f"no se pudo actualizar WordPress ({option}): {result.text().strip()}",
-                    EXIT_WORDPRESS,
-                )
+        script += 'rm -f "$f"\nexit "$rc"\n'
+
+        result = self.runner.run(["sh", "-c", script])
+        if not result.ok:
+            raise ProxyError(
+                f"no se pudo actualizar WordPress: {result.text().strip()}",
+                EXIT_WORDPRESS,
+            )
         self.audit("wordpress", site, domain, "updated")
         self.say(f"wordpress: home y siteurl = {url}")
 

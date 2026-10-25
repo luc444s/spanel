@@ -160,6 +160,12 @@ Reglas del perfil `internal`:
 - Al terminar `add`, imprime el **link real** (`https://<dominio>` si el puerto
   HTTPS es 443, si no `https://<dominio>:<puerto>`), la línea de `/etc/hosts`
   para el host y el comando `curl` verificado con la CA local.
+- `add` no declara éxito solo con el certificado: espera además a que la ruta
+  responda por HTTPS con un código distinto de `404`/`503`, porque el file
+  provider recarga el YAML con un pequeño retardo.
+- `--set-wordpress-url` ejecuta `wordpress:cli` en un contenedor efímero que
+  comparte la red del sitio y recibe el entorno (incluida la conexión a la BD)
+  por un archivo temporal `0600`; nunca por `argv`, logs ni auditoría.
 
 ### Estado del certificado
 
