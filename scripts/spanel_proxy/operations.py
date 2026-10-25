@@ -136,6 +136,10 @@ class ProxyOperations:
         port = self.https_port()
         return f"https://{domain}" if port == 443 else f"https://{domain}:{port}"
 
+    def probe_host(self) -> str:
+        """Dónde escuchar el handshake TLS: el host Docker o la máquina local."""
+        return self.settings.ssh_host or "127.0.0.1"
+
     def _read_text(self, path: Path) -> str | None:
         if self.settings.is_remote:
             result = self.runner.run(["cat", str(path)])
@@ -446,7 +450,7 @@ class ProxyOperations:
 
     def _wait_for_certificate(self, domain: str, seconds: int) -> None:
         port = self.https_port()
-        host = "127.0.0.1"
+        host = self.probe_host()
         deadline = time.monotonic() + max(1, seconds)
         last = None
         while time.monotonic() < deadline:
@@ -554,7 +558,7 @@ class ProxyOperations:
         site = document_container(data) or "desconocido"
         resolver = document_resolver(data) or self.settings.cert_resolver
         port = self.https_port()
-        host = "127.0.0.1"
+        host = self.probe_host()
         info = probe_certificate(domain, host, port, self.settings.ca_file)
 
         self.say(f"dominio:   {domain}")
