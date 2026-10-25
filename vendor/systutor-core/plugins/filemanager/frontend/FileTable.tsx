@@ -81,6 +81,8 @@ export function FileTable({
           return (
             <tr
               key={entry.name}
+              data-file-item="true"
+              data-file-name={entry.name}
               className={`border-t border-border/70 ${isSelected ? "bg-accent/60" : "hover:bg-accent/30"}`}
               onClick={(event) => {
                 if (longPressed.current) {

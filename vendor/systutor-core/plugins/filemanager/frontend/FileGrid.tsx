@@ -44,6 +44,8 @@ export function FileGrid({ entries, selected, onSelect, onToggle, onOpen, onCont
             key={entry.name}
             role="button"
             tabIndex={0}
+            data-file-item="true"
+            data-file-name={entry.name}
             aria-label={entry.name}
             aria-pressed={isSelected}
             className={`relative flex cursor-default select-none flex-col items-center gap-1 rounded-lg border p-3 text-center transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${

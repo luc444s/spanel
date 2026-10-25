@@ -68,6 +68,9 @@ export function FileExplorer({ provider, resourceId, onClose }: Props) {
   const [extracting, setExtracting] = useState<string | null>(null);
   const [conflict, setConflict] = useState<{ name: string; resolve: (choice: ConflictChoice) => void } | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [marqueeBox, setMarqueeBox] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const [marqueeActive, setMarqueeActive] = useState(false);
+  const marqueeDrag = useRef<{ startX: number; startY: number; base: Set<string>; additive: boolean; moved: boolean } | null>(null);
   const dragDepth = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -387,6 +390,43 @@ export function FileExplorer({ provider, resourceId, onClose }: Props) {
   }, [view]);
 
   useEffect(() => {
+    if (!marqueeActive) return;
+    function onMove(event: globalThis.MouseEvent) {
+      const drag = marqueeDrag.current;
+      if (!drag) return;
+      const x = Math.min(drag.startX, event.clientX);
+      const y = Math.min(drag.startY, event.clientY);
+      const width = Math.abs(event.clientX - drag.startX);
+      const height = Math.abs(event.clientY - drag.startY);
+      if (!drag.moved && width < 4 && height < 4) return;
+      drag.moved = true;
+      setMarqueeBox({ x, y, width, height });
+      const next = new Set(drag.additive ? drag.base : []);
+      document.querySelectorAll<HTMLElement>("[data-file-item='true']").forEach((node) => {
+        const box = node.getBoundingClientRect();
+        const overlaps =
+          box.left < x + width && box.right > x && box.top < y + height && box.bottom > y;
+        const name = node.dataset.fileName;
+        if (overlaps && name) next.add(name);
+      });
+      setSelected(next);
+    }
+    function onUp() {
+      const drag = marqueeDrag.current;
+      if (drag && !drag.moved && !drag.additive) setSelected(new Set());
+      marqueeDrag.current = null;
+      setMarqueeActive(false);
+      setMarqueeBox(null);
+    }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [marqueeActive]);
+
+  useEffect(() => {
     if (!menu) return;
     function close(event: PointerEvent) {
       if (!menuRef.current?.contains(event.target as Node)) setMenu(null);
@@ -525,7 +565,22 @@ export function FileExplorer({ provider, resourceId, onClose }: Props) {
       ) : null}
     >
       <div
-        className="min-h-full"
+        className={`min-h-full ${marqueeActive ? "select-none" : ""}`}
+        onMouseDown={(event) => {
+          if (event.button !== 0 || isCoarsePointer()) return;
+          const target = event.target as HTMLElement;
+          if (target.closest("input, button, a, select, textarea, [role='menuitem'], [data-file-item='true']")) return;
+          event.preventDefault();
+          marqueeDrag.current = {
+            startX: event.clientX,
+            startY: event.clientY,
+            base: new Set(selected),
+            additive: event.ctrlKey || event.metaKey || event.shiftKey,
+            moved: false,
+          };
+          setMarqueeBox({ x: event.clientX, y: event.clientY, width: 0, height: 0 });
+          setMarqueeActive(true);
+        }}
         onDragEnter={(event) => {
           if (!canWrite) return;
           event.preventDefault();
@@ -680,6 +735,17 @@ export function FileExplorer({ provider, resourceId, onClose }: Props) {
           setEditing(null);
         }}
       />
+      {marqueeBox ? (
+        <div
+          className="pointer-events-none fixed z-[955] border border-primary bg-primary/10"
+          style={{
+            left: marqueeBox.x,
+            top: marqueeBox.y,
+            width: marqueeBox.width,
+            height: marqueeBox.height,
+          }}
+        />
+      ) : null}
     </FileManagerModal>
   );
 }

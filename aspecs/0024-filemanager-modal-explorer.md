@@ -65,8 +65,12 @@ de A.SPEC 0023.
   - `Shift` + clic selecciona un rango;
   - `Ctrl`/`Cmd` + clic agrega o quita;
   - doble clic izquierdo abre carpeta o archivo;
+  - arrastrar con clic izquierdo desde el fondo (fuera de filas y tarjetas)
+    dibuja un rectángulo de selección; reemplaza la selección y con
+    `Ctrl`/`Cmd`/`Shift` la suma; un clic simple en el fondo la limpia;
   - clic derecho abre menú contextual: Abrir, Descargar, Renombrar,
-    Comprimir, Descomprimir (solo ZIP) y Borrar.
+    Comprimir, Descomprimir (solo ZIP) y Borrar. En el fondo, el menú ofrece
+    Subir archivos, Nueva carpeta, Actualizar e Ir al inicio.
 - **Táctil (puntero grueso)**:
   - un toque abre carpeta o archivo;
   - mantener presionado abre el menú contextual;
