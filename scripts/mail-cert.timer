@@ -1,0 +1,14 @@
+[Unit]
+Description=SPanel: renovación diaria del certificado TLS de mail.lucas.spanel (A.SPEC 0028)
+Documentation=file:///home/lucas/mailadmin/aspecs/0028-mail-cert-internal-tls.md
+
+[Timer]
+# Diario con dispersión: el certificado dura 720 h y `renew` solo actúa por
+# debajo del 30 % de vida, así que la mayoría de las ejecuciones no hacen nada.
+OnCalendar=daily
+RandomizedDelaySec=1h
+Persistent=true
+AccuracySec=5min
+
+[Install]
+WantedBy=timers.target

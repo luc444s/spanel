@@ -1,0 +1,18 @@
+[Unit]
+Description=SPanel: renovar y entregar el certificado TLS de mail.lucas.spanel (A.SPEC 0028)
+Documentation=file:///home/lucas/mailadmin/aspecs/0028-mail-cert-internal-tls.md
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Ajustar si el repo no está en /home/lucas/mailadmin o el usuario no tiene docker.
+WorkingDirectory=/home/lucas/mailadmin
+ExecStart=/usr/bin/python3 /home/lucas/mailadmin/scripts/mail_cert.py renew --all --yes
+# La renovación recrea el contenedor solo si el certificado cambió.
+TimeoutStartSec=10min
+Nice=10
+
+[Install]
+WantedBy=multi-user.target
