@@ -58,6 +58,11 @@ export default {
           foreground: "hsl(var(--sidebar-foreground))",
           muted: "hsl(var(--sidebar-muted))",
         },
+        chrome: {
+          DEFAULT: "hsl(var(--chrome))",
+          foreground: "hsl(var(--chrome-foreground))",
+          muted: "hsl(var(--chrome-muted))",
+        },
         surface: "hsl(var(--surface))",
         "surface-alt": "hsl(var(--surface-alt))",
       },

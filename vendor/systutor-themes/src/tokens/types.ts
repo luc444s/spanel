@@ -27,6 +27,9 @@ export type ThemeTokens = {
   sidebar: string;
   sidebarForeground: string;
   sidebarMuted: string;
+  chrome: string;
+  chromeForeground: string;
+  chromeMuted: string;
   surface: string;
   surfaceAlt: string;
   radius: string;
