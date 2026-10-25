@@ -2,3 +2,6 @@
 traefik.yml
 dynamic/
 data/
+ca/
+dns/
+backups/

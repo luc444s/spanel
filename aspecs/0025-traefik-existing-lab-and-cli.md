@@ -211,7 +211,8 @@ Si el entorno tiene Docker disponible, además:
 
 - `shellcheck scripts/traefik-lab.sh` si está instalado; si no, reportarlo.
 - `adopt` contra el servidor real: sin cambios, solo lectura.
-- La prueba con certificado real se define en A.SPEC 0026.
+- El HTTPS interno con CA ACME local y el perfil `internal` del CLI se definen
+  en A.SPEC 0026.
 - Las pruebas del CLI (Ruff, unitarios de YAML/DNS/idempotencia) quedan para la
   entrega 2.
 
