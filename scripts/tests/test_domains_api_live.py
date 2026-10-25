@@ -51,8 +51,21 @@ LIVE = os.environ.get("SPANEL_LIVE_TESTS") == "1"
 SITIO = os.environ.get("SPANEL_LIVE_DOMAIN_CONTAINER", "spanel-lab-domains-wp")
 PRIMARIO = os.environ.get("SPANEL_LIVE_DOMAIN_PRIMARY", "lab-domains.spanel")
 EXTRA = os.environ.get("SPANEL_LIVE_DOMAIN_EXTRA", "lab-extra.spanel")
-LAB_DYNAMIC = RAIZ / "scripts" / "traefik-lab" / "dynamic"
-LAB_CA = RAIZ / "scripts" / "traefik-lab" / "ca" / "root_ca.crt"
+# Un checkout nuevo puede no tener el laboratorio montado: el operador apunta
+# estas rutas al directorio que el Traefik del laboratorio tiene bind-mounted.
+LAB_DYNAMIC = Path(
+    os.environ.get("SPANEL_LIVE_PROXY_DIR", RAIZ / "scripts" / "traefik-lab" / "dynamic")
+)
+LAB_CA = Path(
+    os.environ.get(
+        "SPANEL_LIVE_PROXY_CA", RAIZ / "scripts" / "traefik-lab" / "ca" / "root_ca.crt"
+    )
+)
+LAB_DNS_HOSTS = Path(
+    os.environ.get(
+        "SPANEL_LIVE_DNS_HOSTS", RAIZ / "scripts" / "traefik-lab" / "dns" / "hosts"
+    )
+)
 TRAEFIK_API = os.environ.get("SPANEL_LIVE_TRAEFIK_API", "http://127.0.0.1:9081")
 EMAIL = "admin@example.com"
 PASSWORD = "ChangeMe123!"
@@ -123,6 +136,7 @@ def live(tmp_path: Path) -> Iterator[Live]:
     os.environ["SPANEL_PROXY_SSH_HOST"] = ""
     os.environ["SPANEL_PROXY_PROBE_HOST"] = "127.0.0.1"
     os.environ["SPANEL_PROXY_DNS_CONTAINER"] = "spanel-lab-dns"
+    os.environ["SPANEL_PROXY_DNS_HOSTS"] = str(LAB_DNS_HOSTS)
 
     settings = Settings(
         app_name="Domains API test",
