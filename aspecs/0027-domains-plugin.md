@@ -624,7 +624,7 @@ apps/web: vite build                -> ok
 
 No ejecutado acá: `ruff`, `pyright` (no instalados en Termux) y la suite live
 `test_domains_api_live.py` (requiere `SPANEL_LIVE_TESTS=1` y el laboratorio).
-El commit queda pendiente; Traceability se completa al commitear.
+Implementación en `9639db3`.
 
 ## Traceability
 
@@ -632,7 +632,7 @@ El commit queda pendiente; Traceability se completa al commitear.
   dueño por Host y sin tocar el primario de Hosting.
 - owner: luc444s
 - approver:
-- Commit:
+- Commit: 9639db3
 - Deployment: laboratorio Docker (`spanel-*`, `com.spanel.lab=true`) y luego
   el host de producción con el plugin habilitado.
 
