@@ -254,8 +254,14 @@ def test_flujo_completo_del_dominio_extra(live: Live):
 
     after = sorted(path.name for path in LAB_DYNAMIC.glob("spanel-*.yml"))
     assert after == before, "quitar el extra no debe tocar otros archivos"
-    router = _router(slug)
-    assert router is None or router.get("status") != "enabled"
+    # El file provider avisa a Traefik de forma asíncrona: se espera la baja.
+    deadline = time.monotonic() + 20
+    while time.monotonic() < deadline:
+        router = _router(slug)
+        if router is None or router.get("status") != "enabled":
+            break
+        time.sleep(1)
+    assert router is None or router.get("status") != "enabled", router
     assert EXTRA not in "".join(
         (LAB_DYNAMIC / name).read_text() for name in after
     )
