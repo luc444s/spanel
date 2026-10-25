@@ -2,7 +2,8 @@
 """CLI de dominios de SPanel.
 
 Diagnostica el proxy, agrega/quita dominios gestionados y consulta el estado
-del certificado. Reutiliza la misma lógica que el futuro plugin `proxy`.
+del certificado. Es una entrada delgada sobre el plugin `domains`: la
+implementación vive en `vendor/systutor-core/plugins/domains/backend/proxy/`.
 
 Perfiles:
   internal  laboratorio Docker aislado con CA ACME local (por defecto)
@@ -22,11 +23,17 @@ import argparse
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+_VENDOR_CORE = Path(__file__).resolve().parents[1] / "vendor" / "systutor-core"
+if str(_VENDOR_CORE) not in sys.path:
+    sys.path.insert(0, str(_VENDOR_CORE))
 
-from spanel_proxy.config import PROFILES, Settings
-from spanel_proxy.core import ProxyError, build_runner
-from spanel_proxy.operations import ProxyOperations
+from plugins.domains.backend.proxy import (  # noqa: E402
+    PROFILES,
+    ProxyError,
+    ProxyOperations,
+    Settings,
+    build_runner,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:

@@ -8,14 +8,16 @@ from pathlib import Path
 import pytest
 
 SCRIPTS = Path(__file__).resolve().parents[1]
+RAIZ = SCRIPTS.parent
+CORE = RAIZ / "vendor" / "systutor-core"
 sys.path.insert(0, str(SCRIPTS))
+sys.path.insert(0, str(CORE))
 
-from proxy_domain import build_parser
-from spanel_proxy.config import Settings
-from spanel_proxy.core import (
+from plugins.domains.backend.proxy import (
     EXIT_VALIDATION,
     CommandResult,
     ProxyError,
+    Settings,
     document_container,
     document_domains,
     document_resolver,
@@ -25,7 +27,8 @@ from spanel_proxy.core import (
     site_file_name,
     slug_for,
 )
-from spanel_proxy.operations import ProxyOperations
+from plugins.domains.backend.proxy.operations import ProxyOperations
+from proxy_domain import build_parser
 
 
 class FakeRunner:

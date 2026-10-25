@@ -72,12 +72,15 @@ def list_sites(
 @router.post("", response_model=CreateSiteResponse, status_code=201)
 def create_site(
     body: CreateSiteRequest,
+    request: Request,
     response: Response,
     tenant_context: TenantContext = Depends(get_current_tenant_context),
     _current_user: User = Depends(require_permission("hosting.sites.create")),
     service: HostingService = Depends(_get_hosting_service),
 ) -> CreateSiteResponse:
-    result = service.create_site(tenant_context, body.name, body.domain, body.admin_email)
+    result = service.create_site(
+        tenant_context, body.name, body.domain, body.admin_email, app=request.app
+    )
     response.headers["Cache-Control"] = "no-store"
     return result
 

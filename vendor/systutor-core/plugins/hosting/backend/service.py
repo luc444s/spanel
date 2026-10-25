@@ -16,10 +16,12 @@ import secrets
 import shlex
 from urllib.parse import quote
 
+from fastapi import FastAPI
 from sqlalchemy import Select, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from systutor.contracts.domain_ownership import is_extra_claimed
 from systutor.core.errors import AppError, NotFoundError
 from systutor.kernel.audit.service import record_audit
 from systutor.kernel.tenants.context import TenantContext
@@ -202,7 +204,13 @@ class HostingService:
         )
 
     def create_site(
-        self, tenant_context: TenantContext, name: str, domain: str, admin_email: str
+        self,
+        tenant_context: TenantContext,
+        name: str,
+        domain: str,
+        admin_email: str,
+        *,
+        app: FastAPI | None = None,
     ) -> CreateSiteResponse:
         try:
             names = SiteNames(slug_for(name))
@@ -221,6 +229,12 @@ class HostingService:
         ):
             raise AppError(
                 "Dominio o nombre ya registrado", status_code=409, code="hosting_site_conflict"
+            )
+        if app is not None and is_extra_claimed(app, self._db, domain):
+            raise AppError(
+                "El dominio ya está publicado como dominio extra por el plugin de dominios",
+                status_code=409,
+                code="hosting_site_conflict",
             )
         provisioner = Provisioner(self._settings)
         try:

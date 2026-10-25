@@ -1,0 +1,22 @@
+{
+  "id": "domains",
+  "name": "Dominios",
+  "version": "0.1.0",
+  "api_version": "1",
+  "requires": [],
+  "backend_entrypoint": "backend.register:register",
+  "frontend_entrypoint": "frontend/register.ts",
+  "permissions": [
+    "domains.domains.read",
+    "domains.domains.manage"
+  ],
+  "tenant_admin_permissions": [
+    "domains.domains.read",
+    "domains.domains.manage"
+  ],
+  "events": [
+    "domains.domain.added",
+    "domains.domain.removed"
+  ],
+  "description": "Dominios web: primarios de Hosting en lectura y extras del proxy"
+}

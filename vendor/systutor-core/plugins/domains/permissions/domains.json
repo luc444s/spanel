@@ -1,0 +1,6 @@
+{
+  "permissions": [
+    {"name": "domains.domains.read", "description": "View primary and extra domains with their certificate"},
+    {"name": "domains.domains.manage", "description": "Add and remove extra domains routed by the proxy"}
+  ]
+}

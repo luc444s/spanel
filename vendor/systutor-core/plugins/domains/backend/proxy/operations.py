@@ -1,19 +1,15 @@
-"""Operaciones del CLI: doctor, add, list, status y remove."""
+"""Operaciones de dominios: add, remove, status, list y utilidades."""
 
 from __future__ import annotations
 
-import os
 import shlex
 import socket
 import ssl
 import sys
 import time
-from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO
-
-import yaml
 
 from .config import Settings
 from .core import (
@@ -22,8 +18,6 @@ from .core import (
     EXIT_OK,
     EXIT_TRANSPORT,
     EXIT_VALIDATION,
-    EXIT_WORDPRESS,
-    CommandResult,
     ProxyError,
     atomic_write,
     document_container,
@@ -32,23 +26,28 @@ from .core import (
     is_managed_document,
     normalize_domain,
     parse_site_document,
-    probe_certificate,
     render_site_yaml,
     site_file_name,
     slug_for,
     timestamp,
     validate_managed_path,
 )
+from .doctor import DoctorMixin
+from .labdns import LabDnsMixin
+from .probe import CertificateInfo, probe_certificate
+from .transport import CommandResult
+from .wordpress import WordPressMixin
 
 
-@dataclass
-class DoctorCheck:
-    label: str
-    ok: bool
-    detail: str = ""
+@dataclass(frozen=True)
+class ManagedDomain:
+    domain: str
+    container: str
+    resolver: str
+    file: str
 
 
-class ProxyOperations:
+class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
     def __init__(
         self,
         settings: Settings,
@@ -139,8 +138,12 @@ class ProxyOperations:
         return f"https://{domain}" if port == 443 else f"https://{domain}:{port}"
 
     def probe_host(self) -> str:
-        """Dónde escuchar el handshake TLS: el host Docker o la máquina local."""
-        return self.settings.ssh_host or "127.0.0.1"
+        """Dónde escuchar el handshake TLS: override, host Docker o localhost."""
+        return self.settings.probe_address or self.settings.ssh_host or "127.0.0.1"
+
+    def config_writable(self) -> tuple[bool, str]:
+        """¿Se puede escribir el directorio dinámico desde este proceso?"""
+        return self._check_config_dir()
 
     def _read_text(self, path: Path) -> str | None:
         if self.settings.is_remote:
@@ -215,121 +218,6 @@ class ProxyOperations:
             pass
 
     # ---- doctor -----------------------------------------------------------
-
-    def doctor(self) -> int:
-        checks: list[DoctorCheck] = []
-
-        def record(label: str, fn) -> None:
-            try:
-                ok, detail = fn()
-            except Exception as exc:  # noqa: BLE001 - el doctor reporta, no propaga
-                ok, detail = False, str(exc)
-            checks.append(DoctorCheck(label, bool(ok), detail))
-
-        record("docker", self._check_docker)
-        if self.settings.is_internal:
-            for name in dict.fromkeys(
-                (
-                    self.settings.traefik_container,
-                    "spanel-step-ca",
-                    self.settings.dns_container,
-                )
-            ):
-                record(f"contenedor {name}", lambda n=name: self._check_container(n))
-        record("directorio dinámico", self._check_config_dir)
-        record("resolver", self._check_resolver)
-        if self.settings.ca_file:
-            record("CA local", self._check_ca)
-        if self.settings.is_internal:
-            record("puerto HTTPS", self._check_https_port)
-        record("registro de auditoría", self._check_log)
-
-        width = max(len(check.label) for check in checks)
-        failed = 0
-        for check in checks:
-            status = "ok" if check.ok else "FALLA"
-            if not check.ok:
-                failed += 1
-            detail = f"  {check.detail}" if check.detail else ""
-            self.say(f"  [{status:5}] {check.label.ljust(width)}{detail}")
-
-        if failed:
-            self.say()
-            self.say(f"doctor: {failed} comprobación(es) fallaron")
-            return EXIT_TRANSPORT
-        self.say()
-        self.say(f"doctor: todo listo (perfil {self.settings.profile})")
-        return EXIT_OK
-
-    def _check_docker(self) -> tuple[bool, str]:
-        result = self.runner.run(["docker", "info"])
-        if result.ok:
-            return True, "daemon accesible"
-        return False, (result.text().strip().splitlines() or ["sin respuesta"])[-1]
-
-    def _check_container(self, name: str) -> tuple[bool, str]:
-        if not self.container_exists(name):
-            return False, "no existe"
-        if not self.container_running(name):
-            return False, "detenido"
-        return True, "running"
-
-    def _check_config_dir(self) -> tuple[bool, str]:
-        directory = self.settings.config_dir
-        if self.settings.is_remote:
-            result = self.runner.run(["test", "-w", str(directory)])
-            return result.ok, str(directory)
-        if not directory.exists():
-            return False, f"no existe {directory}"
-        if not os.access(directory, os.W_OK):
-            return False, f"sin permiso de escritura en {directory}"
-        return True, str(directory)
-
-    def _check_resolver(self) -> tuple[bool, str]:
-        path = self.settings.traefik_static
-        if path is None:
-            return False, "sin ruta de config estática"
-        text = self._read_text(path)
-        if text is None:
-            return False, f"no se pudo leer {path}"
-        try:
-            data = yaml.safe_load(text) or {}
-        except yaml.YAMLError as exc:
-            return False, f"YAML inválido: {exc}"
-        resolvers = data.get("certificatesResolvers") or {}
-        if self.settings.cert_resolver in resolvers:
-            return True, f"{self.settings.cert_resolver} en {path.name}"
-        return False, f"falta '{self.settings.cert_resolver}' en {path}"
-
-    def _check_ca(self) -> tuple[bool, str]:
-        path = self.settings.ca_file
-        if path is None:
-            return False, "sin ruta de CA"
-        if not self._path_exists(path):
-            return False, f"no existe {path} (¿corriste traefik-lab.sh up?)"
-        text = self._read_text(path) or ""
-        try:
-            from cryptography import x509
-
-            cert = x509.load_pem_x509_certificate(text.encode())
-        except Exception as exc:  # noqa: BLE001
-            return False, f"certificado ilegible: {exc}"
-        return True, cert.subject.rfc4514_string()
-
-    def _check_https_port(self) -> tuple[bool, str]:
-        port = self.published_port(self.settings.traefik_container, 443)
-        if port is None:
-            return False, "el laboratorio no publica 443"
-        return True, f"127.0.0.1:{port}"
-
-    def _check_log(self) -> tuple[bool, str]:
-        try:
-            self.settings.log_file.parent.mkdir(parents=True, exist_ok=True)
-        except OSError as exc:
-            return False, str(exc)
-        return True, str(self.settings.log_file)
-
-    # ---- add --------------------------------------------------------------
 
     def add(
         self,
@@ -434,7 +322,10 @@ class ProxyOperations:
         if self.settings.ca_file:
             self.say()
             self.say("Y confiá en la CA local una sola vez:")
-            self.say(f"  sudo cp {self.settings.ca_file} /usr/local/share/ca-certificates/spanel-lab-ca.crt")
+            self.say(
+                f"  sudo cp {self.settings.ca_file} "
+                "/usr/local/share/ca-certificates/spanel-lab-ca.crt"
+            )
             self.say("  sudo update-ca-certificates")
             self.say(f"  curl --cacert {self.settings.ca_file} {self.link_for(domain)}")
         if open_browser:
@@ -500,73 +391,6 @@ class ProxyOperations:
             return None
         return int(line[1])
 
-    def _update_wordpress(self, site: str, domain: str) -> None:
-        url = self.link_for(domain)
-        # El wp-cli corre en un contenedor efímero que comparte la red del sitio.
-        # Las variables de entorno (incluida la BD) se pasan por archivo temporal
-        # 0600, nunca por argv ni por logs.
-        script = (
-            "umask 077\n"
-            "f=$(mktemp)\n"
-            f'docker inspect -f {shlex.quote("{{range .Config.Env}}{{println .}}{{end}}")} '
-            f'{shlex.quote(site)} > "$f" || {{ rm -f "$f"; exit 4; }}\n'
-            "rc=0\n"
-        )
-        for option in ("home", "siteurl"):
-            script += (
-                "docker run --rm --volumes-from "
-                f"{shlex.quote(site)} --network container:{shlex.quote(site)} "
-                f'--env-file "$f" {shlex.quote(self.settings.wp_image)} '
-                f"option update {option} {shlex.quote(url)} "
-                f"--path={shlex.quote(self.settings.wp_root)} --allow-root || rc=$?\n"
-            )
-        script += 'rm -f "$f"\nexit "$rc"\n'
-
-        result = self.runner.run(["sh", "-c", script])
-        if not result.ok:
-            raise ProxyError(
-                f"no se pudo actualizar WordPress: {result.text().strip()}",
-                EXIT_WORDPRESS,
-            )
-        self.audit("wordpress", site, domain, "updated")
-        self.say(f"wordpress: home y siteurl = {url}")
-
-    # ---- DNS interno ------------------------------------------------------
-
-    def _dns_plan(self, domains: Sequence[str]) -> list[str]:
-        if not self.settings.is_internal or self.settings.dns_hosts_file is None:
-            return []
-        return [f"dns: agregar {domain} en {self.settings.dns_hosts_file}" for domain in domains]
-
-    def _dns_apply(self, domains: Sequence[str], *, add: bool) -> None:
-        path = self.settings.dns_hosts_file
-        if not self.settings.is_internal or path is None:
-            return
-        ip = self.container_ip(self.settings.traefik_container)
-        if add and not ip:
-            raise ProxyError(
-                "no se pudo obtener la IP del Traefik del laboratorio", EXIT_TRANSPORT
-            )
-        text = self._read_text(path) or ""
-        targets = set(domains)
-        kept: list[str] = []
-        for line in text.splitlines():
-            stripped = line.strip()
-            if not stripped or stripped.startswith("#"):
-                kept.append(line)
-                continue
-            parts = stripped.split()
-            if len(parts) >= 2 and parts[-1] in targets:
-                continue
-            kept.append(line)
-        if add:
-            for domain in domains:
-                kept.append(f"{ip} {domain}")
-        self._write_text(path, "\n".join(kept).rstrip("\n") + "\n")
-        self.docker("kill", "-s", "HUP", self.settings.dns_container, check=False)
-
-    # ---- búsqueda y respaldo ---------------------------------------------
-
     def _find_owner(self, domain: str) -> Path | None:
         for path in self.site_files():
             text = self._read_text(path)
@@ -598,7 +422,9 @@ class ProxyOperations:
         resolver = document_resolver(data) or self.settings.cert_resolver
         port = self.https_port()
         host = self.probe_host()
-        info = probe_certificate(domain, host, port, self.settings.ca_file)
+        info = probe_certificate(
+            domain, host, port, self.settings.ca_file, timeout=self.settings.probe_timeout
+        )
 
         self.say(f"dominio:   {domain}")
         self.say(f"sitio:     {site}")
@@ -625,8 +451,9 @@ class ProxyOperations:
 
     # ---- list -------------------------------------------------------------
 
-    def list_domains(self) -> int:
-        rows: list[tuple[str, str, str, str]] = []
+    def managed_domains(self) -> list[ManagedDomain]:
+        """Todos los dominios extra gestionados, leídos de los YAML."""
+        rows: list[ManagedDomain] = []
         for path in self.site_files():
             text = self._read_text(path)
             if not text or not is_managed_document(text):
@@ -635,16 +462,30 @@ class ProxyOperations:
                 data = parse_site_document(text)
             except ProxyError:
                 continue
-            site = document_container(data) or "?"
+            container = document_container(data) or "?"
             resolver = document_resolver(data) or "?"
             for domain in document_domains(data):
-                rows.append((domain, site, resolver, path.name))
+                rows.append(ManagedDomain(domain, container, resolver, path.name))
+        return rows
+
+    def certificate(self, domain: str) -> CertificateInfo:
+        """Sondea el certificado de un dominio ya conocido; no lo normaliza."""
+        return probe_certificate(
+            domain,
+            self.probe_host(),
+            self.https_port(),
+            self.settings.ca_file,
+            timeout=self.settings.probe_timeout,
+        )
+
+    def list_domains(self) -> int:
+        rows = self.managed_domains()
         if not rows:
             self.say("no hay dominios gestionados")
             return EXIT_OK
         self.say(f"{'DOMINIO':<40} {'SITIO':<28} {'RESOLVER':<12} ARCHIVO")
-        for domain, site, resolver, name in sorted(rows):
-            self.say(f"{domain:<40} {site:<28} {resolver:<12} {name}")
+        for row in sorted(rows, key=lambda item: item.domain):
+            self.say(f"{row.domain:<40} {row.container:<28} {row.resolver:<12} {row.file}")
         return EXIT_OK
 
     # ---- remove -----------------------------------------------------------
@@ -666,7 +507,8 @@ class ProxyOperations:
         if dry_run:
             self.say(f"# dry-run: {owner}")
             self.say(f"# se quitaría: {domain}")
-            self.say(f"# quedarían: {', '.join(remaining) if remaining else '(ninguno, se borra el archivo)'}")
+            kept = ", ".join(remaining) if remaining else "(ninguno, se borra el archivo)"
+            self.say(f"# quedarían: {kept}")
             return EXIT_OK
 
         self._backup(owner, text)
@@ -692,3 +534,4 @@ class ProxyOperations:
         self.say(f"archivo:  {owner} -> {action}")
         self.say("estado:   eliminado")
         return EXIT_OK
+

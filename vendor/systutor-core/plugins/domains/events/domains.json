@@ -1,0 +1,6 @@
+{
+  "events": [
+    {"name": "domains.domain.added", "description": "An extra domain was added to a site"},
+    {"name": "domains.domain.removed", "description": "An extra domain was removed from a site"}
+  ]
+}

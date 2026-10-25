@@ -58,6 +58,27 @@ class AdoptionError(Exception):
     """A failure explained to the operator, not a traceback."""
 
 
+def _domain_claimed_by_extra(domain: str) -> bool:
+    """Rechaza adoptar con un dominio que ya publica el plugin de dominios.
+
+    Si el proxy no está configurado (entorno sin laboratorio), avisa y deja
+    seguir: la comprobación es una red de seguridad, no un requisito de arranque.
+    """
+    import os
+
+    try:
+        from plugins.domains.backend.proxy import ProxyOperations, Settings, build_runner
+
+        profile = os.getenv("SPANEL_DOMAINS_PROFILE", "public").strip() or "public"
+        settings = Settings.from_env(profile)
+        operations = ProxyOperations(settings, build_runner(settings))
+        needle = domain.strip().lower()
+        return any(row.domain.lower() == needle for row in operations.managed_domains())
+    except Exception as exc:  # noqa: BLE001 - el aviso es visible para el operador
+        print(f"aviso: no se pudo verificar dominios extra: {exc}", file=sys.stderr)
+        return False
+
+
 class AlreadyOwnedError(AdoptionError):
     """The container is already in `hosting_sites`."""
 
@@ -124,6 +145,11 @@ def adopt_container(
         owner_label = f"{owner.slug} ({owner.id})" if owner is not None else existing.tenant_id
         raise AlreadyOwnedError(
             f"el contenedor {container_name} ya pertenece al tenant {owner_label}"
+        )
+
+    if domain and _domain_claimed_by_extra(domain):
+        raise AlreadyOwnedError(
+            f"el dominio {domain} ya esta publicado como dominio extra del proxy"
         )
 
     if dry_run:

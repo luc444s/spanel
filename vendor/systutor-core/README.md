@@ -33,6 +33,9 @@ The kernel provides:
   file target resolver registry: providers register a callable that resolves
   a tenant-owned resource to a trusted container/root; the filemanager plugin
   never accepts a container or absolute root from the browser.
+  `systutor.contracts.domain_ownership` exposes the domain namespace: hosting
+  publishes each site's primary domain and the domains plugin publishes the
+  extra routes it owns, so a Host can never be claimed twice.
 
 The kernel deliberately contains no business domain logic. Business
 modules are external plugins that declare identity, version, permissions,

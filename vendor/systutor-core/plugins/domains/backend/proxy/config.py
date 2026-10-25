@@ -1,4 +1,4 @@
-"""Configuración del CLI de dominios y de la integración con el proxy."""
+"""Configuración compartida por el CLI y la API del plugin de dominios."""
 
 from __future__ import annotations
 
@@ -7,7 +7,22 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+_PACKAGE_DIR = Path(__file__).resolve().parent
+
+
+def _detect_repo_root() -> Path:
+    """Raíz del repo cuando el plugin se usa desde el árbol de desarrollo."""
+    for parent in _PACKAGE_DIR.parents:
+        if (parent / "scripts" / "traefik-lab.sh").is_file():
+            return parent
+    return Path.cwd()
+
+
+REPO_ROOT = (
+    Path(os.environ["SPANEL_PROXY_REPO_ROOT"]).expanduser()
+    if os.environ.get("SPANEL_PROXY_REPO_ROOT")
+    else _detect_repo_root()
+)
 SCRIPTS_DIR = REPO_ROOT / "scripts"
 LAB_ROOT = SCRIPTS_DIR / "traefik-lab"
 PROFILES = ("internal", "public")
@@ -51,6 +66,10 @@ class Settings:
     wp_image: str
     wp_root: str
     wait_seconds: int
+    # Dónde se sondea el certificado cuando el proceso corre en un contenedor:
+    # el host Docker o el nombre del Traefik en la red `proxy`.
+    probe_address: str | None = None
+    probe_timeout: float = 5.0
 
     @property
     def is_internal(self) -> bool:
@@ -133,6 +152,8 @@ class Settings:
             ssh_password=_env(
                 env, "SPANEL_PROXY_SSH_PASSWORD", "SPANEL_DOCKER_SSH_PASSWORD"
             ),
+            probe_address=_env(env, "SPANEL_PROXY_PROBE_HOST"),
+            probe_timeout=float(_env(env, "SPANEL_PROXY_PROBE_TIMEOUT", default="5") or "5"),
             wp_image=_env(env, "SPANEL_PROXY_WP_IMAGE", default="wordpress:cli") or "wordpress:cli",
             wp_root=_env(env, "SPANEL_PROXY_WP_ROOT", default="/var/www/html")
             or "/var/www/html",
