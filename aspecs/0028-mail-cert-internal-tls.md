@@ -419,7 +419,7 @@ Sin cambios en `vendor/**`: se usa la API existente del plugin `mail`
 3. `scripts/mail-cert.service` + `scripts/mail-cert.timer` — renovación diaria.
    **Implementado, no instalado.**
 4. `scripts/tests/test_mail_cert_live.py` — la prueba de T8 como test repetible.
-   **Pendiente**; por ahora T8 se ejecutó a mano y quedó registrado abajo.
+   **Implementado, 5 casos**; corre standalone en el host (sin pytest).
 5. `scripts/proxy_domain.py` + `scripts/spanel_proxy/**` — quedan intactos: la
    integración con el CLI de dominios se pospone a A.SPEC 0027 (plugin `proxy`).
 
@@ -575,23 +575,33 @@ siguen listadas (I3).
 ### T8 — Envío y lectura con verificación TLS (meta del usuario)
 
 ```bash
-python3 scripts/tests/test_mail_cert_live.py \
-  --host mail.lucas.spanel --user lucas@lucas.spanel --password-stdin
+cd /home/lucas/mailadmin && python3 scripts/tests/test_mail_cert_live.py
+# con pytest, si está instalado: python3 -m pytest scripts/tests/test_mail_cert_live.py -q -s
 ```
 
-El test, con `ssl.SSLContext.load_verify_locations(root_ca.crt)` y **sin**
-desactivar la verificación:
+Se salta solo si falta la contraseña del buzón, así que un `pytest` genérico en
+una máquina sin el laboratorio no intenta conectarse. Con
+`ssl.create_default_context(cafile=root_ca.crt)` y **sin** desactivar la
+verificación, el test:
 
-1. `smtplib.SMTP(587).starttls(context)` + `login()`.
-2. `send_message` de `lucas@lucas.spanel` a `lucas@lucas.spanel` con
-   `Message-ID` único.
-3. `imaplib.IMAP4_SSL(993, ssl_context=...)` + `login()`.
-4. `SEARCH` por ese `Message-ID`, `FETCH` de cabeceras.
-5. Asserts: `getpeercert()` con issuer del CA local, SAN correcto y el mensaje
-   recuperado.
+1. comprueba que `993`, `465` y `587` presentan el mismo certificado, con CN
+   `mail.lucas.spanel`, SAN correcto y emisor del CA local;
+2. envía por `587` STARTTLS con `login()` y `Message-ID` único;
+3. lo recupera por `993` con `SEARCH` por `Message-ID` y `FETCH` de cabeceras;
+4. exige ver que la entrega fue local (`LMTP`/`Postfix` en las cabeceras).
 
-Evidencia: salida del test con `Message-ID` enviado y recuperado, más el
-`Received:` del mensaje.
+Evidencia real (2026-10-25):
+
+```text
+PASS  test_imaps_993_presenta_el_certificado_de_la_ca_local
+      imaps:993: serial=AA7F4769716504ADE3B4F76A0D2EBDC0 no_after=Nov 24 06:31:57 2026 GMT san=['mail.lucas.spanel', 'mail.spanel.local']
+PASS  test_los_tres_puertos_presentan_el_mismo_certificado
+PASS  test_smtps_465_presenta_el_certificado_de_la_ca_local
+PASS  test_submission_587_starttls_presenta_el_certificado_de_la_ca_local
+PASS  test_envio_y_lectura_interna_con_tls
+5 ok, 0 fallas, 0 omitidos
+resultado: OK
+```
 
 ### T9 — Negativo de confianza
 
@@ -765,8 +775,8 @@ El simulacro encontró dos defectos que ya están corregidos:
 3. `check` ahora informa qué serial sirve el contenedor y cuál está en disco, en
    vez de dar OK con un certificado desincronizado.
 
-Pendiente: `scripts/tests/test_mail_cert_live.py` (la prueba de T8 como test
-repetible).
+No queda nada pendiente de esta A.SPEC: emisión, entrega, verificación, rollback,
+timer y prueba live están implementados y ejecutados.
 
 ## CRITERIOS DE ACEPTACIÓN
 
