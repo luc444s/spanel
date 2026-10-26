@@ -30,8 +30,30 @@ Reutiliza `SPANEL_PROXY_*` del CLI (`scripts/proxy_domain.py`). Las variables
 propias son `SPANEL_DOMAINS_PROFILE` (default `public`) y
 `SPANEL_PROXY_PROBE_HOST` / `SPANEL_PROXY_PROBE_TIMEOUT` para el sondeo.
 
-Sin `SPANEL_PROXY_SSH_HOST` ni un `SPANEL_PROXY_CONFIG_DIR` escribible, las
-operaciones responden `503 domains.proxy_unavailable`.
+### Transporte (A.SPEC 0029)
+
+`SPANEL_PROXY_TRANSPORT` vale `auto` (default), `local`, `ssh` o `docker`.
+
+- `auto` prueba en orden: SSH configurado (`SPANEL_PROXY_SSH_HOST`), Docker
+  con un Traefik escribible, y por último `SPANEL_PROXY_CONFIG_DIR` local.
+  Si nada aplica responde `503 domains.proxy_unavailable` detallando cada
+  comprobación.
+- `docker` detecta el contenedor Traefik, lee su config estática dentro del
+  contenedor y escribe los `spanel-*.yml` con `docker exec` en el bind mount
+  del file provider. No hace falta montar el directorio ni configurar SSH.
+- Un modo explícito que falla no cae a otro en silencio.
+
+Overrides del transporte Docker:
+
+| Variable | Efecto |
+|---|---|
+| `SPANEL_PROXY_TRAEFIK_CONTAINER` | nombre exacto del contenedor Traefik |
+| `SPANEL_PROXY_CONFIG_DIR` | directorio **dentro de Traefik** (override) |
+| `SPANEL_PROXY_PROBE_HOST` | host de sondeo cuando no hay red compartida |
+| `SPANEL_PROXY_CERT_RESOLVER` | gana sobre el resolver detectado |
+
+`doctor` informa `transporte: docker|local|ssh (motivo)`. Sin un transporte
+viable, las operaciones responden `503 domains.proxy_unavailable`.
 
 ## CLI
 

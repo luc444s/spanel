@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import shlex
 import socket
 import ssl
@@ -19,7 +20,6 @@ from .core import (
     EXIT_TRANSPORT,
     EXIT_VALIDATION,
     ProxyError,
-    atomic_write,
     document_container,
     document_domains,
     document_resolver,
@@ -32,11 +32,15 @@ from .core import (
     timestamp,
     validate_managed_path,
 )
+from .detect import Detection, select_transport
 from .doctor import DoctorMixin
+from .files import ProxyFiles, build_files
 from .labdns import LabDnsMixin
 from .probe import CertificateInfo, probe_certificate
 from .transport import CommandResult
 from .wordpress import WordPressMixin
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -54,11 +58,78 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
         runner,
         out: TextIO | None = None,
         err: TextIO | None = None,
+        files: ProxyFiles | None = None,
     ) -> None:
         self.settings = settings
         self.runner = runner
         self.out = out or sys.stdout
         self.err = err or sys.stderr
+        self._files = files
+        self._detection: Detection | None = None
+        self._detection_error: ProxyError | None = None
+
+    # ---- transporte -------------------------------------------------------
+
+    @property
+    def selection(self) -> Detection:
+        """Detección resuelta una sola vez por operación (I3)."""
+        if self._detection is None:
+            if self._detection_error is not None:
+                raise self._detection_error
+            try:
+                detection = select_transport(self.settings, self.runner)
+            except ProxyError as exc:
+                self._detection_error = exc
+                raise
+            logger.info(
+                "domains proxy transport=%s reason=%s",
+                detection.transport,
+                detection.reason,
+            )
+            self._detection = detection
+        return self._detection
+
+    @property
+    def files(self) -> ProxyFiles:
+        if self._files is None:
+            self._files = build_files(self.runner, self.selection)
+        return self._files
+
+    def _lenient_selection(self) -> Detection | None:
+        """`auto` sin transporte no rompe la lectura: lista vacía como 0027."""
+        try:
+            return self.selection
+        except ProxyError:
+            if self.settings.transport == "auto":
+                return None
+            raise
+
+    @property
+    def profile(self) -> str:
+        selection = self._lenient_selection()
+        if selection is not None and selection.transport == "docker" and selection.profile:
+            return selection.profile
+        return self.settings.profile
+
+    @property
+    def is_internal(self) -> bool:
+        return self.profile == "internal"
+
+    @property
+    def resolver(self) -> str:
+        selection = self._lenient_selection()
+        if (
+            selection is not None
+            and selection.transport == "docker"
+            and selection.cert_resolver
+        ):
+            return selection.cert_resolver
+        return self.settings.cert_resolver
+
+    @property
+    def uses_docker(self) -> bool:
+        selection = self._lenient_selection()
+        return selection is not None and selection.transport == "docker"
 
     # ---- utilidades -------------------------------------------------------
 
@@ -120,6 +191,11 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
         return None
 
     def https_port(self) -> int:
+        selection = self._lenient_selection()
+        if selection is not None and selection.transport == "docker":
+            if selection.probe_port:
+                return selection.probe_port
+            return self.settings.fallback_https_port
         if self.settings.is_internal:
             published = self.published_port(self.settings.traefik_container, 443)
             if published:
@@ -138,77 +214,58 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
         return f"https://{domain}" if port == 443 else f"https://{domain}:{port}"
 
     def probe_host(self) -> str:
-        """Dónde escuchar el handshake TLS: override, host Docker o localhost."""
+        """Dónde escuchar el handshake TLS: detección Docker, override o localhost."""
+        selection = self._lenient_selection()
+        if selection is not None and selection.transport == "docker":
+            return selection.probe_host or ""
         return self.settings.probe_address or self.settings.ssh_host or "127.0.0.1"
 
     def config_writable(self) -> tuple[bool, str]:
         """¿Se puede escribir el directorio dinámico desde este proceso?"""
-        return self._check_config_dir()
+        try:
+            return self.files.writable()
+        except ProxyError as exc:
+            return False, str(exc)
+
+    # ---- archivos ---------------------------------------------------------
 
     def _read_text(self, path: Path) -> str | None:
-        if self.settings.is_remote:
+        return self.files.read_text(path)
+
+    def _read_raw(self, path: Path) -> str | None:
+        """Lectura de config estática/CA fuera del file provider (no gestionada)."""
+        if self.settings.transport == "ssh" or (
+            self.settings.transport == "auto" and self.settings.is_remote
+        ):
             result = self.runner.run(["cat", str(path)])
             return result.stdout if result.ok else None
         try:
             return path.read_text(encoding="utf-8")
-        except FileNotFoundError:
+        except (FileNotFoundError, IsADirectoryError, OSError):
             return None
 
     def _path_exists(self, path: Path) -> bool:
-        if self.settings.is_remote:
-            return self.runner.run(["test", "-e", str(path)]).ok
-        return path.exists()
+        return self.files.exists(path)
 
     def _write_text(self, path: Path, text: str, mode: int = 0o644) -> None:
-        if not self.settings.is_remote:
-            atomic_write(path, text, mode)
-            return
-        quoted = shlex.quote(str(path))
-        tmp = shlex.quote(f"{path}.tmp.{os.getpid()}")
-        script = (
-            f"umask 022 && cat > {tmp} && chmod {mode:o} {tmp} && mv {tmp} {quoted}"
-        )
-        result = self.runner.run(["sh", "-c", script], stdin=text)
-        if not result.ok:
-            raise ProxyError(
-                f"no se pudo escribir {path} en {self.settings.ssh_host}: "
-                f"{result.text().strip()}",
-                EXIT_TRANSPORT,
-            )
+        self.files.write_text(path, text, mode)
 
     def _delete_file(self, path: Path) -> None:
-        if self.settings.is_remote:
-            result = self.runner.run(["rm", "-f", "--", str(path)])
-            if not result.ok:
-                raise ProxyError(f"no se pudo borrar {path}", EXIT_TRANSPORT)
-            return
-        path.unlink(missing_ok=True)
+        self.files.delete(path)
 
     def site_files(self) -> list[Path]:
-        if self.settings.is_remote:
-            result = self.runner.run(
-                [
-                    "sh",
-                    "-c",
-                    (
-                        f"ls -1 {shlex.quote(str(self.settings.config_dir))}/spanel-*.yml "
-                        "2>/dev/null || true"
-                    ),
-                ]
-            )
-            return [Path(line.strip()) for line in result.stdout.splitlines() if line.strip()]
-        directory = self.settings.config_dir
-        if not directory.is_dir():
+        selection = self._lenient_selection()
+        if selection is None:
             return []
-        return sorted(
-            path
-            for path in directory.iterdir()
-            if path.is_file() and path.name.startswith("spanel-") and path.suffix == ".yml"
-        )
+        return self.files.list_site_files()
 
     def audit(self, action: str, site: str, domain: str, result: str) -> None:
+        transport = (
+            self._detection.transport if self._detection is not None else self.settings.transport
+        )
         line = (
-            f"{timestamp()}\taction={action}\tsite={site}\tdomain={domain}\tresult={result}\n"
+            f"{timestamp()}\taction={action}\tsite={site}\tdomain={domain}"
+            f"\tresult={result}\ttransport={transport}\n"
         )
         try:
             self.settings.log_file.parent.mkdir(parents=True, exist_ok=True)
@@ -230,10 +287,10 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
         open_browser: bool = False,
         wait: int | None = None,
     ) -> int:
-        domain = normalize_domain(domain, self.settings.profile)
+        domain = normalize_domain(domain, self.profile)
         new_domains = [domain]
         if www:
-            new_domains.append(normalize_domain(f"www.{domain}", self.settings.profile))
+            new_domains.append(normalize_domain(f"www.{domain}", self.profile))
 
         if not self.container_exists(site):
             raise ProxyError(f"el sitio '{site}' no existe como contenedor", EXIT_TRANSPORT)
@@ -241,7 +298,7 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
             raise ProxyError(f"el sitio '{site}' no está running", EXIT_TRANSPORT)
 
         slug = slug_for(site)
-        path = self.settings.config_dir / site_file_name(slug)
+        path = self.files.config_dir / site_file_name(slug)
         existing_text = self._read_text(path)
         existing_domains: list[str] = []
         if existing_text:
@@ -259,7 +316,7 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
         content = render_site_yaml(
             site,
             domains,
-            self.settings.cert_resolver,
+            self.resolver,
             self.settings.entrypoint_http,
             self.settings.entrypoint_https,
         )
@@ -274,7 +331,7 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
         if dry_run:
             self.say("# dry-run: no se escribe nada")
             self.say(f"# archivo: {path}")
-            self.say(f"# resolver: {self.settings.cert_resolver}")
+            self.say(f"# resolver: {self.resolver}")
             for command in connect_commands:
                 self.say(f"# comando: {command}")
             for line in dns_commands:
@@ -286,7 +343,7 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
         for command in connect_commands:
             self.warn(f"==> {command}")
             self.docker(*shlex.split(command)[1:])
-        if self.settings.is_internal:
+        if self.is_internal and not self.uses_docker:
             self._dns_apply(new_domains, add=True)
 
         if existing_text is not None and existing_text != content:
@@ -305,7 +362,7 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
         self.say(f"sitio:    {site}")
         self.say(f"dominio:  {', '.join(domains)}")
         self.say(f"archivo:  {path}")
-        self.say(f"resolver: {self.settings.cert_resolver}")
+        self.say(f"resolver: {self.resolver}")
         self.say(
             "estado:   active"
             if wait_seconds > 0
@@ -346,9 +403,7 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
         last = None
         last_code = None
         while time.monotonic() < deadline:
-            last = probe_certificate(
-                domain, self.probe_host(), self.https_port(), self.settings.ca_file
-            )
+            last = self.certificate(domain)
             if last.state == "active":
                 last_code = self._route_code(domain)
                 if last_code is not None and last_code not in (404, 503):
@@ -370,12 +425,15 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
 
     def _route_code(self, domain: str) -> int | None:
         """Código HTTP de `GET /` hablando TLS directo al proxy con SNI del dominio."""
+        host = self.probe_host()
+        if not host:
+            return None
         context = ssl.create_default_context()
         if self.settings.ca_file:
             context.load_verify_locations(cafile=str(self.settings.ca_file))
         try:
             with (
-                socket.create_connection((self.probe_host(), self.https_port()), timeout=5) as raw,
+                socket.create_connection((host, self.https_port()), timeout=5) as raw,
                 context.wrap_socket(raw, server_hostname=domain) as tls,
             ):
                 request = (
@@ -405,6 +463,9 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
         return None
 
     def _backup(self, path: Path, text: str) -> None:
+        if not self.files.supports_foreign_paths:
+            self.warn("==> backup: omitido (transporte docker sin escritura fuera del provider)")
+            return
         target = self.settings.backups_dir / timestamp() / path.name
         self._write_text(target, text)
         self.warn(f"==> backup: {target}")
@@ -412,19 +473,15 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
     # ---- status -----------------------------------------------------------
 
     def status(self, domain: str) -> int:
-        domain = normalize_domain(domain, self.settings.profile)
+        domain = normalize_domain(domain, self.profile)
         owner = self._find_owner(domain)
         if owner is None:
             raise ProxyError(f"el dominio {domain} no está gestionado por spanel", EXIT_VALIDATION)
         text = self._read_text(owner) or ""
         data = parse_site_document(text)
         site = document_container(data) or "desconocido"
-        resolver = document_resolver(data) or self.settings.cert_resolver
-        port = self.https_port()
-        host = self.probe_host()
-        info = probe_certificate(
-            domain, host, port, self.settings.ca_file, timeout=self.settings.probe_timeout
-        )
+        resolver = document_resolver(data) or self.resolver
+        info = self.certificate(domain)
 
         self.say(f"dominio:   {domain}")
         self.say(f"sitio:     {site}")
@@ -470,6 +527,12 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
 
     def certificate(self, domain: str) -> CertificateInfo:
         """Sondea el certificado de un dominio ya conocido; no lo normaliza."""
+        selection = self._lenient_selection()
+        if selection is not None and selection.transport == "docker" and not selection.probe_host:
+            return CertificateInfo(
+                state="pending_cert",
+                error="no hay host de sondeo alcanzable desde este contenedor",
+            )
         return probe_certificate(
             domain,
             self.probe_host(),
@@ -491,7 +554,7 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
     # ---- remove -----------------------------------------------------------
 
     def remove(self, domain: str, *, dry_run: bool = False) -> int:
-        domain = normalize_domain(domain, self.settings.profile)
+        domain = normalize_domain(domain, self.profile)
         owner = self._find_owner(domain)
         if owner is None:
             raise ProxyError(f"el dominio {domain} no está gestionado por spanel", EXIT_VALIDATION)
@@ -502,7 +565,7 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
         domains = document_domains(data)
         remaining = [item for item in domains if item not in (domain, f"www.{domain}")]
         site = document_container(data) or ""
-        resolver = document_resolver(data) or self.settings.cert_resolver
+        resolver = document_resolver(data) or self.resolver
 
         if dry_run:
             self.say(f"# dry-run: {owner}")
@@ -526,7 +589,7 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
             self._delete_file(owner)
             action = "deleted"
 
-        if self.settings.is_internal:
+        if self.is_internal and not self.uses_docker:
             self._dns_apply([domain, f"www.{domain}"], add=False)
 
         self.audit("remove", site, domain, action)

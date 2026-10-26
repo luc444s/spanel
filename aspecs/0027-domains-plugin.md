@@ -7,7 +7,8 @@
 >
 > Numeración: **0027**, reservada por 0025 y 0026 para el plugin `proxy`. La
 > A.SPEC 0028 ya está ocupada por TLS de correo. El contrato genérico
-> multi-integración queda para una futura 0029.
+> multi-integración queda para una futura 0030. La 0029 extiende el transporte
+> del plugin (detección Docker automática).
 
 ## WHY
 
@@ -79,7 +80,7 @@ No entra:
 - Buzones en dominios extra (hoy `mail` solo acepta `Tenant.domain`).
 - Rediseñar Traefik, el laboratorio, `scripts/traefik-lab.sh` o el Traefik de
   producción más allá de escribir los `spanel-*.yml` gestionados.
-- El contrato genérico multi-integración (0029) y el panel de DNS.
+- El contrato genérico multi-integración (0030) y el panel de DNS.
 
 ## T0 — LÍNEA BASE MEDIDA (2026-10-25, HEAD `5146220`)
 
@@ -675,5 +676,5 @@ Implementación en `9639db3`; tests live en `b860e79` y `35a29ae`.
 - Editar el dominio primario, recrear sitios o mover un sitio de contenedor.
 - Buzones en dominios extra o cualquier cambio en `mail`.
 - Historial de cambios de ruteo más allá de la auditoría del kernel.
-- Migrar los labels del primario al plugin (eso sería el contrato de 0029).
+- Migrar los labels del primario al plugin (eso sería el contrato de 0030).
 - Montar `/opt/stacks/traefik` en el contenedor de la app.

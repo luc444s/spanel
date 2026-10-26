@@ -85,7 +85,10 @@ class DomainsService:
         self, tenant_id: str, *, can_manage: bool
     ) -> tuple[list[DomainItem], list[SiteOption]]:
         sites = self._visible_sites(tenant_id)
-        extras = self._operations().managed_domains()
+        try:
+            extras = self._operations().managed_domains()
+        except ProxyError as exc:
+            raise self._proxy_error(exc) from exc
 
         extras_by_domain = {row.domain.lower(): row for row in extras}
         items: list[DomainItem] = []

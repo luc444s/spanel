@@ -34,6 +34,7 @@ def _load_env() -> None:
 
 class DomainsSettings(BaseModel):
     profile: str = "public"
+    transport: str = "auto"
     proxy_ssh_host: str = ""
     proxy_config_dir: str = ""
 
@@ -45,7 +46,7 @@ class DomainsSettings(BaseModel):
         return settings
 
     def is_configured(self) -> bool:
-        return bool(self.proxy_ssh_host or self.proxy_config_dir)
+        return bool(self.proxy_ssh_host or self.proxy_config_dir or self.transport != "auto")
 
 
 _settings: DomainsSettings | None = None
@@ -57,6 +58,7 @@ def register_domains_settings() -> None:
     profile = os.getenv("SPANEL_DOMAINS_PROFILE", "public").strip() or "public"
     _settings = DomainsSettings(
         profile=profile,
+        transport=os.getenv("SPANEL_PROXY_TRANSPORT", "auto").strip() or "auto",
         proxy_ssh_host=os.getenv("SPANEL_PROXY_SSH_HOST", "").strip(),
         proxy_config_dir=os.getenv("SPANEL_PROXY_CONFIG_DIR", "").strip(),
     )

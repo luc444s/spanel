@@ -26,6 +26,7 @@ REPO_ROOT = (
 SCRIPTS_DIR = REPO_ROOT / "scripts"
 LAB_ROOT = SCRIPTS_DIR / "traefik-lab"
 PROFILES = ("internal", "public")
+TRANSPORTS = ("auto", "local", "ssh", "docker")
 
 
 def _env(env: Mapping[str, str], *names: str, default: str | None = None) -> str | None:
@@ -70,6 +71,18 @@ class Settings:
     # el host Docker o el nombre del Traefik en la red `proxy`.
     probe_address: str | None = None
     probe_timeout: float = 5.0
+    # HOSTNAME del contenedor propio, capturado del env efectivo. La detección
+    # no debe leer os.environ por su cuenta: eso vuelve los tests dependientes
+    # del shell que los ejecuta.
+    own_hostname: str | None = None
+    # A.SPEC 0029: selección de transporte y overrides crudos. `config_dir`
+    # sigue siendo el directorio local/remoto de 0027; `config_dir_override`
+    # recuerda si el operador lo definió (para el transporte docker es la ruta
+    # dentro de Traefik).
+    transport: str = "auto"
+    config_dir_override: str | None = None
+    cert_resolver_override: str | None = None
+    traefik_container_override: str | None = None
 
     @property
     def is_internal(self) -> bool:
@@ -90,9 +103,15 @@ class Settings:
             raise ValueError(f"perfil desconocido: {profile} (usá {' o '.join(PROFILES)})")
 
         internal = profile == "internal"
-        config_dir = _path(_env(env, "SPANEL_PROXY_CONFIG_DIR")) or (
-            LAB_ROOT / "dynamic" if internal else Path("/opt/stacks/traefik/config")
-        )
+        config_dir_override = _env(env, "SPANEL_PROXY_CONFIG_DIR")
+        transport = (_env(env, "SPANEL_PROXY_TRANSPORT", default="auto") or "auto").lower()
+        if transport not in TRANSPORTS:
+            raise ValueError(
+                f"transporte desconocido: {transport} (usá {' o '.join(TRANSPORTS)})"
+            )
+        config_dir = _path(config_dir_override)
+        if config_dir is None:
+            config_dir = LAB_ROOT / "dynamic" if internal else Path("/opt/stacks/traefik/config")
         traefik_static = _path(_env(env, "SPANEL_PROXY_STATIC_CONFIG")) or (
             LAB_ROOT / "traefik.yml" if internal else config_dir.parent / "traefik.yml"
         )
@@ -150,10 +169,20 @@ class Settings:
                 _env(env, "SPANEL_PROXY_SSH_PORT", "SPANEL_DOCKER_SSH_PORT", default="22") or "22"
             ),
             ssh_password=_env(
-                env, "SPANEL_PROXY_SSH_PASSWORD", "SPANEL_DOCKER_SSH_PASSWORD"
+                env,
+                "SPANEL_PROXY_SSH_PASSWORD",
+                "SPANEL_DOCKER_SSH_PASSWORD",
+                # Mismo criterio que Hosting: es la misma máquina y el mismo
+                # secreto; si no, el transporte SSH falla en silencio.
+                "MAIL_SERVER_PASSWORD",
             ),
             probe_address=_env(env, "SPANEL_PROXY_PROBE_HOST"),
             probe_timeout=float(_env(env, "SPANEL_PROXY_PROBE_TIMEOUT", default="5") or "5"),
+            own_hostname=_env(env, "SPANEL_PROXY_HOSTNAME", "HOSTNAME"),
+            transport=transport,
+            config_dir_override=config_dir_override,
+            cert_resolver_override=_env(env, "SPANEL_PROXY_CERT_RESOLVER"),
+            traefik_container_override=_env(env, "SPANEL_PROXY_TRAEFIK_CONTAINER"),
             wp_image=_env(env, "SPANEL_PROXY_WP_IMAGE", default="wordpress:cli") or "wordpress:cli",
             wp_root=_env(env, "SPANEL_PROXY_WP_ROOT", default="/var/www/html")
             or "/var/www/html",

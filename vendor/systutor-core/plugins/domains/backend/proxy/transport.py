@@ -115,6 +115,17 @@ class SshRunner:
 
 
 def build_runner(settings: Settings) -> Runner:
+    # `ssh` explícito necesita el host remoto; `docker` ejecuta el CLI local
+    # contra el socket. `auto` usa SSH si está configurado (orden de 0029).
+    if settings.transport in ("docker", "local"):
+        return LocalRunner()
+    if settings.transport == "ssh":
+        return SshRunner(
+            settings.ssh_host or "",
+            settings.ssh_user,
+            settings.ssh_port,
+            settings.ssh_password,
+        )
     if settings.is_remote:
         return SshRunner(
             settings.ssh_host or "",
