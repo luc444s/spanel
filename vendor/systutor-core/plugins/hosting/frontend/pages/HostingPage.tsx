@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
   hostingKeys,
+  checkHostingDomain,
   createHostingSite,
   operateHostingSite,
   deleteHostingSite,
@@ -12,6 +13,7 @@ import {
   resetUserPassword,
   type HostingSite,
   type HostingSiteDatabase,
+  type HostingSiteKind,
   type WordPressUser,
 } from "../api";
 import { Alert } from "@systutor/shell/ui/alert";
@@ -19,8 +21,9 @@ import { Button } from "@systutor/shell/ui/button";
 import { Dialog } from "@systutor/shell/ui/dialog";
 import { toast } from "@systutor/shell/ui/toast";
 import { Input } from "@systutor/shell/ui/input";
+import { Select } from "@systutor/shell/ui/select";
 import { useAuthStore } from "../../../../../../apps/web/src/features/auth/store";
-import { SiteCard, stateLabel } from "../components/SiteCard";
+import { SiteCard, kindLabel, stateLabel } from "../components/SiteCard";
 import { SiteConfigDialog } from "../components/SiteConfigDialog";
 import { DatabaseDialog } from "../components/DatabaseDialog";
 import { LogsDialog, UsersDialog } from "../components/SiteDataDialogs";
@@ -30,12 +33,43 @@ type GeneratedPassword = {
   password: string;
 };
 
+type DomainCheckState =
+  | { status: "idle" }
+  | { status: "checking" }
+  | { status: "available"; suffix: string | null }
+  | { status: "unavailable"; reason: string }
+  | { status: "error"; message: string };
+
+const KIND_OPTIONS = [
+  { value: "wordpress", label: "WordPress" },
+  { value: "static", label: "Estático" },
+];
+
 const OPERATE_LABELS = { start: "Iniciar", stop: "Detener", restart: "Reiniciar" } as const;
+
 
 /** Only the action that makes sense for the current state stays enabled. */
 function actionAllowed(status: string, action: "start" | "stop" | "restart") {
   if (action === "start") return status !== "running";
   return status === "running";
+}
+
+function DomainCheckMessage({ check }: { check: DomainCheckState }) {
+  if (check.status === "idle") return null;
+  if (check.status === "checking") {
+    return <p className="text-xs text-muted-foreground">Validando dominio...</p>;
+  }
+  if (check.status === "available") {
+    return (
+      <p className="text-xs text-emerald-600">
+        Dominio disponible{check.suffix ? ` para el sufijo ${check.suffix}` : ""}
+      </p>
+    );
+  }
+  if (check.status === "unavailable") {
+    return <p className="text-xs text-destructive">{check.reason}</p>;
+  }
+  return <p className="text-xs text-destructive">No se pudo validar el dominio: {check.message}</p>;
 }
 
 export default function HostingPage() {
@@ -57,9 +91,10 @@ export default function HostingPage() {
   const canReadUsers = permissions.includes("hosting.users.read");
   const canReset = permissions.includes("hosting.users.password");
   const [createOpen, setCreateOpen] = useState(false);
+  const [kind, setKind] = useState<HostingSiteKind>("wordpress");
   const [name, setName] = useState("");
   const [domain, setDomain] = useState("");
-  const [email, setEmail] = useState("");
+  const [domainCheck, setDomainCheck] = useState<DomainCheckState>({ status: "idle" });
   const [deleteTarget, setDeleteTarget] = useState<HostingSite | null>(null);
   const [confirmation, setConfirmation] = useState("");
   const [logsTarget, setLogsTarget] = useState<HostingSite | null>(null);
@@ -73,6 +108,57 @@ export default function HostingPage() {
   } | null>(null);
   const [resetTarget, setResetTarget] = useState<WordPressUser | null>(null);
   const [generated, setGenerated] = useState<GeneratedPassword | null>(null);
+  const [createdUrl, setCreatedUrl] = useState<string | null>(null);
+
+  function resetCreateForm() {
+    setKind("wordpress");
+    setName("");
+    setDomain("");
+    setDomainCheck({ status: "idle" });
+  }
+
+  function closeCreate() {
+    setCreateOpen(false);
+    resetCreateForm();
+  }
+
+  // The domain check is debounced and only runs while the create dialog is
+  // open. The suffix shown to the user always comes from the backend.
+  useEffect(() => {
+    if (!createOpen) return;
+    const value = domain.trim();
+    if (value.length < 4) {
+      setDomainCheck({ status: "idle" });
+      return;
+    }
+    setDomainCheck({ status: "checking" });
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      checkHostingDomain(value)
+        .then((result) => {
+          if (cancelled) return;
+          if (result.available) {
+            setDomainCheck({ status: "available", suffix: result.suffix });
+          } else {
+            setDomainCheck({
+              status: "unavailable",
+              reason: result.reason ?? "El dominio no está disponible",
+            });
+          }
+        })
+        .catch((error: Error) => {
+          if (cancelled) return;
+          setDomainCheck({
+            status: "error",
+            message: error.message || "No se pudo validar el dominio",
+          });
+        });
+    }, 350);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [domain, createOpen]);
 
   const sitesQuery = useQuery({
     queryKey: hostingKeys.sites,
@@ -84,8 +170,14 @@ export default function HostingPage() {
     onSuccess: async (data) => {
       await queryClient.invalidateQueries({ queryKey: hostingKeys.sites });
       setCreateOpen(false);
-      setName(""); setDomain(""); setEmail("");
-      setGenerated({ login: "admin", password: data.admin_password });
+      resetCreateForm();
+      if (data.site.kind === "static") {
+        // A static site has no credentials: show its URL instead.
+        setCreatedUrl(`https://${data.site.domain ?? domain.trim()}`);
+      } else if (data.admin_password) {
+        // WordPress keeps the one-time password dialog.
+        setGenerated({ login: "admin", password: data.admin_password });
+      }
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -170,6 +262,9 @@ export default function HostingPage() {
   // The list is the source of truth: after an action we refetch it, and the
   // open dialog must show the new status without closing and reopening.
   const detail = detailSite ? sites.find((site) => site.id === detailSite.id) ?? detailSite : null;
+  // A static site has no WordPress surface: users, config, database and
+  // phpMyAdmin are not offered. Logs, lifecycle, filemanager and delete stay.
+  const isStatic = detail?.kind === "static";
 
   return (
     <section className="space-y-4">
@@ -180,7 +275,7 @@ export default function HostingPage() {
 
       {sites.length === 0 ? (
         <p className="rounded-md border border-border bg-card px-3 py-4 text-sm text-muted-foreground">
-          No hay sitios WordPress asignados a este tenant.
+          No hay sitios asignados a este tenant.
         </p>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -203,6 +298,10 @@ export default function HostingPage() {
           <div className="space-y-4">
             <dl className="grid grid-cols-2 gap-3 text-sm">
               <div>
+                <dt className="text-xs text-muted-foreground">Tipo</dt>
+                <dd className="text-foreground">{kindLabel(detail.kind)}</dd>
+              </div>
+              <div>
                 <dt className="text-xs text-muted-foreground">Estado</dt>
                 <dd className="text-foreground">{stateLabel(detail.status)}</dd>
               </div>
@@ -217,7 +316,7 @@ export default function HostingPage() {
             </dl>
 
             <div className="grid grid-cols-2 gap-2">
-              {canReadUsers ? (
+              {canReadUsers && !isStatic ? (
                 <Button variant="secondary" onClick={() => setSelectedSite(detail)}>
                   Ver usuarios
                 </Button>
@@ -230,14 +329,16 @@ export default function HostingPage() {
                   Gestor de archivos
                 </Button>
               ) : null}
-              <Button
-                variant="secondary"
-                disabled={detail.status === "missing"}
-                onClick={() => setConfigTarget(detail)}
-              >
-                Configuración
-              </Button>
-              {canManage ? (
+              {!isStatic ? (
+                <Button
+                  variant="secondary"
+                  disabled={detail.status === "missing"}
+                  onClick={() => setConfigTarget(detail)}
+                >
+                  Configuración
+                </Button>
+              ) : null}
+              {canManage && !isStatic ? (
                 <Button
                   variant="secondary"
                   disabled={detail.status === "missing" || databaseMutation.isPending}
@@ -286,18 +387,76 @@ export default function HostingPage() {
 
       <Dialog
         open={createOpen && canCreate}
-        title="Crear sitio WordPress"
-        onClose={() => setCreateOpen(false)}
+        title="Crear sitio"
+        onClose={closeCreate}
       >
         <form className="space-y-3" onSubmit={(event: FormEvent) => {
-          event.preventDefault(); createMutation.mutate({ name, domain, admin_email: email });
+          event.preventDefault();
+          createMutation.mutate({ kind, name: name.trim(), domain: domain.trim() });
         }}>
-          <Input required placeholder="Nombre" value={name} onChange={(event) => setName(event.target.value)} />
-          <Input required placeholder="Dominio" value={domain} onChange={(event) => setDomain(event.target.value)} />
-          <Input required type="email" placeholder="Email del administrador" value={email}
-            onChange={(event) => setEmail(event.target.value)} />
-          <Button type="submit" disabled={createMutation.isPending}>Crear</Button>
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Tipo</label>
+            <Select
+              value={kind}
+              onChange={(value) => setKind(value as HostingSiteKind)}
+              options={KIND_OPTIONS}
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Nombre</label>
+            <Input required placeholder="Nombre" value={name} onChange={(event) => setName(event.target.value)} />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Dominio</label>
+            <Input
+              required
+              placeholder="Dominio"
+              value={domain}
+              onChange={(event) => setDomain(event.target.value)}
+            />
+            <DomainCheckMessage check={domainCheck} />
+          </div>
+          <Button
+            type="submit"
+            disabled={
+              createMutation.isPending ||
+              name.trim().length === 0 ||
+              domainCheck.status !== "available"
+            }
+          >
+            {createMutation.isPending ? "Creando..." : "Crear"}
+          </Button>
         </form>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(createdUrl)}
+        title="Sitio creado"
+        description={createdUrl ?? undefined}
+        onClose={() => setCreatedUrl(null)}
+        zIndexClassName="z-[1300]"
+        maxWidthClassName="max-w-md"
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-foreground">El sitio estático ya está disponible en:</p>
+          <code className="block overflow-x-auto rounded-md border border-border bg-muted px-3 py-2 font-mono text-sm">
+            {createdUrl ?? ""}
+          </code>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="secondary" size="sm" onClick={() => setCreatedUrl(null)}>
+              Cerrar
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => {
+                if (createdUrl) window.open(createdUrl, "_blank", "noopener,noreferrer");
+              }}
+            >
+              Abrir sitio
+            </Button>
+          </div>
+        </div>
       </Dialog>
 
       <Dialog

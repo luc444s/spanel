@@ -12,8 +12,17 @@ const STATUS_LABELS: Record<string, string> = {
   missing: "No existe",
 };
 
+const KIND_LABELS: Record<HostingSite["kind"], string> = {
+  wordpress: "WordPress",
+  static: "Estático",
+};
+
 export function stateLabel(status: string) {
   return STATUS_LABELS[status] ?? status;
+}
+
+export function kindLabel(kind: HostingSite["kind"]) {
+  return KIND_LABELS[kind] ?? kind;
 }
 
 function statusDot(status: string) {
@@ -58,7 +67,10 @@ export function SiteCard({ site, onOpen }: SiteCardProps) {
       <p className="mt-1 truncate text-sm text-muted-foreground">
         {site.domain ?? "Sin dominio"}
       </p>
-      <p className="mt-4 text-xs text-muted-foreground">
+      <div className="mt-3">
+        <Badge>{kindLabel(site.kind)}</Badge>
+      </div>
+      <p className="mt-3 text-xs text-muted-foreground">
         {site.managed ? "Gestionable" : "Solo lectura"}
       </p>
     </Card>

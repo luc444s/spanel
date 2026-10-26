@@ -1,11 +1,20 @@
 import { apiRequest } from "@systutor/shell/api/client";
 
+export type HostingSiteKind = "wordpress" | "static";
+
 export type HostingSite = {
   id: string;
   container_name: string;
   domain: string | null;
   status: string;
   managed: boolean;
+  kind: HostingSiteKind;
+};
+
+export type DomainCheck = {
+  available: boolean;
+  reason: string | null;
+  suffix: string | null;
 };
 
 export type HostingSiteListResponse = {
@@ -85,10 +94,27 @@ export const hostingKeys = {
   config: (siteId: string) => ["hosting", siteId, "config"] as const,
 };
 
-export function createHostingSite(payload: { name: string; domain: string; admin_email: string }) {
-  return apiRequest<{ site: HostingSite; admin_password: string }>("/api/v1/plugins/hosting/sites", {
-    method: "POST", body: JSON.stringify(payload),
-  });
+export function createHostingSite(payload: {
+  kind: HostingSiteKind;
+  name: string;
+  domain: string;
+}) {
+  return apiRequest<{ site: HostingSite; admin_password: string | null }>(
+    "/api/v1/plugins/hosting/sites",
+    {
+      method: "POST", body: JSON.stringify(payload),
+    }
+  );
+}
+
+/**
+ * Ask the domains plugin whether this domain belongs to the tenant and is free.
+ * The backend owns the suffix; the UI never guesses it.
+ */
+export function checkHostingDomain(domain: string) {
+  return apiRequest<DomainCheck>(
+    `/api/v1/plugins/domains/check?domain=${encodeURIComponent(domain)}`
+  );
 }
 
 export function operateHostingSite(siteId: string, action: "start" | "stop" | "restart") {
