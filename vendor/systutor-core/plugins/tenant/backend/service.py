@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from sqlalchemy import Select, select
+import re
+
+from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session
 
+from systutor.core.errors import AppError
 from systutor.kernel.auth.models import User
 from systutor.kernel.auth.security import hash_password
 from systutor.kernel.permissions.models import Role
@@ -47,8 +50,59 @@ def get_tenant_by_id(db: Session, tenant_id: str) -> Tenant | None:
     return db.scalar(stmt)
 
 
+def normalize_tenant_domain(value: str | None) -> str | None:
+    """Normaliza el dominio del tenant y convierte vacío en NULL.
+
+    El dominio se usa para correo, así que se guarda en minúsculas y sin el
+    punto final. Un string vacío no es un dominio: es la ausencia de dominio.
+    """
+    if value is None:
+        return None
+    text = value.strip().lower().removesuffix(".")
+    if not text:
+        return None
+    if re.search(r"[\s/]", text):
+        raise AppError(
+            "El dominio del tenant no puede tener espacios ni barras",
+            status_code=422,
+            code="tenant_domain_invalid",
+        )
+    return text
+
+
+def ensure_domain_available(
+    db: Session,
+    *,
+    domain: str | None,
+    exclude_tenant_id: str | None = None,
+) -> None:
+    """409 claro cuando otro tenant ya tiene ese dominio.
+
+    La base tiene un índice único, pero sin esta comprobación un choque llega
+    como `IntegrityError` y la API responde 500. El chequeo se hace con
+    `lower()` para que `Empresa.com` y `empresa.com` cuenten como el mismo.
+    """
+    if not domain:
+        return
+    needle = domain.strip().lower().removesuffix(".")
+    if not needle:
+        return
+    stmt = select(Tenant).where(func.lower(Tenant.domain) == needle)
+    if exclude_tenant_id is not None:
+        stmt = stmt.where(Tenant.id != exclude_tenant_id)
+    other = db.scalar(stmt)
+    if other is not None:
+        raise AppError(
+            f"El dominio {needle} ya está asignado al tenant {other.name} ({other.slug})",
+            status_code=409,
+            code="tenant_domain_conflict",
+        )
+
+
 def create_tenant(db: Session, *, name: str, slug: str, domain: str | None = None) -> Tenant:
-    tenant = Tenant(name=name, slug=slug, domain=domain)
+    normalized = normalize_tenant_domain(domain)
+    ensure_domain_available(db, domain=normalized)
+    tenant = Tenant(name=name, slug=slug, domain=normalized)
     db.add(tenant)
     db.flush()
     # A.SPEC 0012: the tenant plugin is no longer the source of truth for
@@ -84,7 +138,9 @@ def create_user_for_tenant(
 
 
 def update_tenant_domain(db: Session, *, tenant: Tenant, domain: str | None) -> Tenant:
-    tenant.domain = domain
+    normalized = normalize_tenant_domain(domain)
+    ensure_domain_available(db, domain=normalized, exclude_tenant_id=tenant.id)
+    tenant.domain = normalized
     db.add(tenant)
     db.flush()
     return tenant

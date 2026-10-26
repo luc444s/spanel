@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from plugins.tenant.backend.schemas import (
@@ -25,6 +26,7 @@ from plugins.tenant.backend.service import (
     update_tenant_domain,
 )
 from systutor.api.deps import get_db_session
+from systutor.core.errors import AppError
 from systutor.kernel.auth.dependencies import require_permission
 from systutor.kernel.auth.models import User
 from systutor.kernel.auth.service import get_user_by_id
@@ -58,15 +60,23 @@ def create_new_tenant(
     db: Session = Depends(get_db_session),
     _current_user: User = Depends(require_permission("tenant.tenants.manage")),
 ) -> TenantResponse:
-    tenant = create_tenant(db, name=body.name, slug=body.slug, domain=body.domain)
-    create_user_for_tenant(
-        db,
-        tenant_id=tenant.id,
-        email=body.user_email,
-        password=body.user_password,
-        full_name=body.user_full_name,
-    )
-    db.commit()
+    try:
+        tenant = create_tenant(db, name=body.name, slug=body.slug, domain=body.domain)
+        create_user_for_tenant(
+            db,
+            tenant_id=tenant.id,
+            email=body.user_email,
+            password=body.user_password,
+            full_name=body.user_full_name,
+        )
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise AppError(
+            "El dominio, el slug o el email ya están en uso",
+            status_code=409,
+            code="tenant_conflict",
+        ) from exc
     return TenantResponse(
         id=tenant.id,
         name=tenant.name,
@@ -86,8 +96,16 @@ def update_tenant(
     tenant = get_tenant_by_id(db, tenant_id)
     if tenant is None:
         raise HTTPException(status_code=404, detail="Tenant not found")
-    updated = update_tenant_domain(db, tenant=tenant, domain=body.domain)
-    db.commit()
+    try:
+        updated = update_tenant_domain(db, tenant=tenant, domain=body.domain)
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise AppError(
+            "El dominio ya está asignado a otro tenant",
+            status_code=409,
+            code="tenant_domain_conflict",
+        ) from exc
     return TenantResponse(
         id=updated.id,
         name=updated.name,

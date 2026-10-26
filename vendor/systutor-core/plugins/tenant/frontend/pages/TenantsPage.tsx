@@ -257,7 +257,7 @@ export default function TenantsPage() {
         <form className="space-y-3" onSubmit={handleEditDomain}>
           <label className="block space-y-1 text-sm text-foreground">
             <span>Dominio (DMS)</span>
-            <Input type="text" value={editDomain} onChange={(e) => setEditDomain(e.target.value)} placeholder="empresa.com" autoFocus />
+            <Input type="text" value={editDomain} onChange={(e) => { setEditDomain(e.target.value); setEditError(null); }} placeholder="empresa.com" autoFocus />
           </label>
           {editError && <Alert title="Error">{editError}</Alert>}
           <div className="flex justify-end gap-2">
