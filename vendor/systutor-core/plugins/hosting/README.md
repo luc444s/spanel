@@ -29,8 +29,21 @@ All three routes require the kernel `TenantContext`:
 - `GET /api/v1/plugins/hosting/sites/{site_id}/users` — `hosting.users.read`
 - `POST /api/v1/plugins/hosting/sites/{site_id}/users/{wp_user_id}/password` —
   `hosting.users.password`
-- `POST /api/v1/plugins/hosting/sites` — `hosting.sites.create`; accepts name,
-  domain and admin_email, and returns the generated admin password once.
+- `POST /api/v1/plugins/hosting/sites` — `hosting.sites.create`; accepts
+  `{"kind": "wordpress"|"static", "name": "...", "domain": "..."}` and returns
+  the generated admin password once (`null` for a static site). `admin_email`
+  is no longer accepted: WordPress uses the authenticated user's email, with
+  `admin@<domain>` as fallback. The domain must belong to the tenant's
+  `site_suffix` and be free in `hosting_sites` and in the proxy extras.
+- `POST /api/v1/plugins/hosting/sites` with `kind="static"` provisions
+  `spanel-<slug>-web` plus its homonymous volume, seeds `index.html`,
+  `styles.css` and `app.js`, and serves them with `nginx:alpine`. It creates no
+  database, WordPress user or password. When the `domains` plugin is enabled,
+  its file-provider publisher owns the primary route; otherwise the container
+  gets Traefik labels exactly like WordPress. `start`, `stop`, `restart`,
+  `logs` and the filemanager work for both kinds; `config`, `database`,
+  `phpmyadmin`, `users`, `secrets/salts` and password reset answer
+  `409 hosting_site_wrong_kind` on a static site.
 - `POST /api/v1/plugins/hosting/sites/{site_id}/{start|stop|restart}` —
   `hosting.sites.manage`
 - `GET /api/v1/plugins/hosting/sites/{site_id}/logs?lines=200` — `hosting.sites.read`

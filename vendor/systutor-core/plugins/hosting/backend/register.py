@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from plugins.hosting.backend.models import HostingSite
 from plugins.hosting.backend.router import router
 from plugins.hosting.backend.settings import get_hosting_settings, register_hosting_settings
+from plugins.hosting.backend.static import files_root_for
 from systutor.contracts.domain_ownership import OwnedSite, register_site_provider
 from systutor.contracts.file_targets import FileTarget, register_file_target
 from systutor.sdk.context import PluginContext
@@ -38,7 +39,11 @@ def resolve_hosting_files(
     )
     if site is None:
         return None
-    return FileTarget(site.container_name, get_hosting_settings().files_root, site.id)
+    return FileTarget(
+        site.container_name,
+        files_root_for(site.kind, get_hosting_settings().files_root),
+        site.id,
+    )
 
 
 def register(context: PluginContext) -> None:

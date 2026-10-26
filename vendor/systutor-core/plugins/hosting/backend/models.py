@@ -30,6 +30,10 @@ class HostingSite(Base):
     # PostgreSQL allows several NULLs in a unique column, so sites without a
     # domain do not collide with each other.
     domain: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
+    # `wordpress` or `static`. Existing rows are backfilled by migration 002.
+    kind: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="wordpress", server_default="wordpress"
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

@@ -54,6 +54,7 @@ class HostingSettings(BaseModel):
     command_timeout: int = 60
     wp_image: str = "wordpress:latest"
     db_image: str = "mariadb:11"
+    static_image: str = "nginx:alpine"
     network: str = "proxy"
     traefik: bool = True
     install_timeout: int = 180
@@ -96,6 +97,8 @@ def register_hosting_settings() -> HostingSettings:
         command_timeout=_int_env("SPANEL_HOSTING_COMMAND_TIMEOUT", 60),
         wp_image=os.getenv("SPANEL_HOSTING_WP_IMAGE", "wordpress:latest"),
         db_image=os.getenv("SPANEL_HOSTING_DB_IMAGE", "mariadb:11"),
+        static_image=os.getenv("SPANEL_HOSTING_STATIC_IMAGE", "nginx:alpine").strip()
+        or "nginx:alpine",
         network=os.getenv("SPANEL_HOSTING_NETWORK", "proxy"),
         traefik=os.getenv("SPANEL_HOSTING_TRAEFIK", "true").lower() not in {"false", "0", "no"},
         install_timeout=_int_env("SPANEL_HOSTING_INSTALL_TIMEOUT", 180),

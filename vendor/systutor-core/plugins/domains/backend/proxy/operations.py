@@ -463,8 +463,11 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
         return None
 
     def _backup(self, path: Path, text: str) -> None:
-        if not self.files.supports_foreign_paths:
-            self.warn("==> backup: omitido (transporte docker sin escritura fuera del provider)")
+        if self.selection.transport != "local":
+            self.warn(
+                "==> backup: omitido (transporte no local; el backup no puede "
+                "escribir rutas del proceso en el host remoto)"
+            )
             return
         target = self.settings.backups_dir / timestamp() / path.name
         self._write_text(target, text)

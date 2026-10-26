@@ -79,7 +79,7 @@ def create_site(
     service: HostingService = Depends(_get_hosting_service),
 ) -> CreateSiteResponse:
     result = service.create_site(
-        tenant_context, body.name, body.domain, body.admin_email, app=request.app
+        tenant_context, body.name, body.domain, kind=body.kind, app=request.app
     )
     response.headers["Cache-Control"] = "no-store"
     return result
@@ -328,13 +328,14 @@ def rotate_site_salts(
 
 @router.delete("/{site_id}", status_code=204)
 def delete_site(
+    request: Request,
     site: HostingSite = Depends(get_owned_site),
     tenant_context: TenantContext = Depends(get_current_tenant_context),
     _current_user: User = Depends(require_permission("hosting.sites.delete", platform_only=True)),
     service: HostingService = Depends(_get_hosting_service),
     db: Session = Depends(get_db_session),
 ) -> None:
-    service.delete_site(site, tenant_context)
+    service.delete_site(site, tenant_context, app=request.app)
     db.commit()
 
 

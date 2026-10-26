@@ -14,6 +14,7 @@ from __future__ import annotations
 import re
 import secrets
 import shlex
+from collections.abc import Callable
 from urllib.parse import quote
 
 from fastapi import FastAPI
@@ -22,8 +23,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from systutor.contracts.domain_ownership import is_extra_claimed
+from systutor.contracts.site_domain_publisher import get_site_domain_publisher
+from systutor.contracts.site_namespace import domain_in_suffix, get_site_suffix
 from systutor.core.errors import AppError, NotFoundError
 from systutor.kernel.audit.service import record_audit
+from systutor.kernel.auth.models import User
 from systutor.kernel.tenants.context import TenantContext
 from systutor.kernel.tenants.models import Tenant
 
@@ -55,6 +59,7 @@ from .schemas import (
     WordPressUserSummary,
 )
 from .settings import HostingSettings, docker_env, get_hosting_settings
+from .static import LABEL_MANAGED, StaticNames, StaticProvisioner
 from .transport import Fallo, build_docker_argv, run
 from .wpconfig import read_wp_config
 
@@ -137,10 +142,12 @@ class HostingService:
         )
 
     def _require_site(self, site: HostingSite) -> tuple[dict, bool]:
-        """The container must exist and still be a WordPress site.
+        """The container must exist and still be a managed site.
 
         Returns the inspect payload and whether its `spanel.managed` label
-        allows operations. A missing container is 409 and names it.
+        allows operations. WordPress keeps its historical detector; a static
+        site is validated by the ownership label alone because nginx is not a
+        WordPress container.
         """
         info = self._inspect(site.container_name)
         if info is None:
@@ -149,6 +156,9 @@ class HostingService:
                 status_code=409,
                 code="hosting_site_unavailable",
             )
+        if site.kind == "static":
+            labels = ((info.get("Config") or {}).get("Labels")) or {}
+            return info, labels.get(LABEL_MANAGED) != "false"
         candidato = candidato_de(info)
         if not candidato.es_sitio:
             raise AppError(
@@ -157,6 +167,24 @@ class HostingService:
                 code="hosting_site_unavailable",
             )
         return info, candidato.gestionable
+
+    def _require_wordpress(self, site: HostingSite) -> None:
+        if site.kind == "static":
+            raise AppError(
+                f"El sitio {site.container_name} es estático; esta operación es solo para WordPress",
+                status_code=409,
+                code="hosting_site_wrong_kind",
+            )
+
+    def _wordpress_admin_email(
+        self, tenant_context: TenantContext, domain: str, admin_email: str | None
+    ) -> str:
+        """The authenticated user's email, with `admin@<domain>` as fallback."""
+        if admin_email:
+            return admin_email
+        user = self._db.get(User, tenant_context.current_user_id)
+        email = (user.email or "").strip() if user is not None else ""
+        return email or f"admin@{domain}"
 
     def _database_binding_for(
         self, site: HostingSite, info: dict
@@ -208,14 +236,17 @@ class HostingService:
         tenant_context: TenantContext,
         name: str,
         domain: str,
-        admin_email: str,
+        admin_email: str | None = None,
         *,
+        kind: str = "wordpress",
         app: FastAPI | None = None,
     ) -> CreateSiteResponse:
         try:
-            names = SiteNames(slug_for(name))
+            slug = slug_for(name)
         except ValueError as exc:
             raise AppError(str(exc), status_code=422, code="hosting_invalid_name") from exc
+        names = StaticNames(slug) if kind == "static" else SiteNames(slug)
+        container_name = names.container if kind == "static" else names.wp
         tenant_id = tenant_context.current_tenant_id
         tenant = self._db.get(Tenant, tenant_id)
         if tenant is None or not tenant.is_active:
@@ -224,7 +255,7 @@ class HostingService:
             )
         if self._db.scalar(
             select(HostingSite.id).where(
-                (HostingSite.domain == domain) | (HostingSite.container_name == names.wp)
+                (HostingSite.domain == domain) | (HostingSite.container_name == container_name)
             )
         ):
             raise AppError(
@@ -236,20 +267,132 @@ class HostingService:
                 status_code=409,
                 code="hosting_site_conflict",
             )
+        if app is not None:
+            suffix = get_site_suffix(app, self._db, tenant_id)
+            if not suffix:
+                raise AppError(
+                    "El tenant no configuró un sufijo de sitios",
+                    status_code=409,
+                    code="hosting_site_suffix_missing",
+                )
+            if not domain_in_suffix(domain, suffix):
+                raise AppError(
+                    f"El dominio debe estar debajo de {suffix}",
+                    status_code=409,
+                    code="hosting_site_domain_outside_suffix",
+                )
+        if kind == "static":
+            return self._create_static(
+                tenant_context, names, tenant_id, domain, app=app
+            )
+        return self._create_wordpress(
+            tenant_context, names, tenant_id, domain, admin_email
+        )
+
+    def _create_wordpress(
+        self,
+        tenant_context: TenantContext,
+        names: SiteNames,
+        tenant_id: str,
+        domain: str,
+        admin_email: str | None,
+    ) -> CreateSiteResponse:
         provisioner = Provisioner(self._settings)
+        email = self._wordpress_admin_email(tenant_context, domain, admin_email)
         try:
-            password = provisioner.create(names, tenant_id, domain, admin_email)
+            password = provisioner.create(names, tenant_id, domain, email)
         except Fallo as exc:
             raise AppError(str(exc), status_code=409, code="hosting_provision_failed") from exc
-        site = HostingSite(tenant_id=tenant_id, container_name=names.wp, domain=domain)
+        return self._finish_create(
+            tenant_context,
+            tenant_id=tenant_id,
+            container_name=names.wp,
+            domain=domain,
+            kind="wordpress",
+            password=password,
+            cleanup=lambda: provisioner.cleanup(names, tenant_id),
+        )
+
+    def _create_static(
+        self,
+        tenant_context: TenantContext,
+        names: StaticNames,
+        tenant_id: str,
+        domain: str,
+        *,
+        app: FastAPI | None,
+    ) -> CreateSiteResponse:
+        provisioner = StaticProvisioner(self._settings)
+        publisher = get_site_domain_publisher(app)
+        try:
+            provisioner.create(
+                names,
+                tenant_id,
+                domain,
+                traefik=publisher is None and self._settings.traefik,
+            )
+        except Fallo as exc:
+            failures = provisioner.cleanup(names, tenant_id)
+            detail = f"; limpieza: {failures}" if failures else ""
+            raise AppError(
+                f"{exc}{detail}", status_code=409, code="hosting_provision_failed"
+            ) from exc
+        return self._finish_create(
+            tenant_context,
+            tenant_id=tenant_id,
+            container_name=names.container,
+            domain=domain,
+            kind="static",
+            password=None,
+            cleanup=lambda: provisioner.cleanup(names, tenant_id),
+            publisher=publisher,
+        )
+
+    def _finish_create(
+        self,
+        tenant_context: TenantContext,
+        *,
+        tenant_id: str,
+        container_name: str,
+        domain: str,
+        kind: str,
+        password: str | None,
+        cleanup: Callable[[], list[str]],
+        publisher=None,
+    ) -> CreateSiteResponse:
+        published = False
+        if publisher is not None:
+            try:
+                publisher.publish(container_name, domain)
+                published = True
+            except Exception as exc:
+                failures = cleanup()
+                raise AppError(
+                    f"No se pudo publicar el dominio: {exc}; limpieza: {failures}",
+                    status_code=409,
+                    code="hosting_provision_failed",
+                ) from exc
+        site = HostingSite(
+            tenant_id=tenant_id,
+            container_name=container_name,
+            domain=domain,
+            kind=kind,
+        )
         try:
             self._db.add(site)
             self._db.flush()
-            self._audit_site(site, tenant_context, "create")
+            self._audit_site(site, tenant_context, "create", {"kind": kind})
             self._db.commit()
         except Exception as exc:
             self._db.rollback()
-            failures = provisioner.cleanup(names, tenant_id)
+            if published:
+                try:
+                    publisher.unpublish(domain)
+                except Exception:
+                    # The row is gone either way; an orphan route is corrected
+                    # by the operator or by deleting the site again.
+                    pass
+            failures = cleanup()
             if isinstance(exc, IntegrityError):
                 raise AppError(
                     f"Dominio o nombre ya registrado; limpieza: {failures}",
@@ -268,6 +411,7 @@ class HostingService:
                 domain=site.domain,
                 status="running",
                 managed=True,
+                kind=kind,
             ),
             admin_password=password,
         )
@@ -287,6 +431,7 @@ class HostingService:
             domain=site.domain,
             status="exited" if action == "stop" else "running",
             managed=True,
+            kind=site.kind,
         )
 
     def start_site(self, site: HostingSite, tenant_context: TenantContext) -> HostingSiteSummary:
@@ -309,7 +454,16 @@ class HostingService:
             raise AppError(str(exc), status_code=409, code="hosting_site_unavailable") from exc
         return SiteLogsResponse(logs=logs)
 
-    def delete_site(self, site: HostingSite, tenant_context: TenantContext) -> None:
+    def delete_site(
+        self,
+        site: HostingSite,
+        tenant_context: TenantContext,
+        *,
+        app: FastAPI | None = None,
+    ) -> None:
+        if site.kind == "static":
+            self._delete_static(site, tenant_context, app)
+            return
         info = self._inspect(site.container_name)
         if info is not None:
             self._managed_site(site)
@@ -354,6 +508,48 @@ class HostingService:
         self._audit_site(site, tenant_context, "delete", {"missing": missing})
         self._db.delete(site)
 
+    def _delete_static(
+        self,
+        site: HostingSite,
+        tenant_context: TenantContext,
+        app: FastAPI | None,
+    ) -> None:
+        names = StaticNames(site.container_name.removeprefix("spanel-").removesuffix("-web"))
+        if names.container != site.container_name:
+            raise AppError(
+                "Sitio externo: sin recursos gestionados",
+                status_code=409,
+                code="hosting_site_not_managed",
+            )
+        provisioner = Provisioner(self._settings)
+        # Reversed by `cleanup`, so the container goes before its volume.
+        resources = [("volume", names.volume), ("container", names.container)]
+        for kind, name in resources:
+            if provisioner.exists(kind, name) and not provisioner._owned(
+                kind, name, names, site.tenant_id
+            ):
+                raise AppError(
+                    f"Recurso ajeno: {name}", status_code=409, code="hosting_site_not_managed"
+                )
+        missing = [name for kind, name in resources if not provisioner.exists(kind, name)]
+        publisher = get_site_domain_publisher(app)
+        if publisher is not None and site.domain:
+            try:
+                publisher.unpublish(site.domain)
+            except Exception as exc:
+                raise AppError(
+                    f"No se pudo quitar la ruta publicada: {exc}",
+                    status_code=409,
+                    code="hosting_delete_failed",
+                ) from exc
+        failures = provisioner.cleanup(names, site.tenant_id, resources)
+        if failures:
+            raise AppError("; ".join(failures), status_code=409, code="hosting_delete_failed")
+        self._audit_site(
+            site, tenant_context, "delete", {"missing": missing, "kind": "static"}
+        )
+        self._db.delete(site)
+
     def list_sites(self, tenant_id: str) -> HostingSiteListResponse:
         """Only the rows owned by the tenant; Docker is asked about those alone."""
         stmt: Select[tuple[HostingSite]] = (
@@ -374,6 +570,7 @@ class HostingService:
                         domain=site.domain,
                         status="missing",
                         managed=False,
+                        kind=site.kind,
                     )
                 )
                 continue
@@ -384,12 +581,14 @@ class HostingService:
                     domain=site.domain,
                     status=estado_del_contenedor(info),
                     managed=candidato_de(info).gestionable,
+                    kind=site.kind,
                 )
             )
         return HostingSiteListResponse(sites=summaries)
 
     def get_site_config(self, site: HostingSite) -> SiteConfigResponse:
         """The editable env and the NAMES of the secrets. Values never leak."""
+        self._require_wordpress(site)
         config = RawAdapter(self._settings).read_config(site)
         return SiteConfigResponse(
             site_id=config.site_id,
@@ -407,6 +606,7 @@ class HostingService:
         Read-only toward the database: the only side effect is an audit row
         that names the database and the host, never the password.
         """
+        self._require_wordpress(site)
         info, _managed = self._require_site(site)
         _raw_host, host, database, user, password = self._database_binding_for(site, info)
         db_info = self._inspect(host)
@@ -442,6 +642,7 @@ class HostingService:
         self, site: HostingSite, tenant_context: TenantContext, client: PmaClient
     ) -> dict[str, str]:
         """Log in upstream here; the HTTP route never receives the DB password."""
+        self._require_wordpress(site)
         try:
             info, _ = self._require_site(site)
             _, host, database, user, password = self._database_binding_for(site, info)
@@ -475,6 +676,7 @@ class HostingService:
         env: dict[str, str],
     ) -> SiteConfigResponse:
         """Persist whitelisted env changes and recreate the owned container."""
+        self._require_wordpress(site)
         config = RawAdapter(self._settings).update_config(site, env)
         self._audit_site(site, tenant_context, "config_update", {"keys": sorted(env)})
         return SiteConfigResponse(
@@ -489,6 +691,7 @@ class HostingService:
         self, site: HostingSite, tenant_context: TenantContext
     ) -> SecretRotationResponse:
         """Rotate WordPress auth salts. Audited; no secret value is recorded."""
+        self._require_wordpress(site)
         RawAdapter(self._settings).rotate_salts(site)
         self._audit_site(site, tenant_context, "secrets_rotated", {"kind": "salts"})
         return SecretRotationResponse(
@@ -536,6 +739,7 @@ class HostingService:
         return credenciales, db_container, prefijo
 
     def list_users(self, site: HostingSite) -> WordPressUserListResponse:
+        self._require_wordpress(site)
         info, _managed = self._require_site(site)
         credenciales, db_container, prefijo = self._credentials(site, info)
         try:
@@ -579,6 +783,7 @@ class HostingService:
         correlation_id: str | None = None,
         request_id: str | None = None,
     ) -> ResetPasswordResponse:
+        self._require_wordpress(site)
         info, managed = self._require_site(site)
         if not managed:
             # Visible but outside the operations scope. Nothing is written,
