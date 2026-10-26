@@ -352,18 +352,18 @@ structural_constraints:
   `site_suffix`; el sufijo es configuración separada del dominio de correo.
 - owner: luc444s
 - approver: luc444s
-- Commit: pendiente (al ejecutar)
+- Commit: `dc38191`
 - Deployment: local primero; el laboratorio configura `site_suffix="spanel"`
   para demo después del deploy.
 
 ## Definition of Done
 
-- [ ] Objetivo: el sufijo se configura y el namespace se aplica a lista y check.
-- [ ] Alcance respetado: sin cambios en Hosting, mail, proxy ni contenedores.
-- [ ] Contrato: tabla, API, check y visibilidad implementados.
-- [ ] Invariantes I1–I8 probados.
-- [ ] V0–V5 ejecutados.
-- [ ] Rollback de migración ejecutado (up/down/up).
-- [ ] Sin archivos fuera de `change_surface`.
-- [ ] Nada >600 líneas; ideal <400.
-- [ ] Trazabilidad completa.
+- [x] Objetivo: el sufijo se configura y el namespace se aplica a lista y check.
+- [x] Alcance respetado: sin cambios en Hosting, mail, proxy ni contenedores.
+- [x] Contrato: tabla, API, check y visibilidad implementados.
+- [x] Invariantes I1–I10 probados.
+- [x] V0–V5 ejecutados.
+- [x] Rollback de migración ejecutado (up/down/up).
+- [x] Sin archivos fuera de `change_surface`.
+- [x] Nada >600 líneas; ideal <400.
+- [x] Trazabilidad completa.
