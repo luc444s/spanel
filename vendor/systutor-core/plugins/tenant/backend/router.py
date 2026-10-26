@@ -19,19 +19,32 @@ from plugins.tenant.backend.service import (
     assign_user_to_tenant,
     create_tenant,
     create_user_for_tenant,
+    get_site_suffix_for_tenant,
     get_tenant_by_id,
     list_tenants,
     list_users_for_tenant,
     remove_user_from_tenant,
-    update_tenant_domain,
+    update_tenant as update_tenant_settings,
 )
 from systutor.api.deps import get_db_session
 from systutor.core.errors import AppError
 from systutor.kernel.auth.dependencies import require_permission
 from systutor.kernel.auth.models import User
 from systutor.kernel.auth.service import get_user_by_id
+from systutor.kernel.tenants.models import Tenant
 
 router = APIRouter(prefix="/tenants", tags=["tenants"])
+
+
+def _tenant_response(db: Session, tenant: Tenant) -> TenantResponse:
+    return TenantResponse(
+        id=tenant.id,
+        name=tenant.name,
+        slug=tenant.slug,
+        domain=tenant.domain,
+        site_suffix=get_site_suffix_for_tenant(db, tenant.id),
+        is_active=tenant.is_active,
+    )
 
 
 @router.get("", response_model=TenantListResponse)
@@ -41,16 +54,7 @@ def list_all_tenants(
 ) -> TenantListResponse:
     tenants = list_tenants(db)
     return TenantListResponse(
-        tenants=[
-            TenantResponse(
-                id=t.id,
-                name=t.name,
-                slug=t.slug,
-                domain=t.domain,
-                is_active=t.is_active,
-            )
-            for t in tenants
-        ]
+        tenants=[_tenant_response(db, tenant) for tenant in tenants]
     )
 
 
@@ -77,13 +81,7 @@ def create_new_tenant(
             status_code=409,
             code="tenant_conflict",
         ) from exc
-    return TenantResponse(
-        id=tenant.id,
-        name=tenant.name,
-        slug=tenant.slug,
-        domain=tenant.domain,
-        is_active=tenant.is_active,
-    )
+    return _tenant_response(db, tenant)
 
 
 @router.put("/{tenant_id}", response_model=TenantResponse)
@@ -96,23 +94,38 @@ def update_tenant(
     tenant = get_tenant_by_id(db, tenant_id)
     if tenant is None:
         raise HTTPException(status_code=404, detail="Tenant not found")
+
+    fields = body.model_fields_set
+    if not fields:
+        raise AppError(
+            "No hay nada que actualizar",
+            status_code=422,
+            code="tenant_update_empty",
+        )
+
+    updates: dict[str, str | None] = {}
+    if "domain" in fields:
+        updates["domain"] = body.domain
+    if "site_suffix" in fields:
+        updates["site_suffix"] = body.site_suffix
+
     try:
-        updated = update_tenant_domain(db, tenant=tenant, domain=body.domain)
+        updated = update_tenant_settings(db, tenant=tenant, **updates)
         db.commit()
     except IntegrityError as exc:
         db.rollback()
+        if "site_suffix" in fields:
+            raise AppError(
+                "El sufijo ya está asignado a otro tenant",
+                status_code=409,
+                code="tenant_site_suffix_conflict",
+            ) from exc
         raise AppError(
             "El dominio ya está asignado a otro tenant",
             status_code=409,
             code="tenant_domain_conflict",
         ) from exc
-    return TenantResponse(
-        id=updated.id,
-        name=updated.name,
-        slug=updated.slug,
-        domain=updated.domain,
-        is_active=updated.is_active,
-    )
+    return _tenant_response(db, updated)
 
 
 @router.get("/{tenant_id}/users", response_model=TenantUsersResponse)

@@ -5,6 +5,7 @@ export type TenantResponse = {
   name: string;
   slug: string;
   domain: string | null;
+  site_suffix: string | null;
   is_active: boolean;
 };
 
@@ -33,8 +34,9 @@ export type CreateTenantPayload = {
   user_full_name?: string;
 };
 
-export type UpdateTenantDomainPayload = {
-  domain: string | null;
+export type UpdateTenantPayload = {
+  domain?: string | null;
+  site_suffix?: string | null;
 };
 
 export type AssignUserPayload = {
@@ -67,7 +69,7 @@ export function createTenant(payload: CreateTenantPayload) {
   });
 }
 
-export function updateTenantDomain(tenantId: string, payload: UpdateTenantDomainPayload) {
+export function updateTenant(tenantId: string, payload: UpdateTenantPayload) {
   return apiRequest<TenantResponse>(`/api/v1/plugins/tenant/tenants/${tenantId}`, {
     method: "PUT",
     body: JSON.stringify(payload),

@@ -14,6 +14,13 @@ class DomainItem(BaseModel):
     owner: Literal["hosting", "domains"]
     editable: bool = False
     conflict: bool = False
+    outside_tenant: bool = False
+
+
+class DomainCheckResponse(BaseModel):
+    available: bool
+    reason: str | None = None
+    suffix: str | None = None
 
 
 class SiteOption(BaseModel):

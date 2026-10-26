@@ -20,6 +20,7 @@ from plugins.domains.backend.schemas import (
     CertificateResponse,
     CreateDomainRequest,
     CreateDomainsResponse,
+    DomainCheckResponse,
     DomainsResponse,
 )
 from plugins.domains.backend.service import DomainsService
@@ -58,8 +59,19 @@ def list_domains(
     items, sites = service.list_domains(
         tenant_context.current_tenant_id,
         can_manage=tenant_context.has_permission("domains.domains.manage"),
+        include_outside=tenant_context.is_platform,
     )
     return DomainsResponse(items=items, sites=sites)
+
+
+@router.get("/check", response_model=DomainCheckResponse)
+def check_domain(
+    domain: str,
+    tenant_context: TenantContext = Depends(get_current_tenant_context),
+    _current_user: User = Depends(require_permission("domains.domains.read")),
+    service: DomainsService = Depends(_get_service),
+) -> DomainCheckResponse:
+    return service.check_domain(tenant_context, domain)
 
 
 @router.post("", response_model=CreateDomainsResponse, status_code=201)
@@ -111,4 +123,8 @@ def get_certificate(
     _current_user: User = Depends(require_permission("domains.domains.read")),
     service: DomainsService = Depends(_get_service),
 ) -> CertificateResponse:
-    return service.certificate(tenant_context.current_tenant_id, domain)
+    return service.certificate(
+        tenant_context.current_tenant_id,
+        domain,
+        include_outside=tenant_context.is_platform,
+    )

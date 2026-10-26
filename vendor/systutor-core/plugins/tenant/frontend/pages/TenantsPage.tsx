@@ -10,7 +10,7 @@ import {
   listTenantUsers,
   reassignUserFromTenant,
   tenantKeys,
-  updateTenantDomain,
+  updateTenant,
   type TenantResponse,
   type TenantUserResponse,
 } from "../api";
@@ -33,6 +33,7 @@ export default function TenantsPage() {
 
   const [selectedTenant, setSelectedTenant] = useState<TenantResponse | null>(null);
   const [editDomain, setEditDomain] = useState("");
+  const [editSiteSuffix, setEditSiteSuffix] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
 
   const [showUsers, setShowUsers] = useState<TenantResponse | null>(null);
@@ -70,13 +71,13 @@ export default function TenantsPage() {
   });
 
   const updateDomainMutation = useMutation({
-    mutationFn: ({ tenantId, domain }: { tenantId: string; domain: string | null }) =>
-      updateTenantDomain(tenantId, { domain }),
+    mutationFn: ({ tenantId, domain, site_suffix }: { tenantId: string; domain: string | null; site_suffix: string | null }) =>
+      updateTenant(tenantId, { domain, site_suffix }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: tenantKeys.tenants });
       setSelectedTenant(null);
       setEditError(null);
-      toast.success("Dominio actualizado");
+      toast.success("Tenant actualizado");
     },
     onError: (e: Error) => setEditError(e.message),
   });
@@ -130,7 +131,11 @@ export default function TenantsPage() {
     e.preventDefault();
     setEditError(null);
     if (!selectedTenant) return;
-    updateDomainMutation.mutate({ tenantId: selectedTenant.id, domain: editDomain || null });
+    updateDomainMutation.mutate({
+      tenantId: selectedTenant.id,
+      domain: editDomain || null,
+      site_suffix: editSiteSuffix || null,
+    });
   }
 
   function handleCreateUser(e: FormEvent<HTMLFormElement>) {
@@ -211,6 +216,7 @@ export default function TenantsPage() {
               <th className="pb-2 pr-4">Nombre</th>
               <th className="pb-2 pr-4">Slug</th>
               <th className="pb-2 pr-4">Dominio</th>
+              <th className="pb-2 pr-4">Sufijo de sitios</th>
               <th className="pb-2 pr-4">Estado</th>
               <th className="pb-2">Acciones</th>
             </tr>
@@ -221,6 +227,7 @@ export default function TenantsPage() {
                 <td className="py-2 pr-4 text-foreground">{t.name}</td>
                 <td className="py-2 pr-4 font-mono text-xs text-muted-foreground">{t.slug}</td>
                 <td className="py-2 pr-4 text-foreground">{t.domain ?? "—"}</td>
+                <td className="py-2 pr-4 font-mono text-xs text-muted-foreground">{t.site_suffix ?? "—"}</td>
                 <td className="py-2 pr-4">
                   <span className={`inline-block rounded px-1.5 py-0.5 text-xs ${t.is_active ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
                     {t.is_active ? "Activo" : "Inactivo"}
@@ -231,9 +238,9 @@ export default function TenantsPage() {
                     <Button
                       size="sm"
                       variant="secondary"
-                      onClick={() => { setSelectedTenant(t); setEditDomain(t.domain ?? ""); setEditError(null); }}
+                      onClick={() => { setSelectedTenant(t); setEditDomain(t.domain ?? ""); setEditSiteSuffix(t.site_suffix ?? ""); setEditError(null); }}
                     >
-                      Dominio
+                      Dominio y sufijo
                     </Button>
                     <Button
                       size="sm"
@@ -247,17 +254,22 @@ export default function TenantsPage() {
               </tr>
             ))}
             {tenants.length === 0 && (
-              <tr><td colSpan={5} className="py-4 text-center text-muted-foreground">No hay tenants</td></tr>
+              <tr><td colSpan={6} className="py-4 text-center text-muted-foreground">No hay tenants</td></tr>
             )}
           </tbody>
         </table>
       </div>
 
-      <Dialog open={Boolean(selectedTenant)} title="Editar dominio" description={selectedTenant?.name} onClose={() => setSelectedTenant(null)}>
+      <Dialog open={Boolean(selectedTenant)} title="Editar dominio y sufijo" description={selectedTenant?.name} onClose={() => setSelectedTenant(null)}>
         <form className="space-y-3" onSubmit={handleEditDomain}>
           <label className="block space-y-1 text-sm text-foreground">
             <span>Dominio (DMS)</span>
             <Input type="text" value={editDomain} onChange={(e) => { setEditDomain(e.target.value); setEditError(null); }} placeholder="empresa.com" autoFocus />
+          </label>
+          <label className="block space-y-1 text-sm text-foreground">
+            <span>Sufijo de sitios</span>
+            <Input type="text" value={editSiteSuffix} onChange={(e) => { setEditSiteSuffix(e.target.value); setEditError(null); }} placeholder="empresa.com" />
+            <span className="text-xs text-muted-foreground">Los sitios solo podrán usar dominios dentro de este sufijo. Vacío = sin sufijo.</span>
           </label>
           {editError && <Alert title="Error">{editError}</Alert>}
           <div className="flex justify-end gap-2">

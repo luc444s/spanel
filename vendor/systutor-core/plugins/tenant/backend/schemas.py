@@ -14,6 +14,7 @@ class CreateTenantRequest(BaseModel):
 
 class UpdateTenantDomainRequest(BaseModel):
     domain: str | None = None
+    site_suffix: str | None = None
 
 
 class TenantResponse(BaseModel):
@@ -21,6 +22,7 @@ class TenantResponse(BaseModel):
     name: str
     slug: str
     domain: str | None
+    site_suffix: str | None = None
     is_active: bool
 
 

@@ -5,6 +5,11 @@ import re
 from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session
 
+from systutor.contracts.site_namespace import (
+    default_suffix_from_domain,
+    normalize_site_suffix,
+    site_suffixes_overlap,
+)
 from systutor.core.errors import AppError
 from systutor.kernel.auth.models import User
 from systutor.kernel.auth.security import hash_password
@@ -12,7 +17,11 @@ from systutor.kernel.permissions.models import Role
 from systutor.kernel.permissions.service import assign_role_to_user, sync_tenant_admin_role
 from systutor.kernel.tenants.models import Tenant
 
+from plugins.tenant.backend.models import TenantSiteSettings
+
 TENANT_ADMIN_ROLE = "tenant_admin"
+
+_UNSET = object()
 
 
 class TenantNotFoundError(ValueError):
@@ -70,6 +79,83 @@ def normalize_tenant_domain(value: str | None) -> str | None:
     return text
 
 
+def normalize_tenant_site_suffix(value: str | None) -> str | None:
+    """Normaliza el sufijo de sitios y traduce el error puro a `AppError`."""
+    try:
+        return normalize_site_suffix(value)
+    except ValueError as exc:
+        raise AppError(
+            str(exc),
+            status_code=422,
+            code="tenant_site_suffix_invalid",
+        ) from exc
+
+
+def get_tenant_site_settings(db: Session, tenant_id: str) -> TenantSiteSettings | None:
+    stmt: Select[tuple[TenantSiteSettings]] = select(TenantSiteSettings).where(
+        TenantSiteSettings.tenant_id == tenant_id
+    )
+    return db.scalar(stmt)
+
+
+def get_site_suffix_for_tenant(db: Session, tenant_id: str) -> str | None:
+    settings = get_tenant_site_settings(db, tenant_id)
+    return settings.site_suffix if settings is not None else None
+
+
+def _get_or_create_site_settings(db: Session, tenant_id: str) -> TenantSiteSettings:
+    settings = get_tenant_site_settings(db, tenant_id)
+    if settings is None:
+        settings = TenantSiteSettings(tenant_id=tenant_id, site_suffix=None)
+        db.add(settings)
+        db.flush()
+    return settings
+
+
+def ensure_site_suffix_available(
+    db: Session,
+    *,
+    suffix: str | None,
+    exclude_tenant_id: str | None = None,
+) -> None:
+    """409 cuando otro tenant tiene un sufijo igual o solapado.
+
+    El índice único solo cubre igualdad; el solapamiento jerárquico
+    (`spanel` vs `spanel.site`) se decide aquí, antes de escribir.
+    """
+    if not suffix:
+        return
+    stmt = select(TenantSiteSettings, Tenant).join(
+        Tenant, Tenant.id == TenantSiteSettings.tenant_id
+    )
+    if exclude_tenant_id is not None:
+        stmt = stmt.where(TenantSiteSettings.tenant_id != exclude_tenant_id)
+    for other_settings, other_tenant in db.execute(stmt).all():
+        other_suffix = other_settings.site_suffix
+        if not other_suffix:
+            continue
+        if site_suffixes_overlap(suffix, other_suffix):
+            raise AppError(
+                f"El sufijo {suffix} se solapa con el del tenant "
+                f"{other_tenant.name} ({other_tenant.slug})",
+                status_code=409,
+                code="tenant_site_suffix_conflict",
+            )
+
+
+def set_site_suffix(db: Session, *, tenant_id: str, site_suffix: str | None) -> None:
+    normalized = normalize_tenant_site_suffix(site_suffix)
+    ensure_site_suffix_available(
+        db,
+        suffix=normalized,
+        exclude_tenant_id=tenant_id,
+    )
+    settings = _get_or_create_site_settings(db, tenant_id)
+    settings.site_suffix = normalized
+    db.add(settings)
+    db.flush()
+
+
 def ensure_domain_available(
     db: Session,
     *,
@@ -104,6 +190,12 @@ def create_tenant(db: Session, *, name: str, slug: str, domain: str | None = Non
     ensure_domain_available(db, domain=normalized)
     tenant = Tenant(name=name, slug=slug, domain=normalized)
     db.add(tenant)
+    db.flush()
+    # Postcondición 3: todo tenant nace con su fila de settings. El sufijo
+    # inicial se deriva del dominio de correo, pero vive en otra tabla.
+    suffix = default_suffix_from_domain(normalized)
+    ensure_site_suffix_available(db, suffix=suffix, exclude_tenant_id=tenant.id)
+    db.add(TenantSiteSettings(tenant_id=tenant.id, site_suffix=suffix))
     db.flush()
     # A.SPEC 0012: the tenant plugin is no longer the source of truth for
     # tenant_admin. The core sync grants exactly what installed plugins
@@ -142,6 +234,47 @@ def update_tenant_domain(db: Session, *, tenant: Tenant, domain: str | None) -> 
     ensure_domain_available(db, domain=normalized, exclude_tenant_id=tenant.id)
     tenant.domain = normalized
     db.add(tenant)
+    db.flush()
+    return tenant
+
+
+def update_tenant(
+    db: Session,
+    *,
+    tenant: Tenant,
+    domain: str | None | object = _UNSET,
+    site_suffix: str | None | object = _UNSET,
+) -> Tenant:
+    """Actualiza solo los campos enviados, sin pisar el otro.
+
+    La validación se completa antes de mutar el tenant: un conflicto de sufijo
+    no deja el dominio de correo a medio escribir.
+    """
+    normalized_domain: str | None | object = _UNSET
+    normalized_suffix: str | None | object = _UNSET
+
+    if domain is not _UNSET:
+        normalized_domain = normalize_tenant_domain(domain)  # type: ignore[arg-type]
+        ensure_domain_available(
+            db,
+            domain=normalized_domain,  # type: ignore[arg-type]
+            exclude_tenant_id=tenant.id,
+        )
+    if site_suffix is not _UNSET:
+        normalized_suffix = normalize_tenant_site_suffix(site_suffix)  # type: ignore[arg-type]
+        ensure_site_suffix_available(
+            db,
+            suffix=normalized_suffix,  # type: ignore[arg-type]
+            exclude_tenant_id=tenant.id,
+        )
+
+    if normalized_domain is not _UNSET:
+        tenant.domain = normalized_domain  # type: ignore[assignment]
+        db.add(tenant)
+    if normalized_suffix is not _UNSET:
+        settings = _get_or_create_site_settings(db, tenant.id)
+        settings.site_suffix = normalized_suffix  # type: ignore[assignment]
+        db.add(settings)
     db.flush()
     return tenant
 

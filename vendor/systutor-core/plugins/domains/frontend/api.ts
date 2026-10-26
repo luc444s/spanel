@@ -9,6 +9,13 @@ export type DomainItem = {
   owner: DomainOwner;
   editable: boolean;
   conflict: boolean;
+  outside_tenant: boolean;
+};
+
+export type DomainCheckResponse = {
+  available: boolean;
+  reason: string | null;
+  suffix: string | null;
 };
 
 export type SiteOption = {
@@ -55,6 +62,12 @@ export function createDomain(payload: CreateDomainPayload) {
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+export function checkDomain(domain: string) {
+  return apiRequest<DomainCheckResponse>(
+    `${BASE}/check?domain=${encodeURIComponent(domain)}`
+  );
 }
 
 export function removeDomain(domain: string) {

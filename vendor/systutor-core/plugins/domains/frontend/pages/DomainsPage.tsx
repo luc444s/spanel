@@ -192,6 +192,15 @@ export default function DomainsPage() {
                   <tr key={item.domain} className="border-t border-border">
                     <td className="px-3 py-2 font-medium text-foreground">
                       {item.domain}
+                      {item.outside_tenant && (
+                        <span
+                          className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs
+                            text-amber-800"
+                          title="Fuera del sufijo de sitios del tenant"
+                        >
+                          Fuera del tenant
+                        </span>
+                      )}
                       {extraConflict && (
                         <span
                           className="ml-2 rounded bg-red-100 px-1.5 py-0.5 text-xs
