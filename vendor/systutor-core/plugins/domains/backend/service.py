@@ -12,16 +12,6 @@ from io import StringIO
 from fastapi import FastAPI
 from sqlalchemy.orm import Session
 
-from systutor.contracts.domain_ownership import (
-    is_primary_domain,
-    list_sites,
-    resolve_site,
-)
-from systutor.contracts.site_namespace import domain_in_suffix, get_site_suffix
-from systutor.core.errors import AppError, NotFoundError
-from systutor.kernel.audit.service import record_audit
-from systutor.kernel.tenants.context import TenantContext
-
 from plugins.domains.backend.proxy import (
     EXIT_VALIDATION,
     ProxyError,
@@ -37,6 +27,15 @@ from plugins.domains.backend.schemas import (
     SiteOption,
 )
 from plugins.domains.backend.settings import get_domains_settings
+from systutor.contracts.domain_ownership import (
+    is_primary_domain,
+    list_sites,
+    resolve_site,
+)
+from systutor.contracts.site_namespace import domain_in_suffix, get_site_suffix
+from systutor.core.errors import AppError, NotFoundError
+from systutor.kernel.audit.service import record_audit
+from systutor.kernel.tenants.context import TenantContext
 
 
 class DomainsService:
@@ -135,12 +134,16 @@ class DomainsService:
             if not domain or domain in seen:
                 continue
             seen.add(domain)
+            # A static site's primary is published by the domains publisher in
+            # its own managed YAML: same container, same Host, one writer. Only
+            # a YAML owned by a DIFFERENT container is a real second owner.
+            extra = extras_by_domain.get(domain)
             row = item(
                 domain,
                 site=site,
                 owner="hosting",
                 editable=False,
-                conflict=domain in extras_by_domain,
+                conflict=extra is not None and extra.container != site.container,
             )
             if row is not None:
                 items.append(row)
@@ -335,6 +338,13 @@ class DomainsService:
         sites = self._visible_sites(tenant_id)
         if claim.container not in sites:
             raise NotFoundError("Dominio desconocido")
+        site = sites[claim.container]
+        if (site.primary_domain or "").strip().lower() == needle:
+            raise AppError(
+                f"{needle} es el dominio primario de {claim.container} y lo publica Hosting",
+                status_code=409,
+                code="domains.primary_owned",
+            )
 
         operations = self._ready()
         try:

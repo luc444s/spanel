@@ -120,11 +120,25 @@ def test_list_merges_primary_and_extra(setup):
 
 def test_list_marks_conflict_when_primary_is_also_extra(setup):
     service, ops, _ = setup
-    ops.extras.append(ManagedDomain("a.spanel", "spanel-a-wp", "internal", "spanel-a.yml"))
+    ops.extras.append(ManagedDomain("a.spanel", "spanel-b-wp", "internal", "spanel-b.yml"))
     items, _ = service.list_domains("t1", can_manage=True)
     primary = next(item for item in items if item.domain == "a.spanel")
     assert primary.owner == "hosting"
     assert primary.conflict is True
+    assert len([item for item in items if item.domain == "a.spanel"]) == 1
+
+
+def test_primary_published_by_its_own_container_is_not_conflict(setup):
+    """A static site's primary lives in its own managed YAML: one writer."""
+    service, ops, _ = setup
+    ops.extras.append(
+        ManagedDomain("a.spanel", "spanel-a-wp", "internal", "spanel-a-web.yml")
+    )
+    items, _ = service.list_domains("t1", can_manage=True)
+    primary = next(item for item in items if item.domain == "a.spanel")
+    assert primary.owner == "hosting"
+    assert primary.conflict is False
+    assert primary.editable is False
     assert len([item for item in items if item.domain == "a.spanel"]) == 1
 
 
@@ -183,9 +197,20 @@ def test_remove_extra_works(setup):
 
 def test_remove_conflict_removes_only_the_extra(setup):
     service, ops, _ = setup
-    ops.extras.append(ManagedDomain("a.spanel", "spanel-a-wp", "internal", "spanel-a.yml"))
+    ops.extras.append(ManagedDomain("a.spanel", "spanel-b-wp", "internal", "spanel-b.yml"))
     service.remove(ctx(), "a.spanel")
     assert ops.removed == ["a.spanel"]
+
+
+def test_remove_primary_published_by_own_container_is_rejected(setup):
+    service, ops, _ = setup
+    ops.extras.append(
+        ManagedDomain("a.spanel", "spanel-a-wp", "internal", "spanel-a-web.yml")
+    )
+    with pytest.raises(AppError) as exc:
+        service.remove(ctx(), "a.spanel")
+    assert exc.value.code == "domains.primary_owned"
+    assert ops.removed == []
 
 
 def test_remove_unknown_is_404(setup):
