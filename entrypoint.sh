@@ -75,7 +75,12 @@ try:
     req = urllib.request.Request(f'{base}/api/v1/core/plugins', headers={'Authorization': f'Bearer {token}'})
     plugins = json.loads(urllib.request.urlopen(req).read())
     for p in plugins:
-        if p['state'] == 'validated' and not p['is_enabled']:
+        # Un plugin recién descubierto queda en `disabled` con installed_at
+        # vacío después del boot. Uno que el admin deshabilitó a propósito ya
+        # tiene installed_at y no se vuelve a habilitar solo.
+        fresh = p.get('installed_at') is None
+        eligible = p['state'] in ('validated', 'disabled')
+        if eligible and fresh and not p['is_enabled']:
             req = urllib.request.Request(f'{base}/api/v1/core/plugins/{p[\"plugin_id\"]}/enable', method='POST', headers={'Authorization': f'Bearer {token}'})
             urllib.request.urlopen(req)
             print(f'Enabled: {p[\"plugin_id\"]}')
