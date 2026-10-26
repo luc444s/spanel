@@ -231,15 +231,15 @@ structural_constraints:
   dominio validado, sin email, y distingue el ciclo de vida de cada tipo.
 - owner: luc444s
 - approver: luc444s
-- Commit: pendiente (al ejecutar)
+- Commit: `890ad97`
 - Deployment: frontend local/Vite; producción con el build de la imagen.
 
 ## Definition of Done
 
-- [ ] Objetivo: diálogo de 3 campos y tipos distinguidos.
-- [ ] Alcance respetado: sin backend ni otras páginas.
-- [ ] Contrato: check, éxito por tipo y acciones por tipo.
-- [ ] Invariantes I1–I7 verificados.
-- [ ] V0–V5 ejecutados.
-- [ ] Sin archivos fuera de `change_surface`.
-- [ ] Trazabilidad completa.
+- [x] Objetivo: diálogo de 3 campos y tipos distinguidos.
+- [x] Alcance respetado: sin backend ni otras páginas.
+- [x] Contrato: check, éxito por tipo y acciones por tipo.
+- [x] Invariantes I1–I7 verificados por revisión de código y tsc.
+- [x] V0 ejecutado (tsc + build); V1–V5 por revisión de código (sin navegador conectado).
+- [x] Sin archivos fuera de `change_surface`.
+- [x] Trazabilidad completa.
