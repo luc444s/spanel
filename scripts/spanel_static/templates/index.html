@@ -1,0 +1,76 @@
+<!doctype html>
+<!-- spanel-static: v1 · contenido de prueba editable -->
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Sitio estático de prueba servido por nginx y publicado por Traefik.">
+  <title>Página de Lucas · SPanel static</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="glow" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <a class="brand" href="/">
+      <span class="brand-dot"></span>
+      <span>SPanel <strong>static</strong></span>
+    </a>
+    <span class="badge">nginx · Traefik · HTTPS</span>
+  </header>
+
+  <main class="wrap">
+    <section class="hero">
+      <p class="kicker">Sitio estático de prueba</p>
+      <h1>Página de <span class="accent">Lucas</span></h1>
+      <p class="lead">
+        HTML, CSS y JavaScript servidos desde un contenedor <code>nginx:alpine</code>,
+        con un volumen propio y un certificado emitido por la CA del laboratorio.
+      </p>
+      <div class="actions">
+        <button id="counter" class="button" type="button">
+          Probar JavaScript <span class="count" id="count">0</span>
+        </button>
+        <a class="button ghost" href="https://spanel.systutor.com" target="_blank" rel="noreferrer">
+          Ir al panel
+        </a>
+      </div>
+    </section>
+
+    <section class="grid" aria-label="Detalles técnicos">
+      <article class="card">
+        <h2>Contenedor</h2>
+        <p id="host">—</p>
+        <p class="muted">Volumen <code>spanel-&lt;slug&gt;-web</code> montado en la raíz web.</p>
+      </article>
+      <article class="card">
+        <h2>Routing</h2>
+        <p>Traefik + file provider</p>
+        <p class="muted">El puerto 80 del contenedor se publica como HTTPS en el proxy.</p>
+      </article>
+      <article class="card">
+        <h2>Contenido</h2>
+        <p>3 archivos base</p>
+        <p class="muted"><code>index.html</code>, <code>styles.css</code> y <code>app.js</code>.</p>
+      </article>
+    </section>
+
+    <section class="card note">
+      <h2>Cómo se verifica</h2>
+      <pre><code>curl --cacert scripts/traefik-lab/ca/root_ca.crt \
+  https://paginadelucas.spanel/</code></pre>
+      <p class="muted">
+        El certificado es real y lo emite la CA local. Un navegador lo acepta
+        después de confiar en <code>root_ca.crt</code>.
+      </p>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span>Servido por <strong>SPanel static</strong></span>
+    <span id="year">2026</span>
+  </footer>
+
+  <script src="/app.js" defer></script>
+</body>
+</html>
