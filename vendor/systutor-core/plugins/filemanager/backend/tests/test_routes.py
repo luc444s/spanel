@@ -241,3 +241,29 @@ def test_revoked_permission_and_provider_can_supply_a_different_root(tmp_path, m
         assert seen == [("different-container", "/srv/custom")]
     finally:
         engine.dispose()
+
+
+def test_static_sites_use_the_volume_runtime(tmp_path) -> None:
+    app, engine, _token, own_id, _ = _app(tmp_path / "static.sqlite")
+    with app.state.session_factory.begin() as db:
+        wordpress = db.get(HostingSite, own_id)
+        assert wordpress is not None
+        static = HostingSite(
+            tenant_id=wordpress.tenant_id,
+            container_name="spanel-demo-web",
+            domain="demo.spanel",
+            kind="static",
+        )
+        db.add(static)
+        db.flush()
+        static_id = static.id
+        tenant_id = wordpress.tenant_id
+
+    with app.state.session_factory() as db:
+        target = resolve_hosting_files(
+            db, tenant_id, static_id, False, ("hosting.sites.read",)
+        )
+        assert target is not None
+        assert target.runtime == "volume"
+        assert target.root == "/usr/share/nginx/html"
+    engine.dispose()

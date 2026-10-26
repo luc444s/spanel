@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Literal
 
 from fastapi import FastAPI
 from sqlalchemy.orm import Session
@@ -14,6 +15,10 @@ class FileTarget:
     container: str
     root: str
     resource_id: str
+    # `php` means the container itself has PHP and can run the filemanager
+    # script. `volume` means it does not (a static nginx site): the driver
+    # mounts this container's volumes in a disposable helper image instead.
+    runtime: Literal["php", "volume"] = "php"
 
 
 FileTargetResolver = Callable[[Session, str, str, bool, tuple[str, ...]], FileTarget | None]

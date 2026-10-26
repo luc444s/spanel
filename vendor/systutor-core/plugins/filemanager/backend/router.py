@@ -124,6 +124,7 @@ def docker_environment() -> dict[str, str]:
             "SPANEL_DOCKER_SSH_STRICT_HOST_KEY",
             "SPANEL_DOCKER_SSH_PASSWORD",
             "MAIL_SERVER_PASSWORD",
+            "SPANEL_FILEMANAGER_HELPER_IMAGE",
         )
     }
 

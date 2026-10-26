@@ -43,6 +43,7 @@ def resolve_hosting_files(
         site.container_name,
         files_root_for(site.kind, get_hosting_settings().files_root),
         site.id,
+        runtime="php" if site.kind == "wordpress" else "volume",
     )
 
 

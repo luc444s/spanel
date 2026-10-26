@@ -20,15 +20,31 @@ TRANSFER_LIMIT = 50 * 1024 * 1024
 EDIT_LIMIT = 1024 * 1024
 
 
+def _docker_command(target: FileTarget, env: dict[str, str], encoded: str) -> str:
+    # All user-supplied fields are encoded into a single quoted argv element.
+    if target.runtime == "volume":
+        # Static sites run nginx:alpine, with no PHP and no www-data user. Use
+        # the already-required wp-cli image (PHP + ZipArchive) as a disposable
+        # helper that mounts the target's volumes, so the fixed script is the
+        # same for both kinds of site.
+        helper = env.get("SPANEL_FILEMANAGER_HELPER_IMAGE", "").strip() or "wordpress:cli"
+        return (
+            f"docker run --rm -i --network none --user 0 "
+            f"--volumes-from {shlex.quote(target.container)} "
+            f"--entrypoint php {shlex.quote(helper)} -r "
+            f"{shlex.quote(SCRIPT)} {shlex.quote(encoded)}"
+        )
+    return (
+        f"docker exec -i -u www-data {shlex.quote(target.container)} php -r "
+        f"{shlex.quote(SCRIPT)} {shlex.quote(encoded)}"
+    )
+
+
 def _command(target: FileTarget, op: str, env: dict[str, str], **arguments: object) -> list[str]:
     encoded = base64.b64encode(
         json.dumps({"root": target.root, "op": op, "limit": TRANSFER_LIMIT, **arguments}).encode()
     ).decode()
-    # All user-supplied fields are encoded into a single quoted argv element.
-    command = (
-        f"docker exec -i -u www-data {shlex.quote(target.container)} php -r "
-        f"{shlex.quote(SCRIPT)} {shlex.quote(encoded)}"
-    )
+    command = _docker_command(target, env, encoded)
     if env.get("SPANEL_DOCKER_TRANSPORT", "ssh") == "local":
         return ["sh", "-c", command]
     return [
