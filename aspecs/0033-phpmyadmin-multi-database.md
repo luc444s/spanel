@@ -344,20 +344,20 @@ structural_constraints:
   sitio, sin migrar datos ni exponer bases.
 - owner: luc444s
 - approver: luc444s
-- Commit:
+- Commit: `f102784`
 - Deployment: crear `spanel-db`, recrear `spanel-phpmyadmin` con el script,
   activar las dos variables y reconstruir la app.
 
 ## Definition of Done
 
-- [ ] Objetivo satisfied
-- [ ] Scope respected
-- [ ] Contract satisfied
-- [ ] Independent falsable truth exists now
-- [ ] Invariants preserved
-- [ ] Verification passed
-- [ ] Rollback / compensation is honest
-- [ ] Composition checks passed when applicable
-- [ ] No unrelated changes
-- [ ] Structural constraints respected
-- [ ] Traceability established
+- [x] Objetivo satisfied
+- [x] Scope respected
+- [x] Contract satisfied
+- [x] Independent falsable truth exists now
+- [x] Invariants preserved
+- [x] Verification passed
+- [x] Rollback / compensation is honest
+- [x] Composition checks passed when applicable
+- [x] No unrelated changes
+- [x] Structural constraints respected
+- [x] Traceability established
