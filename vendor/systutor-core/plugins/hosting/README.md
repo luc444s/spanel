@@ -138,6 +138,18 @@ outside WordPress is supported, including a custom port such as
 environment path. The user list and the password reset use the same two
 sources.
 
+### Adopted sites with a network alias (A.SPEC 0034)
+
+A `docker compose` site can declare `WORDPRESS_DB_HOST=db`, where `db` is an
+alias on the compose network rather than a container name. The panel first
+tries `docker inspect <host>`; only when that fails does it read the WordPress
+container's own `NetworkSettings.Networks`, list the containers attached to
+those networks and match the declared host against their `Aliases`. Only a
+single match is accepted: no match or two matches leave the original host in
+place so the existing controlled error path still fires. The raw host is still
+what WordPress receives; the resolved container name is used only for
+`docker inspect`, `docker exec`, SQL and the phpMyAdmin server.
+
 The container name is resolved from the owned row and then used with the proven
 Docker/WordPress core from A.SPEC 0012 (`discovery`, `database`, `passwords`,
 `reset`). A container that no longer exists is listed as `missing`; the users

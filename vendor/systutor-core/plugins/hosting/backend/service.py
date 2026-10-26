@@ -35,6 +35,7 @@ from .config import ENV_WHITELIST, RawAdapter, site_dir
 from .database import (
     filas_de_usuarios,
     prefijo_de_tablas,
+    resolver_alias_de_contenedor,
     roles_desde_capacidades,
     usuarios_con_rol,
 )
@@ -196,9 +197,14 @@ class HostingService:
     def _database_binding_for(
         self, site: HostingSite, info: dict
     ) -> tuple[str, str, str, str, str]:
-        """Environment first; `wp-config.php` only when the environment fails."""
+        """Environment first; `wp-config.php` only when the environment fails.
+
+        When the declared host is not a Docker container, its network alias is
+        resolved inside the site's own networks. The raw host is returned
+        untouched for WordPress; only the inspected container changes.
+        """
         try:
-            return database_binding(info)
+            crudo, host, database, user, password = database_binding(info)
         except AppError:
             wp_config = read_wp_config(
                 self._env,
@@ -207,7 +213,14 @@ class HostingService:
             )
             if wp_config is None:
                 raise
-            return database_binding(info, wp_config=wp_config)
+            crudo, host, database, user, password = database_binding(
+                info, wp_config=wp_config
+            )
+        if self._inspect(host) is None:
+            resuelto = resolver_alias_de_contenedor(self._env, info, host)
+            if resuelto is not None:
+                host = resuelto
+        return crudo, host, database, user, password
 
     def _managed_site(self, site: HostingSite) -> dict:
         info, managed = self._require_site(site)

@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import re
+import shlex
 
 from .transport import Fallo, pedir
 
@@ -179,6 +180,115 @@ def red_de(info: dict, db: str) -> str:
             "el contenedor de WordPress no esta en ninguna red, no se puede llegar a la base"
         )
     return redes[0]
+
+
+def _redes_del_sitio(info: dict) -> list[str]:
+    """Only the networks the WordPress container is actually attached to."""
+    redes = info.get("NetworkSettings", {}).get("Networks") or {}
+    return list(redes.keys()) if isinstance(redes, dict) else []
+
+
+def _aliases_de_una_red(datos) -> list[str]:
+    """`Aliases` from an inspect network entry, tolerating its two shapes."""
+    if isinstance(datos, dict):
+        aliases = datos.get("Aliases") or []
+    elif isinstance(datos, list):
+        aliases = datos
+    else:
+        aliases = []
+    return [str(alias).strip() for alias in aliases if str(alias).strip()]
+
+
+def alias_contenedor(
+    host: str,
+    candidatos: list[dict],
+    *,
+    redes_del_sitio: set[str] | None = None,
+) -> str | None:
+    """The one container that declares `host` as an alias on the site networks.
+
+    `candidatos` is pure data: each item is
+    `{"name": <container>, "networks": {<network>: {"Aliases": [...]}}}`.
+    A missing match and an ambiguous match both return `None`: the caller keeps
+    the original host so the existing controlled error still fires.
+    """
+    host = host.strip()
+    if not host:
+        return None
+    encontrados: set[str] = set()
+    for candidato in candidatos:
+        if not isinstance(candidato, dict):
+            continue
+        nombre = str(candidato.get("name") or "").strip()
+        redes = candidato.get("networks")
+        if not nombre or not isinstance(redes, dict):
+            continue
+        for red, datos in redes.items():
+            if redes_del_sitio is not None and red not in redes_del_sitio:
+                continue
+            if host in _aliases_de_una_red(datos):
+                encontrados.add(nombre)
+                break
+    return next(iter(encontrados)) if len(encontrados) == 1 else None
+
+
+def _contenedores_de_la_red(env: dict[str, str], red: str) -> list[str]:
+    """Container names attached to one network, from `docker network inspect`."""
+    try:
+        salida = pedir(
+            env,
+            f"docker network inspect --format '{{{{json .Containers}}}}' {shlex.quote(red)}",
+        )
+        datos = json.loads(salida)
+    except (Fallo, json.JSONDecodeError):
+        return []
+    if not isinstance(datos, dict):
+        return []
+    nombres: list[str] = []
+    for entrada in datos.values():
+        if not isinstance(entrada, dict):
+            continue
+        nombre = str(entrada.get("Name") or "").strip()
+        if nombre and nombre not in nombres:
+            nombres.append(nombre)
+    return nombres
+
+
+def _redes_de_un_contenedor(env: dict[str, str], contenedor: str) -> dict:
+    """The container's own `NetworkSettings.Networks`, aliases included."""
+    try:
+        salida = pedir(
+            env,
+            "docker inspect --format '{{json .NetworkSettings.Networks}}' "
+            f"{shlex.quote(contenedor)}",
+        )
+        datos = json.loads(salida)
+    except (Fallo, json.JSONDecodeError):
+        return {}
+    return datos if isinstance(datos, dict) else {}
+
+
+def resolver_alias_de_contenedor(
+    env: dict[str, str], info: dict, host: str
+) -> str | None:
+    """Resolve `host` through the site's own networks, never a global scan.
+
+    It only runs after `docker inspect <host>` failed. The returned name is a
+    container the panel can inspect, exec into and connect to the phpMyAdmin
+    network; `None` means the old controlled error path stays in charge.
+    """
+    redes = _redes_del_sitio(info)
+    if not redes:
+        return None
+    candidatos: dict[str, dict] = {}
+    for red in redes:
+        for nombre in _contenedores_de_la_red(env, red):
+            if nombre not in candidatos:
+                candidatos[nombre] = {
+                    "name": nombre,
+                    "networks": _redes_de_un_contenedor(env, nombre),
+                }
+    return alias_contenedor(host, list(candidatos.values()), redes_del_sitio=set(redes))
 
 
 # ---------------------------------------------------------------------------
