@@ -1,6 +1,6 @@
 # Spanel
 
-Sistema de administración multi-tenant de correo electrónico y sitios WordPress sobre Docker. Permite gestionar cuentas de correo y sitios WordPress para múltiples dominios/tenants a través de una interfaz web moderna.
+Sistema de administración multi-tenant de correo electrónico, dominios web y sitios WordPress/estáticos sobre Docker. Permite gestionar cuentas de correo, sitios web y dominios para múltiples tenants a través de una interfaz web moderna.
 
 ## Características Principales
 
@@ -10,7 +10,9 @@ Sistema de administración multi-tenant de correo electrónico y sitios WordPres
 - **RBAC**: Sistema de permisos por rol (superadmin, admin, usuario)
 - **UI Moderna**: Frontend con React, Tailwind CSS y shadcn/ui
 - **Plugin System**: Arquitectura modular basada en plugins
-- **Hosting WordPress**: sitios, usuarios, configuración, ciclo de vida y adopción de sitios existentes
+- **Hosting WordPress y estático**: creación por tipo, usuarios, configuración, ciclo de vida y adopción de sitios existentes
+- **Dominios y proxy**: dominios primarios y extra publicados por Traefik, con estado de certificado
+- **Gestor de archivos**: explorador binario con ZIP para sitios WordPress y estáticos
 - **Acceso a base de datos**: credencial propia del sitio y apertura de phpMyAdmin, sin exponerlo a Internet
 - **Auditoría**: Registro de eventos para trazabilidad
 
@@ -124,11 +126,13 @@ npm run dev
 | `SPANEL_DOCKER_SSH_HOST` | Host Docker para el plugin de hosting | - |
 | `SPANEL_DOCKER_SSH_USER` | Usuario SSH del host Docker | - |
 | `SPANEL_HOSTING_SITES_DIR` | Directorio estable por sitio en el host Docker | `/opt/spanel/sites` |
+| `SPANEL_HOSTING_STATIC_IMAGE` | Imagen de los sitios estáticos | `nginx:alpine` |
 | `SPANEL_PHPMYADMIN_URL` | URL legada incluida en la respuesta de credenciales (la UI ya no la usa) | - |
 | `SPANEL_PHPMYADMIN_INTERNAL_URL` | URL interna de phpMyAdmin, accesible desde el contenedor de la app en una red Docker compartida | `http://spanel-phpmyadmin:8080` |
 | `SPANEL_PHPMYADMIN_SESSION_TTL` | Duración de la sesión de la pestaña (segundos, máximo 3600) | `1500` |
 | `SPANEL_PHPMYADMIN_TIMEOUT` | Timeout HTTP al servicio interno (segundos) | `15` |
-| `SPANEL_HOSTING_FILES_ROOT` | Raíz interna autorizada para el gestor de archivos de sitios | `/var/www/html` |
+| `SPANEL_HOSTING_FILES_ROOT` | Raíz interna autorizada para el gestor de archivos de sitios WordPress | `/var/www/html` |
+| `SPANEL_FILEMANAGER_HELPER_IMAGE` | Imagen con PHP + ZipArchive usada para el gestor de archivos de sitios estáticos | `wordpress:cli` |
 
 ### Configuración del Servidor de Correo
 
@@ -186,14 +190,16 @@ Gestión de tenants (solo superadmin).
 
 ### Plugin de Hosting (`hosting`)
 
-Gestiona sitios WordPress que viven en contenedores Docker en un host remoto
-(SSH) o local. La propiedad es una fila de `hosting_sites`, no una etiqueta de
-Docker: otro tenant ve 404, igual que si el sitio no existiera.
+Gestiona sitios WordPress y sitios estáticos que viven en contenedores Docker en
+un host remoto (SSH) o local. La propiedad es una fila de `hosting_sites`, no una
+etiqueta de Docker: otro tenant ve 404, igual que si el sitio no existiera.
 
 **Endpoints** (todos con `TenantContext` y guard de propiedad):
 
 - `GET /api/v1/plugins/hosting/sites` — `hosting.sites.read`
-- `POST /api/v1/plugins/hosting/sites` — `hosting.sites.create`
+- `POST /api/v1/plugins/hosting/sites` — `hosting.sites.create`; acepta
+  `{"kind": "wordpress"|"static", "name": "...", "domain": "..."}`. WordPress
+  devuelve la contraseña de admin una sola vez; un estático devuelve `null`.
 - `POST /api/v1/plugins/hosting/sites/{id}/{start|stop|restart}` — `hosting.sites.manage`
 - `GET /api/v1/plugins/hosting/sites/{id}/logs` — `hosting.sites.read`
 - `GET|PATCH /api/v1/plugins/hosting/sites/{id}/config` — `hosting.sites.read` / `manage`
@@ -202,6 +208,12 @@ Docker: otro tenant ve 404, igual que si el sitio no existiera.
 - `POST /api/v1/plugins/hosting/sites/{id}/users/{wp_user_id}/password` — `hosting.users.password`
 - `POST /api/v1/plugins/hosting/sites/{id}/database` — `hosting.sites.manage`
 - `DELETE /api/v1/plugins/hosting/sites/{id}` — `hosting.sites.delete` (plataforma)
+
+Un sitio `static` aprovisiona `spanel-<slug>-web` y un volumen propio con
+`nginx:alpine`, `index.html`, `styles.css` y `app.js`. No crea base de datos,
+usuarios WordPress ni contraseña. Las rutas de configuración, base de datos,
+usuarios, salts y phpMyAdmin responden `409 hosting_site_wrong_kind` sobre un
+estático; ciclo de vida, logs, borrado y gestor de archivos sirven para ambos.
 
 Sitios existentes se adoptan con un CLI de operador, nunca por HTTP:
 
@@ -257,18 +269,58 @@ en el entorno de la app. En despliegues con Docker local usá
 
 Habilitá el plugin `filemanager` y asigná `filemanager.files.read` (explorar y
 descargar) o `filemanager.files.manage` (subir, editar, crear, renombrar,
-borrar, comprimir y extraer). El detalle de un sitio WordPress en marcha muestra
-**Gestor de archivos**. El plugin y Hosting comprueban en cada operación el
-usuario, tenant, permisos y propiedad del sitio; el navegador solo envía rutas
-relativas. La raíz de WordPress es configurable con
-`SPANEL_HOSTING_FILES_ROOT` (por defecto `/var/www/html`) y nunca se elige desde
-el cliente. Las subidas por botón o arrastrando, las descargas, ZIP y el editor
+borrar, comprimir y extraer). El detalle de un sitio en marcha muestra
+**Gestor de archivos**, tanto para WordPress como para estáticos. El plugin y
+Hosting comprueban en cada operación el usuario, tenant, permisos y propiedad
+del sitio; el navegador solo envía rutas relativas. La raíz de WordPress es
+configurable con `SPANEL_HOSTING_FILES_ROOT` (por defecto `/var/www/html`); la
+de un estático es siempre `/usr/share/nginx/html`. Ninguna se elige desde el
+cliente. Las subidas por botón o arrastrando, las descargas, ZIP y el editor
 mínimo usan un canal binario local/SSH hacia el contenedor. El editor rechaza
 cambios concurrentes y no abre binarios. Los ZIP se validan contra rutas
 absolutas, `..`, enlaces y límites de tamaño antes de extraer.
 
 Los contenedores WordPress deben incluir la extensión PHP `zip` (la imagen
-oficial la trae). No se modifican permisos de MariaDB ni otros contenedores.
+oficial la trae). Los sitios estáticos usan `nginx:alpine`, que no tiene PHP:
+para ellos el mismo script fijo se ejecuta en un contenedor desechable
+`wordpress:cli` que monta el volumen del sitio con `--volumes-from`. La imagen
+se puede cambiar con `SPANEL_FILEMANAGER_HELPER_IMAGE`. Conviene predescargarla
+en el host Docker para que la primera operación no espere un pull:
+
+```bash
+docker pull wordpress:cli
+```
+
+El helper corre como root dentro de un contenedor efímero y sin red, con acceso
+solo a los volúmenes del sitio. No se modifican permisos de MariaDB ni otros
+contenedores.
+
+### Plugin de Dominios (`domains`)
+
+Administra los **dominios extra** de un sitio (los que viven en el file provider
+de Traefik) y muestra los primarios en solo lectura. El dominio primario lo
+escribe Hosting; el extra lo escribe este plugin; el dominio de correo pertenece
+a Tenant/Mail. Un Host nunca tiene dos dueños y el backend rechaza cruzar ese
+límite.
+
+**Endpoints:**
+
+- `GET /api/v1/plugins/domains` — `domains.domains.read`
+- `POST /api/v1/plugins/domains` — `domains.domains.manage`; recibe
+  `{site_id, domain, www}`
+- `GET /api/v1/plugins/domains/check?domain=...` — `domains.domains.read`
+- `GET /api/v1/plugins/domains/{domain}/certificate` — `domains.domains.read`
+- `DELETE /api/v1/plugins/domains/{domain}` — `domains.domains.manage`
+
+El transporte hacia Traefik es `auto` (`SSH`, Docker o directorio local) y se
+configura con `SPANEL_PROXY_*`. Si ningún transporte es viable, las operaciones
+responden `503 domains.proxy_unavailable` en vez de escribir a ciegas. El CLI de
+operador sigue disponible:
+
+```bash
+python3 scripts/proxy_domain.py doctor
+python3 scripts/proxy_domain.py list
+```
 
 ## Desarrollo
 
@@ -286,9 +338,9 @@ spanel/
 ├── scripts/                    # CLIs de operador (adopción, phpMyAdmin, reset)
 ├── vendor/
 │   └── systutor-core/          # Core del framework
-│       ├── src/systutor/       # SDK / kernel
+│       ├── src/systutor/       # SDK / kernel / contratos
 │       ├── app/                # FastAPI app
-│       └── plugins/            # mail, tenant, hosting (backend + frontend)
+│       └── plugins/            # mail, tenant, hosting, domains, filemanager
 ├── docker-compose.yml
 ├── Dockerfile
 └── entrypoint.sh
@@ -319,12 +371,19 @@ python3 scripts/hosting_adopt.py --container spanel-demowp-wp --tenant demo --dr
 ### Testing
 
 ```bash
-# Backend (desde vendor/systutor-core)
-python -m pytest plugins/mail/ -v
-python -m pytest plugins/tenant/ -v
+# Backend de plugins (desde la raíz del repo)
+PYTHONPATH=vendor/systutor-core:vendor/systutor-core/src \
+  .venv/bin/python -m pytest vendor/systutor-core/plugins/mail/backend/tests -q
+
+PYTHONPATH=vendor/systutor-core:vendor/systutor-core/src \
+  .venv/bin/python -m pytest \
+    vendor/systutor-core/plugins/hosting/backend/tests \
+    vendor/systutor-core/plugins/domains/backend/tests \
+    vendor/systutor-core/plugins/filemanager/backend/tests -q
 
 # Frontend (desde apps/web)
-npm run test
+node node_modules/typescript/bin/tsc --noEmit
+node node_modules/vite/bin/vite.js build
 ```
 
 ### Construir para Producción
