@@ -131,6 +131,8 @@ npm run dev
 | `SPANEL_PHPMYADMIN_INTERNAL_URL` | URL interna de phpMyAdmin, accesible desde el contenedor de la app en una red Docker compartida | `http://spanel-phpmyadmin:8080` |
 | `SPANEL_PHPMYADMIN_SESSION_TTL` | Duración de la sesión de la pestaña (segundos, máximo 3600) | `1500` |
 | `SPANEL_PHPMYADMIN_TIMEOUT` | Timeout HTTP al servicio interno (segundos) | `15` |
+| `SPANEL_PHPMYADMIN_ARBITRARY` | `true` envía `pma_servername` en el login (hub multi-base) | `false` |
+| `SPANEL_PHPMYADMIN_DB_NETWORK` | Red interna que comparten phpMyAdmin y los MariaDB; vacío = desactivado | - |
 | `SPANEL_HOSTING_FILES_ROOT` | Raíz interna autorizada para el gestor de archivos de sitios WordPress | `/var/www/html` |
 | `SPANEL_FILEMANAGER_HELPER_IMAGE` | Imagen con PHP + ZipArchive usada para el gestor de archivos de sitios estáticos | `wordpress:cli` |
 
@@ -234,23 +236,26 @@ el usuario propio del sitio y emite un ticket de un solo uso.
 app (red interna Docker compartida con phpMyAdmin). Si no es accesible, el
 diálogo muestra un error controlado. No se publica un puerto ni un subdominio nuevo.
 
-phpMyAdmin se levanta aparte, apuntando a un MariaDB que ya existe:
+phpMyAdmin se levanta aparte como hub de todas las bases:
 
 ```bash
-./scripts/phpmyadmin_up.sh --host spanel-lab-mariadb --network mariadb_internal
-./scripts/phpmyadmin_up.sh --host spanel-lab-mariadb --dry-run
+./scripts/phpmyadmin_up.sh --host mariadb --network mariadb_internal
+./scripts/phpmyadmin_up.sh --host mariadb --network mariadb_internal --dry-run
 ./scripts/phpmyadmin_up.sh --down --yes
 ```
 
-El script solo agrega (o quita) el contenedor de phpMyAdmin: no crea bases, no
-toca volúmenes ni otros contenedores, y siempre publica en `127.0.0.1`. Cada
-usuario de base ve solo su propia base. Para entrar desde otra máquina usá un
-túnel SSH o `tailscale serve`; nunca publiques el puerto en `0.0.0.0` ni lo
-expongas con Traefik. `SPANEL_PHPMYADMIN_URL` se conserva solo por compatibilidad;
-el proxy usa `SPANEL_PHPMYADMIN_INTERNAL_URL` y la pestaña no contacta el puerto
-de phpMyAdmin directamente. Ambos contenedores deben compartir una red Docker
-existente. Si phpMyAdmin está en `mariadb_internal`, por ejemplo, la app puede
-sumarse con un `docker-compose.override.yml` de despliegue:
+El script crea la red interna `spanel-db` si falta, conecta el MariaDB heredado
+y phpMyAdmin a ella (sin quitarlos de sus redes) y monta
+`scripts/phpmyadmin_arbitrary.php`, que solo admite nombres de contenedor de
+base (`mariadb`, `spanel-*-db`, `*-db`). Nunca crea bases ni toca volúmenes, y
+siempre publica en `127.0.0.1`. Cada usuario de base ve solo su propia base. Para
+entrar desde otra máquina usá un túnel SSH o `tailscale serve`; nunca publiques
+el puerto en `0.0.0.0` ni lo expongas con Traefik. `SPANEL_PHPMYADMIN_URL` se
+conserva solo por compatibilidad; el proxy usa `SPANEL_PHPMYADMIN_INTERNAL_URL`
+y la pestaña no contacta el puerto de phpMyAdmin directamente. La app y
+phpMyAdmin deben compartir una red Docker existente (por ejemplo
+`mariadb_internal`): la app puede sumarse con un `docker-compose.override.yml`
+de despliegue:
 
 ```yaml
 services:
@@ -260,6 +265,19 @@ networks:
   mariadb_internal:
     external: true
 ```
+
+#### Un phpMyAdmin para todas las bases
+
+Con `SPANEL_PHPMYADMIN_ARBITRARY=true` y `SPANEL_PHPMYADMIN_DB_NETWORK=spanel-db`
+el login de cada sitio envía `pma_servername=<contenedor-db>` y, si ese
+contenedor aún no está en `spanel-db`, el panel lo conecta una sola vez antes de
+entrar (idempotente: si ya está, no ejecuta Docker). El provisioning de un sitio
+WordPress nuevo conecta su MariaDB a la misma red; si esa conexión falla, el
+alta falla y limpia contenedores y volúmenes como siempre. La auditoría
+`hosting.site.phpmyadmin_access` incluye `database`, `host` y, solo si hubo
+conexión, `network`; nunca la contraseña. Con cualquiera de las dos variables
+apagada o vacía, el login no envía `pma_servername` y no se ejecuta ningún
+`docker network connect`: el comportamiento es el anterior.
 
 Configurá `SPANEL_PHPMYADMIN_INTERNAL_URL=http://<nombre-del-contenedor>:8080`
 en el entorno de la app. En despliegues con Docker local usá

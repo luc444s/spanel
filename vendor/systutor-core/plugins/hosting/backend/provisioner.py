@@ -10,6 +10,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from .inspection import inspect_container
+from .network import connect_args, multi_database_enabled
 from .settings import HostingSettings, docker_env
 from .transport import (
     Fallo,
@@ -148,6 +149,15 @@ class Provisioner:
                 f"{names.db}:/var/lib/mysql",
                 self.settings.db_image,
             )
+            # The hub can only reach a brand-new database once it shares the
+            # configured internal network. A failure here is part of creation:
+            # the except path below removes the containers and volumes.
+            db_network = self.settings.phpmyadmin_db_network.strip()
+            if multi_database_enabled(self.settings.phpmyadmin_arbitrary, db_network):
+                try:
+                    self.command(*connect_args(db_network, names.db))
+                except ValueError as exc:
+                    raise Fallo(f"La red de bases de datos no es válida: {exc}") from exc
 
             def ready() -> None:
                 self.command(

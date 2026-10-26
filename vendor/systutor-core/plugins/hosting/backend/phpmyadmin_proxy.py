@@ -236,7 +236,12 @@ class PmaClient:
                 "phpMyAdmin no responde", status_code=502, code="hosting_phpmyadmin_login_failed"
             ) from exc
 
-    def login(self, username: str, password: str) -> dict[str, str]:
+    def login(self, username: str, password: str, server: str | None = None) -> dict[str, str]:
+        """Authenticate upstream; `server` selects the container when arbitrary.
+
+        `server` is omitted from the POST when it is `None`, so a fixed
+        `PMA_HOST` deployment sends exactly the body it always sent.
+        """
         try:
             conn, response = self.request("GET", "")
             initial = response.read(LIMIT + 1)
@@ -248,14 +253,17 @@ class PmaClient:
             session = re.search(rb'name=["\']set_session["\'][^>]*value=["\']([^"\']+)', initial)
             if not token or not session:
                 raise ValueError("login form missing")
-            data = urlencode(
-                {
-                    "token": token.group(1).decode("utf-8"),
-                    "set_session": session.group(1).decode("utf-8"),
-                    "pma_username": username,
-                    "pma_password": password,
-                }
-            ).encode()
+            fields = {
+                "token": token.group(1).decode("utf-8"),
+                "set_session": session.group(1).decode("utf-8"),
+                "pma_username": username,
+                "pma_password": password,
+            }
+            if server:
+                # phpMyAdmin resolves this against its own network; the panel
+                # only sends the name `database_binding` already validated.
+                fields["pma_servername"] = server
+            data = urlencode(fields).encode()
             conn, response = self.request(
                 "POST",
                 "index.php",

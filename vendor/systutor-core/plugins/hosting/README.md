@@ -100,6 +100,34 @@ cookie authorizes subsequent proxy requests. No database password appears in
 the tab URL, proxy cookie or session cache. `SPANEL_PHPMYADMIN_URL` remains
 only in the legacy database response and is no longer followed by the UI.
 
+### One phpMyAdmin for every database (A.SPEC 0033)
+
+With `SPANEL_PHPMYADMIN_ARBITRARY=true` and `SPANEL_PHPMYADMIN_DB_NETWORK` set,
+phpMyAdmin runs as a multi-server hub (`PMA_ARBITRARY=1` plus the
+`ArbitraryServerRegexp` in `scripts/phpmyadmin_arbitrary.php`). The login POST
+carries `pma_servername=<database container>`, the host already validated by
+`database_binding`. Before that POST the service reads
+`NetworkSettings.Networks` from the database's `docker inspect`; it runs
+`docker network connect <network> <container>` only when the interface is
+missing, so a second login is a no-op. The container's original networks are
+untouched. `network.py` owns that pure decision; `service.py` only performs the
+transport.
+
+Provisioning a WordPress site attaches its new MariaDB to the same network right
+after the container is created. If that attach fails, creation follows the
+existing failure path and removes its own containers and volumes. The audit row
+`hosting.site.phpmyadmin_access` includes `database`, `host` and, only when a
+connection happened, `network`; never the password.
+
+Either setting alone (or both off/empty) preserves the previous behavior
+byte-for-byte: fixed `PMA_HOST`, no `pma_servername`, no Docker network command.
+The deployment script creates `spanel-db` as `--internal`, keeps binding
+`127.0.0.1`, and attaches both the legacy MariaDB and phpMyAdmin to it:
+
+```bash
+./scripts/phpmyadmin_up.sh --host mariadb --network mariadb_internal
+```
+
 The four values are read from the container environment (`WORDPRESS_DB_*`)
 first. When the environment does not declare them, the plugin reads
 `/var/www/html/wp-config.php` as **text** and extracts the literal `DB_HOST`,
@@ -149,6 +177,10 @@ The Docker transport comes from the core `.env`:
   server-only upstream on a network shared by phpMyAdmin and the app.
 - `SPANEL_PHPMYADMIN_SESSION_TTL` (1500 s, capped at 3600),
   `SPANEL_PHPMYADMIN_TIMEOUT` (15 s).
+- `SPANEL_PHPMYADMIN_ARBITRARY` (`false`): with `true`, the login sends
+  `pma_servername`; ignored unless `SPANEL_PHPMYADMIN_DB_NETWORK` is set.
+- `SPANEL_PHPMYADMIN_DB_NETWORK` (empty): internal Docker network shared by
+  phpMyAdmin and every site MariaDB. Empty disables the multi-database mode.
 - `SPANEL_HOSTING_FILES_ROOT` (`/var/www/html`): server-side root that Hosting
   supplies to the `filemanager` plugin for an owned running site. The client
   never chooses the container or an absolute path.

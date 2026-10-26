@@ -42,6 +42,12 @@ from .database_binding import database_binding
 from .database_binding import database_credentials as _database_credentials
 from .inspection import candidato_de, inspect_container
 from .models import HostingSite
+from .network import (
+    connect_args,
+    multi_database_enabled,
+    needs_connection,
+    validate_network_name,
+)
 from .passwords import hash_de_password
 from .phpmyadmin_proxy import PmaClient
 from .provisioner import Provisioner, SiteNames, slug_for
@@ -171,7 +177,8 @@ class HostingService:
     def _require_wordpress(self, site: HostingSite) -> None:
         if site.kind == "static":
             raise AppError(
-                f"El sitio {site.container_name} es estático; esta operación es solo para WordPress",
+                f"El sitio {site.container_name} es estático; "
+                "esta operación es solo para WordPress",
                 status_code=409,
                 code="hosting_site_wrong_kind",
             )
@@ -638,6 +645,45 @@ class HostingService:
             url=phpmyadmin_url(self._settings.phpmyadmin_url, host),
         )
 
+    def _ensure_database_network(self, db_info: dict, host: str, network: str) -> bool:
+        """Attach the site's database container to the hub network, once.
+
+        `needs_connection` reads the already fetched `docker inspect`; when the
+        interface exists nothing runs. On a real connection the caller audits
+        `network`, never a credential.
+        """
+        if not needs_connection(db_info, network):
+            return False
+        try:
+            argv = connect_args(network, host)
+        except ValueError as exc:
+            raise AppError(
+                "La red de bases de datos no es válida",
+                status_code=409,
+                code="hosting_phpmyadmin_unavailable",
+            ) from exc
+        command = "docker " + " ".join(shlex.quote(part) for part in argv)
+        try:
+            result = run(
+                build_docker_argv(command, env=self._env),
+                env=self._env,
+                timeout=self._settings.command_timeout,
+            )
+        except (OSError, ValueError) as exc:
+            raise AppError(
+                "No se pudo preparar la red de la base de datos",
+                status_code=409,
+                code="hosting_phpmyadmin_unavailable",
+            ) from exc
+        if result.returncode:
+            # The command names containers and a network, never a password.
+            raise AppError(
+                f"No se pudo conectar {host} a la red {network}",
+                status_code=409,
+                code="hosting_phpmyadmin_unavailable",
+            )
+        return True
+
     def phpmyadmin_login_credentials(
         self, site: HostingSite, tenant_context: TenantContext, client: PmaClient
     ) -> dict[str, str]:
@@ -663,10 +709,26 @@ class HostingService:
                 status_code=409,
                 code="hosting_phpmyadmin_unavailable",
             )
-        cookies = client.login(user, password)
-        self._audit_site(
-            site, tenant_context, "phpmyadmin_access", {"database": database, "host": host}
-        )
+        network = self._settings.phpmyadmin_db_network.strip()
+        arbitrary = self._settings.phpmyadmin_arbitrary
+        multi = multi_database_enabled(arbitrary, network)
+        connected = False
+        if multi:
+            try:
+                validate_network_name(network)
+            except ValueError as exc:
+                raise AppError(
+                    "La red de bases de datos no es válida",
+                    status_code=409,
+                    code="hosting_phpmyadmin_unavailable",
+                ) from exc
+            connected = self._ensure_database_network(db_info, host, network)
+        # `None` keeps the old fixed-server POST byte-for-byte.
+        cookies = client.login(user, password, host if multi else None)
+        details = {"database": database, "host": host}
+        if connected:
+            details["network"] = network
+        self._audit_site(site, tenant_context, "phpmyadmin_access", details)
         return cookies
 
     def update_site_config(

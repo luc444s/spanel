@@ -68,6 +68,10 @@ class HostingSettings(BaseModel):
     phpmyadmin_internal_url: str = "http://spanel-phpmyadmin:8080"
     phpmyadmin_session_ttl: int = 1500
     phpmyadmin_timeout: int = 15
+    # A.SPEC 0033: both must be set for the multi-database hub. With either
+    # one off, phpMyAdmin keeps its fixed `PMA_HOST` and login sends no server.
+    phpmyadmin_arbitrary: bool = False
+    phpmyadmin_db_network: str = ""
     files_root: str = "/var/www/html"
 
 
@@ -77,6 +81,18 @@ def _int_env(name: str, default: int) -> int:
         return int(raw)
     except ValueError:
         return default
+
+
+def _bool_env(name: str, default: bool) -> bool:
+    """`0/1/no/off/false/true/yes` as a boolean; anything else keeps the default."""
+    raw = os.getenv(name, "").strip().lower()
+    if not raw:
+        return default
+    if raw in {"0", "no", "off", "false"}:
+        return False
+    if raw in {"1", "yes", "on", "true"}:
+        return True
+    return default
 
 
 def register_hosting_settings() -> HostingSettings:
@@ -111,6 +127,8 @@ def register_hosting_settings() -> HostingSettings:
         ).strip(),
         phpmyadmin_session_ttl=min(3600, max(1, _int_env("SPANEL_PHPMYADMIN_SESSION_TTL", 1500))),
         phpmyadmin_timeout=max(1, _int_env("SPANEL_PHPMYADMIN_TIMEOUT", 15)),
+        phpmyadmin_arbitrary=_bool_env("SPANEL_PHPMYADMIN_ARBITRARY", False),
+        phpmyadmin_db_network=os.getenv("SPANEL_PHPMYADMIN_DB_NETWORK", "").strip(),
         files_root=os.getenv("SPANEL_HOSTING_FILES_ROOT", "/var/www/html").strip(),
     )
     _hosting_settings = settings

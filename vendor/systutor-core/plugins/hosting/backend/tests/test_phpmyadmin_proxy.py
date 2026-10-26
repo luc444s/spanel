@@ -14,6 +14,8 @@ from systutor.core.errors import AppError
 
 
 class Upstream(BaseHTTPRequestHandler):
+    posts: list[dict[str, list[str]]] = []
+
     def log_message(self, format: str, *args: object) -> None:
         pass
 
@@ -61,6 +63,7 @@ class Upstream(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         body = self.rfile.read(int(self.headers["Content-Length"]))
+        type(self).posts.append(parse_qs(body.decode()))
         if self.path == "/index.php" and parse_qs(body.decode()).get("pma_password") == ["secret"]:
             self.send_response(302)
             self.send_header("Set-Cookie", "pma=valid; HttpOnly")
@@ -72,6 +75,7 @@ class Upstream(BaseHTTPRequestHandler):
 
 @pytest.fixture
 def client():
+    Upstream.posts = []
     server = ThreadingHTTPServer(("127.0.0.1", 0), Upstream)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -110,6 +114,19 @@ def test_server_side_login_and_proxy(client: PmaClient) -> None:
     assert b"framed through SPanel" in guard.body
     _, upstream = client.request("GET", "assets/a")
     assert upstream.read() == b"\x00\x01\x02"
+
+
+def test_login_with_a_server_sends_exactly_one_field(client: PmaClient) -> None:
+    cookies = client.login("wp_test", "secret", "spanel-x-db")
+    assert cookies == {"pma": "valid"}
+    posted = Upstream.posts[-1]
+    assert posted["pma_servername"] == ["spanel-x-db"]
+    assert posted["pma_username"] == ["wp_test"]
+
+
+def test_login_without_a_server_sends_no_server_field(client: PmaClient) -> None:
+    client.login("wp_test", "secret")
+    assert "pma_servername" not in Upstream.posts[-1]
 
 
 def test_ajax_navigation_scripts_are_served_unmodified(client: PmaClient) -> None:
