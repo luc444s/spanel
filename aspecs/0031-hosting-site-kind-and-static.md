@@ -343,18 +343,18 @@ structural_constraints:
   tipo y dominio del tenant, sin pedir email y con la ruta publicada.
 - owner: luc444s
 - approver: luc444s
-- Commit: pendiente (al ejecutar)
+- Commit: `6d2b01f`
 - Deployment: laboratorio primero; producción con la imagen nueva y el plugin
   `domains` habilitado para publicar por file provider.
 
 ## Definition of Done
 
-- [ ] Objetivo: API crea ambos tipos y el estático responde por HTTP.
-- [ ] Alcance respetado: sin UI, sin mail, sin proxy ajeno.
-- [ ] Contrato: kind, migración, provisioning, publisher y guards.
-- [ ] Invariantes I1–I10 probados.
-- [ ] V0–V6 ejecutados.
-- [ ] Rollback de migración ejecutado (up/down/up).
-- [ ] Sin archivos fuera de `change_surface`.
-- [ ] Nada >600 líneas; ideal <400.
-- [ ] Trazabilidad completa.
+- [x] Objetivo: API crea ambos tipos y el estático responde por HTTP.
+- [x] Alcance respetado: sin UI, sin mail, sin proxy ajeno.
+- [x] Contrato: kind, migración, provisioning, publisher y guards.
+- [x] Invariantes I1–I10 probados.
+- [x] V0–V6 ejecutados.
+- [x] Rollback de migración ejecutado (up/down/up).
+- [x] Sin archivos fuera de `change_surface`.
+- [x] Nada >600 líneas; ideal <400.
+- [x] Trazabilidad completa.
