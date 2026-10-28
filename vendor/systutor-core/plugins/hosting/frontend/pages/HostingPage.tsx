@@ -26,7 +26,6 @@ import { useAuthStore } from "../../../../../../apps/web/src/features/auth/store
 import { SiteCard, kindLabel, stateLabel } from "../components/SiteCard";
 import { SiteConfigDialog } from "../components/SiteConfigDialog";
 import { DatabaseDialog } from "../components/DatabaseDialog";
-import { CertificatesDialog } from "../components/CertificatesDialog";
 import { LogsDialog, UsersDialog } from "../components/SiteDataDialogs";
 
 type GeneratedPassword = {
@@ -91,10 +90,6 @@ export default function HostingPage() {
     permissions.includes("hosting.sites.delete");
   const canReadUsers = permissions.includes("hosting.users.read");
   const canReset = permissions.includes("hosting.users.password");
-  // Certificados TLS: los tenants solo leen; emitir exige manage, que no se
-  // concede a tenant_admin.
-  const canReadCertificates = permissions.includes("domains.certificates.read");
-  const canManageCertificates = permissions.includes("domains.certificates.manage");
   const [createOpen, setCreateOpen] = useState(false);
   const [kind, setKind] = useState<HostingSiteKind>("wordpress");
   const [name, setName] = useState("");
@@ -106,7 +101,6 @@ export default function HostingPage() {
   const [configTarget, setConfigTarget] = useState<HostingSite | null>(null);
   const [databaseAccess, setDatabaseAccess] = useState<HostingSiteDatabase | null>(null);
   const [detailSite, setDetailSite] = useState<HostingSite | null>(null);
-  const [certificatesSite, setCertificatesSite] = useState<HostingSite | null>(null);
   const [selectedSite, setSelectedSite] = useState<HostingSite | null>(null);
   const [operateTarget, setOperateTarget] = useState<{
     site: HostingSite;
@@ -206,7 +200,7 @@ export default function HostingPage() {
     onSuccess: async () => {
       setDeleteTarget(null); setConfirmation(""); setSelectedSite(null); setLogsTarget(null);
       setConfigTarget(null); setDetailSite(null); setOperateTarget(null);
-      setDatabaseAccess(null); setCertificatesSite(null);
+      setDatabaseAccess(null);
       await queryClient.invalidateQueries({ queryKey: hostingKeys.sites });
     },
     onError: (error: Error) => toast.error(error.message),
@@ -286,21 +280,7 @@ export default function HostingPage() {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {sites.map((site) => (
-            <SiteCard
-              key={site.id}
-              site={site}
-              onOpen={setDetailSite}
-              onOpenCertificates={
-                canReadCertificates
-                  ? (target) => {
-                      // El doble clic dispara antes dos `click`; se cierra el
-                      // detalle para que solo quede visible el modal TLS.
-                      setDetailSite(null);
-                      setCertificatesSite(target);
-                    }
-                  : undefined
-              }
-            />
+            <SiteCard key={site.id} site={site} onOpen={setDetailSite} />
           ))}
         </div>
       )}
@@ -339,11 +319,6 @@ export default function HostingPage() {
               {canReadUsers && !isStatic ? (
                 <Button variant="secondary" onClick={() => setSelectedSite(detail)}>
                   Ver usuarios
-                </Button>
-              ) : null}
-              {canReadCertificates ? (
-                <Button variant="secondary" onClick={() => setCertificatesSite(detail)}>
-                  Certificados TLS
                 </Button>
               ) : null}
               <Button variant="secondary" onClick={() => setLogsTarget(detail)}>
@@ -546,15 +521,6 @@ export default function HostingPage() {
       />
 
       <DatabaseDialog access={databaseAccess} onClose={() => setDatabaseAccess(null)} />
-
-      <CertificatesDialog
-        open={Boolean(certificatesSite) && canReadCertificates}
-        canManage={canManageCertificates}
-        highlightHostname={
-          certificatesSite?.domain ? `mail.${certificatesSite.domain}` : null
-        }
-        onClose={() => setCertificatesSite(null)}
-      />
 
       <Dialog
         open={Boolean(resetTarget)}

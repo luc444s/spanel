@@ -59,15 +59,30 @@ class CertificatesService:
     # ---- visibilidad -----------------------------------------------------
 
     def _tenant_domains(self, tenant_id: str) -> set[str]:
+        domains: set[str] = set()
         try:
             sites = list_sites(self._app, self._db, tenant_id)
         except Exception:  # noqa: BLE001 - un tenant sin proveedor no ve nada
-            return set()
-        return {
+            sites = []
+        domains.update(
             (site.primary_domain or "").strip().lower()
             for site in sites
             if (site.primary_domain or "").strip()
-        }
+        )
+        # Los dominios extra también pertenecen al tenant: si se gestionan en
+        # Dominios, su certificado mail.<dominio> debe ser visible allí. El
+        # proxy puede no estar disponible (p. ej. en tests); en ese caso se
+        # conserva la visibilidad por dominios primarios.
+        try:
+            from plugins.domains.backend.service import DomainsService
+
+            items, _sites = DomainsService(self._db, self._app).list_domains(
+                tenant_id, can_manage=False
+            )
+            domains.update(item.domain.strip().lower() for item in items)
+        except Exception:  # noqa: BLE001 - proxy ausente: solo primarios
+            pass
+        return domains
 
     def _inventory(self) -> Inventory:
         return self._load_inventory(self._config)

@@ -134,7 +134,91 @@ export type CertificateAlerts = {
 
 export type CertificateAdminAction = "verify" | "sync" | "install" | "rollback";
 
+// ---- Inventario del gestor TLS de correo (A.SPEC 0035) ------------------
+
+export type MailCertificate = {
+  hostname: string;
+  name: string;
+  scope: "global" | "tenant";
+  domain: string | null;
+  source: "certbot" | "static" | "step-ca";
+  deployment: "default" | "sni" | "none" | "failed";
+  status: "active" | "expiring" | "expired" | "missing" | "error";
+  sans: string[];
+  issuer: string | null;
+  subject: string | null;
+  serial: string | null;
+  fingerprint: string | null;
+  not_before: string | null;
+  not_after: string | null;
+  cert_path: string | null;
+  key_path: string | null;
+  last_checked_at: string | null;
+  last_issued_at: string | null;
+  last_error: string | null;
+};
+
+export type MailCertificatesResponse = {
+  items: MailCertificate[];
+  stale: boolean;
+  generated_at: string | null;
+  agent_last_seen: string | null;
+  error: string | null;
+};
+
+export type MailCertificateJob = {
+  job_id: string;
+  hostname: string;
+  state: "queued" | "running" | "succeeded" | "failed";
+  action: string | null;
+  requested_at: string | null;
+  updated_at: string | null;
+  message: string | null;
+  error: string | null;
+};
+
+export type MailCertificateRequestResponse = {
+  job_id: string;
+  hostname: string;
+  state: "queued";
+  poll_url: string;
+};
+
+export const certificateKeys = {
+  list: ["domains", "certificates"] as const,
+  job: (hostname: string, jobId: string) =>
+    ["domains", "certificates", hostname, "jobs", jobId] as const,
+};
+
 const CERTIFICATES_BASE = "/api/v1/plugins/domains/certificates";
+
+export function listMailCertificates() {
+  return apiRequest<MailCertificatesResponse>(CERTIFICATES_BASE);
+}
+
+export function requestMailCertificate(
+  hostname: string,
+  action: "ensure" | "force",
+  reason = "manual"
+) {
+  return apiRequest<MailCertificateRequestResponse>(
+    `${CERTIFICATES_BASE}/${encodeURIComponent(hostname)}/request`,
+    { method: "POST", body: JSON.stringify({ action, reason }) }
+  );
+}
+
+export function getMailCertificateJob(hostname: string, jobId: string) {
+  return apiRequest<MailCertificateJob>(
+    `${CERTIFICATES_BASE}/${encodeURIComponent(hostname)}/jobs/${encodeURIComponent(jobId)}`
+  );
+}
+
+export function refreshMailCertificates() {
+  return apiRequest<{ requested: boolean; request_id: string | null; state: "queued" }>(
+    `${CERTIFICATES_BASE}/refresh`,
+    { method: "POST", body: JSON.stringify({}) }
+  );
+}
 
 export const certificateHealthKeys = {
   health: ["domains", "certificates", "health"] as const,

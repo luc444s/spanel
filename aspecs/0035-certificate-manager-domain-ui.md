@@ -23,14 +23,14 @@ Hoy no hay ninguna superficie en el panel para eso:
   validación de solo lectura que se reutiliza aquí.
 - El plugin `domains` solo expone un `GET /{domain}/certificate` para el
   certificado web del proxy; no existe inventario de certificados de correo.
-- La página de Hosting no permite ver ni solicitar el certificado de correo de
+- La página de Dominios no permite ver ni solicitar el certificado de correo de
   un dominio.
 - No hay un componente privilegiado limitado que pueda leer certificados y
   ejecutar recargas autorizadas sin darle a la aplicación web acceso
   indiscriminado a Docker ni a claves privadas.
 
 El resultado esperado es que un administrador de infraestructura pueda abrir el
-modal **Certificados TLS** desde una fila de Hosting, ver el estado real de
+modal **Certificados TLS** desde la página de Dominios, ver el estado real de
 `mail.<dominio>` y pedir su emisión o regeneración. Los tenants solo consultan
 el estado de sus propios dominios.
 
@@ -82,7 +82,7 @@ Códigos de salida: `0` OK, `2` validación, `4` transporte/Docker, `5` CA,
   siendo el proveedor.
 - Solo el administrador de infraestructura puede solicitar emisión o cambios;
   los tenants solo leen sus propios dominios.
-- UI: doble clic en una fila de Hosting abre el modal “Certificados TLS”, con
+- UI: en Dominios, el botón “Certificados” de cada fila abre el modal “Certificados TLS”, con
   subtítulo “Spanel · Infraestructura de correo” y filas del tipo
   `mail.systutor.com — Certbot · SNI — Válido — Regenerar`.
 
@@ -128,8 +128,9 @@ Estado del repositorio: los cambios de la Fase 0 están en el árbol de trabajo,
 2. **API del gestor en el plugin `domains`.** Endpoints de lectura para el
    panel y un endpoint de solicitud de emisión limitado a administradores.
 
-3. **Modal “Certificados TLS” en Hosting.** Se abre con doble clic sobre una
-   fila de hosting (y con una acción accesible equivalente). Muestra el título
+3. **Modal “Certificados TLS” en Dominios.** Se abre con el botón “Certificados”
+   de cada fila de dominio (y con un botón “Certificados TLS” en la cabecera).
+   Muestra el título
    “Certificados TLS”, el subtítulo “Spanel · Infraestructura de correo” y una
    fila por certificado con hostname, fuente, tipo de despliegue, estado y
    botón de acción.
@@ -211,8 +212,9 @@ Entra:
 - Endpoints nuevos bajo `/api/v1/plugins/domains/certificates`.
 - Cambios mínimos en `domains/backend/router.py`, `schemas.py`, `service.py`,
   `register.py`, `plugin.json` y tests.
-- Modal nuevo `CertificatesDialog` en el frontend de Hosting, reutilizando el
-  `Dialog` existente; apertura por doble clic en `HostingPage`.
+- Modal nuevo `CertificatesDialog` en el frontend de Dominios, reutilizando el
+  `Dialog` existente; apertura desde el botón por fila de `DomainsPage` y desde
+  la cabecera. La gestión de certificados vive en Dominios, no en Hosting.
 - Componente nuevo `scripts/spanel_cert_agent/` y unidades systemd:
   - `spanel-cert-agent.path`
   - `spanel-cert-agent.service`
@@ -421,7 +423,8 @@ Modal `CertificatesDialog`:
 
 - Título: **Certificados TLS**.
 - Subtítulo: **Spanel · Infraestructura de correo**.
-- Se abre con doble clic en una fila de Hosting.
+- Se abre con el botón **Certificados** de la fila del dominio o con
+  **Certificados TLS** en la cabecera de Dominios.
 - Debe existir una acción accesible equivalente (botón o menú) para teclado y
   móvil.
 - Lista:
@@ -537,7 +540,7 @@ servicios (comparar mtimes y `docker inspect -f '{{.Id}}'`).
 
 ### V5 — UI
 
-- Doble clic en una fila de Hosting abre el modal.
+- El botón **Certificados** de una fila de Dominios abre el modal.
 - El modal muestra “Certificados TLS”, “Spanel · Infraestructura de correo” y
   la fila del hostname con fuente `Certbot · SNI`.
 - El botón `Regenerar` solo aparece para admin.
@@ -591,9 +594,6 @@ change_surface:
     - vendor/systutor-core/plugins/domains/events/domains.json
     - vendor/systutor-core/plugins/domains/backend/tests/**
     - vendor/systutor-core/plugins/domains/frontend/**
-    - vendor/systutor-core/plugins/hosting/frontend/pages/HostingPage.tsx
-    - vendor/systutor-core/plugins/hosting/frontend/components/CertificatesDialog.tsx   # nuevo
-    - vendor/systutor-core/plugins/hosting/frontend/api.ts
     - scripts/mail_cert.py                                          # solo extensión de la auditoría de Fase 0
     - scripts/tests/test_mail_cert.py
     - scripts/spanel_cert_agent/**
@@ -622,7 +622,7 @@ change_surface:
 blast_radius:
   direct:
     - inventario de certificados de correo
-    - modal de Hosting
+    - modal de Dominios
     - solicitudes de emisión
     - instalación SNI en DMS
   indirect:

@@ -9,22 +9,20 @@ import { toast } from "@systutor/shell/ui/toast";
 import { cn } from "@systutor/shell/ui/cn";
 
 import {
+  certificateHealthKeys,
   certificateKeys,
+  getMailCertificateAlerts,
+  getMailCertificateHealth,
   getMailCertificateJob,
   listMailCertificates,
   refreshMailCertificates,
   requestMailCertificate,
-  type MailCertificate,
-} from "../api";
-import {
-  certificateHealthKeys,
-  getMailCertificateAlerts,
-  getMailCertificateHealth,
   runMailCertificateAction,
   type CertificateAdminAction,
   type CertificateAlert,
   type CertificateHealthItem,
-} from "../../../domains/frontend/api";
+  type MailCertificate,
+} from "../api";
 
 type CertificatesDialogProps = {
   open: boolean;

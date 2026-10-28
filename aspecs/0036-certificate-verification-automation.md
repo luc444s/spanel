@@ -407,7 +407,8 @@ change_surface:
     - vendor/systutor-core/plugins/domains/backend/schemas.py
     - vendor/systutor-core/plugins/domains/backend/tests/**
     - vendor/systutor-core/plugins/domains/frontend/**
-    - vendor/systutor-core/plugins/hosting/frontend/components/CertificatesDialog.tsx
+    - vendor/systutor-core/plugins/domains/frontend/components/CertificatesDialog.tsx
+    - vendor/systutor-core/plugins/domains/frontend/pages/DomainsPage.tsx
     - docs/certificate-manager.md
   prohibited:
     - scripts/mail_cert.py
