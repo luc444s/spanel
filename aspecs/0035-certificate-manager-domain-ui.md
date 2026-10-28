@@ -427,6 +427,9 @@ Modal `CertificatesDialog` (nivel 1), abierto desde Dominios:
 - Se abre con **doble clic** en una fila de la tabla de Dominios o con el botón
   **Certificados TLS** de la cabecera (acción accesible para teclado y móvil).
 - La tabla de Dominios no lleva botón de certificados por fila.
+- El modal solo muestra certificados de los dominios listados en la página;
+  nunca certificados de otro tenant ni el `cf-mail` global. Abierto desde una
+  fila, muestra únicamente el certificado de `mail.<dominio>`.
 - Lista compacta, sin acciones por fila:
   - `mail.systutor.com` — `Certbot · SNI` — `Por vencer` — vence en N días.
   - `cf-mail` — `Global · Predeterminado` — `Válido`.

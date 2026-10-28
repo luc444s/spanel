@@ -380,6 +380,8 @@ export default function DomainsPage() {
       <CertificatesDialog
         open={certificatesOpen && canReadCertificates}
         canManage={canManageCertificates}
+        visibleDomains={items.map((item) => item.domain)}
+        onlyHostname={certificatesDomain ? `mail.${certificatesDomain}` : null}
         highlightHostname={
           certificatesDomain ? `mail.${certificatesDomain}` : null
         }

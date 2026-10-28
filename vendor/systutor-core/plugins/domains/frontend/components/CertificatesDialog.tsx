@@ -15,6 +15,10 @@ type CertificatesDialogProps = {
   open: boolean;
   canManage: boolean;
   highlightHostname?: string | null;
+  /** Dominios visibles en la página; filtra certificados de otros tenants. */
+  visibleDomains?: string[];
+  /** Si se abre desde una fila, muestra solo el certificado de ese dominio. */
+  onlyHostname?: string | null;
   onClose: () => void;
 };
 
@@ -22,15 +26,44 @@ export function CertificatesDialog({
   open,
   canManage,
   highlightHostname,
+  visibleDomains,
+  onlyHostname,
   onClose,
 }: CertificatesDialogProps) {
   const manager = useCertificateManager(open);
   const [selected, setSelected] = useState<string | null>(null);
 
   const data = manager.data;
+  const allowedDomains = new Set(
+    (visibleDomains ?? []).map((domain) => domain.trim().toLowerCase()).filter(Boolean)
+  );
+  const items = (data?.items ?? []).filter((cert) => {
+    if (onlyHostname) return cert.hostname === onlyHostname;
+    if (allowedDomains.size === 0) return true;
+    if (cert.scope === "global") return false;
+    return Boolean(cert.domain && allowedDomains.has(cert.domain.trim().toLowerCase()));
+  });
   const selectedCert = selected
-    ? data?.items.find((item) => item.hostname === selected) ?? null
+    ? items.find((item) => item.hostname === selected) ?? null
     : null;
+  const visibleHostnames = new Set(items.map((item) => item.hostname));
+  const visibleCritical = [...manager.alertsByHost.entries()].filter(
+    ([hostname, alerts]) =>
+      visibleHostnames.has(hostname) &&
+      alerts.some((alert) => alert.severity === "critical")
+  ).length;
+  const visibleWarning = [...manager.alertsByHost.entries()].filter(
+    ([hostname, alerts]) =>
+      visibleHostnames.has(hostname) &&
+      alerts.some((alert) => alert.severity === "warning")
+  ).length;
+  // El estado global del agente incluye certificados de otros tenants; en la
+  // vista de Dominios se deriva de los certificados visibles.
+  const agentState = manager.health
+    ? items.some((item) => manager.healthByHost.get(item.hostname)?.ok === false)
+      ? "degraded"
+      : "ok"
+    : undefined;
 
   function closeAll() {
     setSelected(null);
@@ -81,7 +114,7 @@ export function CertificatesDialog({
         <div className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-xs text-muted-foreground">
             <span>
-              Estado del agente: <strong>{agentStateLabel(manager.health?.agent_state)}</strong>
+              Estado del agente: <strong>{agentStateLabel(agentState)}</strong>
             </span>
             <span>
               Última verificación:{" "}
@@ -89,7 +122,7 @@ export function CertificatesDialog({
             </span>
             <span>
               {manager.health
-                ? `${manager.health.critical_count} críticas · ${manager.health.warning_count} avisos`
+                ? `${visibleCritical} críticas · ${visibleWarning} avisos`
                 : "Sin salud publicada"}
             </span>
           </div>
@@ -114,14 +147,16 @@ export function CertificatesDialog({
             <p className="text-sm text-muted-foreground">Leyendo certificados...</p>
           ) : null}
 
-          {!manager.listLoading && (data?.items.length ?? 0) === 0 ? (
+          {!manager.listLoading && items.length === 0 ? (
             <p className="rounded-md border border-border px-3 py-4 text-sm text-muted-foreground">
-              No hay certificados visibles para este tenant.
+              {onlyHostname
+                ? `No hay certificado para ${onlyHostname}.`
+                : "No hay certificados visibles para este tenant."}
             </p>
           ) : null}
 
           <div className="space-y-2">
-            {data?.items.map((cert) => (
+            {items.map((cert) => (
               <CertificateRow
                 key={cert.hostname}
                 cert={cert}
