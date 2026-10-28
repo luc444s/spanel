@@ -7,7 +7,7 @@ import { useAuthStore } from "./store";
 import { ApiError } from "@systutor/shell/api/client";
 import { Alert } from "@systutor/shell/ui/alert";
 import { Button } from "@systutor/shell/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@systutor/shell/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@systutor/shell/ui/card";
 import { Input } from "@systutor/shell/ui/input";
 import { GithubLink } from "../../shared/layout/GithubLink";
 
@@ -69,9 +69,6 @@ export function LoginPage() {
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>SPANEL</CardTitle>
-          <CardDescription>
-            Inicia sesion para acceder al shell del core y revisar el estado del sistema.
-          </CardDescription>
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={handleSubmit}>

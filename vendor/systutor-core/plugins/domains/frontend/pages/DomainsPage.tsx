@@ -146,9 +146,6 @@ export default function DomainsPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold text-foreground">Dominios</h1>
-          <p className="text-sm text-muted-foreground">
-            El dominio primario lo gestiona Hosting. Los extras se publican por el proxy.
-          </p>
         </div>
         {canManage && (
           <Button size="sm" onClick={openAdd} disabled={sites.length === 0}>
