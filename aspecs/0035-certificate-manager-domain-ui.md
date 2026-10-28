@@ -128,12 +128,13 @@ Estado del repositorio: los cambios de la Fase 0 están en el árbol de trabajo,
 2. **API del gestor en el plugin `domains`.** Endpoints de lectura para el
    panel y un endpoint de solicitud de emisión limitado a administradores.
 
-3. **Modal “Certificados TLS” en Dominios.** Se abre con el botón “Certificados”
-   de cada fila de dominio (y con un botón “Certificados TLS” en la cabecera).
-   Muestra el título
-   “Certificados TLS”, el subtítulo “Spanel · Infraestructura de correo” y una
-   fila por certificado con hostname, fuente, tipo de despliegue, estado y
-   botón de acción.
+3. **Modales “Certificados TLS” en Dominios.** El nivel 1 se abre con doble
+   clic en una fila de dominio (o con el botón “Certificados TLS” de la
+   cabecera) y lista hostname, fuente, despliegue, estado y vencimiento, sin
+   acciones por fila. El nivel 2 se abre con doble clic en un certificado y
+   contiene sus alertas y las acciones (`Verificar`, `Forzar`, `Regenerar`,
+   `Sincronizar`, `Revertir`). El subtítulo es “Spanel · Infraestructura de
+   correo”.
 
 4. **Solicitud de emisión por archivos locales + systemd.** El proceso web no
    ejecuta Certbot ni toca Docker. Escribe una solicitud pequeña y validada en
@@ -419,27 +420,34 @@ Frontend consulta el job y refresca el estado
 
 ### UI
 
-Modal `CertificatesDialog`:
+Modal `CertificatesDialog` (nivel 1), abierto desde Dominios:
 
 - Título: **Certificados TLS**.
 - Subtítulo: **Spanel · Infraestructura de correo**.
-- Se abre con el botón **Certificados** de la fila del dominio o con
-  **Certificados TLS** en la cabecera de Dominios.
-- Debe existir una acción accesible equivalente (botón o menú) para teclado y
-  móvil.
-- Lista:
-  - `mail.systutor.com` — `Certbot · SNI` — `Válido` — vence en N días —
-    `Regenerar`.
-  - `cf-mail` — `Global · Predeterminado` — `Válido` — sin botón de
-    regeneración en esta fase.
+- Se abre con **doble clic** en una fila de la tabla de Dominios o con el botón
+  **Certificados TLS** de la cabecera (acción accesible para teclado y móvil).
+- La tabla de Dominios no lleva botón de certificados por fila.
+- Lista compacta, sin acciones por fila:
+  - `mail.systutor.com` — `Certbot · SNI` — `Por vencer` — vence en N días.
+  - `cf-mail` — `Global · Predeterminado` — `Válido`.
 - Estados visuales: `Válido`, `Por vencer`, `Vencido`, `Sin certificado`,
-  `Pendiente`, `Error`.
-- El botón se deshabilita si:
+  `Pendiente`, `Error`. Una alerta crítica se indica con un punto, no con
+  botones.
+
+Modal anidado `CertificateDetailDialog` (nivel 2):
+
+- Se abre con **doble clic** en una fila de certificado del nivel 1 (o Enter).
+- Título: el hostname; subtítulo: fuente y despliegue.
+- Contiene las alertas del hostname (`Alerta crítica` o `Aviso`) y las acciones:
+  `Verificar`, `Forzar`, `Regenerar`, `Sincronizar`, `Revertir`.
+- Los botones se deshabilitan si:
   - el usuario no tiene `domains.certificates.manage`;
   - hay un job activo;
-  - el certificado es `cf-mail` y no está soportada su regeneración.
-- Confirmación antes de `force`, con advertencia de rate limit de Let's
-  Encrypt.
+  - el certificado es `cf-mail` y no está soportada su regeneración;
+  - hay una alerta crítica: solo se bloquea lo destructivo (`Forzar`,
+    `Sincronizar`, `Revertir`), no `Regenerar` ni `Verificar`.
+- Confirmación antes de `force`, en un tercer nivel, con advertencia de rate
+  limit de Let's Encrypt.
 - Si el agente está caído o el estado está viejo, mostrar “Estado no
   disponible” y no habilitar acciones destructivas.
 
@@ -540,11 +548,13 @@ servicios (comparar mtimes y `docker inspect -f '{{.Id}}'`).
 
 ### V5 — UI
 
-- El botón **Certificados** de una fila de Dominios abre el modal.
-- El modal muestra “Certificados TLS”, “Spanel · Infraestructura de correo” y
-  la fila del hostname con fuente `Certbot · SNI`.
+- Doble clic en una fila de Dominios abre el modal “Certificados TLS”.
+- La tabla de Dominios no tiene botón de certificados por fila.
+- Doble clic en una fila de certificado abre el modal anidado.
+- El modal anidado muestra las alertas del hostname y los botones
+  `Verificar`, `Forzar`, `Regenerar`, `Sincronizar` y `Revertir`.
 - El botón `Regenerar` solo aparece para admin.
-- Un job pendiente muestra `Pendiente` y deshabilita el botón.
+- Un job pendiente muestra `Pendiente` y deshabilita las acciones.
 - Un error del agente muestra un mensaje claro y no permite reintentar en
   bucle.
 

@@ -153,6 +153,7 @@ export default function DomainsPage() {
           <h1 className="text-lg font-semibold text-foreground">Dominios</h1>
           <p className="text-sm text-muted-foreground">
             El dominio primario lo gestiona Hosting. Los extras se publican por el proxy.
+            Doble clic en una fila para ver sus certificados TLS.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -208,7 +209,15 @@ export default function DomainsPage() {
               {items.map((item) => {
                 const extraConflict = item.conflict;
                 return (
-                  <tr key={item.domain} className="border-t border-border">
+                  <tr
+                    key={item.domain}
+                    className="cursor-pointer border-t border-border hover:bg-accent/30"
+                    title="Doble clic para ver los certificados TLS"
+                    onDoubleClick={() => {
+                      setCertificatesDomain(item.domain);
+                      setCertificatesOpen(true);
+                    }}
+                  >
                     <td className="px-3 py-2 font-medium text-foreground">
                       {item.domain}
                       {item.outside_tenant && (
@@ -261,21 +270,8 @@ export default function DomainsPage() {
                         )}
                       </td>
                     )}
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2" onDoubleClick={(event) => event.stopPropagation()}>
                       <div className="flex flex-wrap items-center justify-end gap-2">
-                        {canReadCertificates && (
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => {
-                              setCertificatesDomain(item.domain);
-                              setCertificatesOpen(true);
-                            }}
-                            title={`Estado TLS de mail.${item.domain}`}
-                          >
-                            Certificados
-                          </Button>
-                        )}
                         {item.owner === "domains" && canManage ? (
                           <Button
                             variant="secondary"
