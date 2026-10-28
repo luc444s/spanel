@@ -117,14 +117,19 @@ def _starttls(
 
 def _read_smtp_reply(raw: socket.socket) -> bytes:
     chunks: list[bytes] = []
+    buffer = b""
     while True:
-        line = raw.recv(4096)
-        if not line:
+        chunk = raw.recv(4096)
+        if not chunk:
             break
-        chunks.append(line)
-        # Una respuesta multilínea termina con "NNN " (espacio, no guion).
-        if len(line) >= 4 and line[3:4] == b" ":
-            break
+        chunks.append(chunk)
+        buffer += chunk
+        # Un recv puede traer varias líneas. La respuesta termina en la línea
+        # cuyo cuarto byte es un espacio ("250 "), no en la primera con guion.
+        while b"\r\n" in buffer:
+            line, buffer = buffer.split(b"\r\n", 1)
+            if len(line) >= 4 and line[3:4] == b" ":
+                return b"".join(chunks)
     return b"".join(chunks)
 
 

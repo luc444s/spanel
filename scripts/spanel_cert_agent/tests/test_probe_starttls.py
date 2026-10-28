@@ -23,3 +23,23 @@ def test_lee_respuesta_de_una_linea() -> None:
     socket = FakeSocket([b"250 mail.example\r\n"])
 
     assert _read_smtp_reply(socket) == b"250 mail.example\r\n"
+
+
+def test_lee_multilinea_en_un_solo_recv() -> None:
+    payload = (
+        b"250-mail.example\r\n"
+        b"250-PIPELINING\r\n"
+        b"250-STARTTLS\r\n"
+        b"250 CHUNKING\r\n"
+    )
+    socket = FakeSocket([payload])
+
+    assert _read_smtp_reply(socket) == payload
+
+
+def test_lee_multilinea_con_la_ultima_linea_fragmentada() -> None:
+    socket = FakeSocket([b"250-mail.example\r\n250-PIPELINING\r\n250 ", b"STARTTLS\r\n"])
+
+    assert _read_smtp_reply(socket) == (
+        b"250-mail.example\r\n250-PIPELINING\r\n250 STARTTLS\r\n"
+    )
