@@ -17,6 +17,7 @@ en vez de reconstruirlo perdiendo ese detalle.
 Comandos:
   python3 scripts/mail_cert.py status
   python3 scripts/mail_cert.py check
+  python3 scripts/mail_cert.py audit [--json]
   python3 scripts/mail_cert.py issue --dry-run
   python3 scripts/mail_cert.py issue --deliver mail --yes
   python3 scripts/mail_cert.py renew --all --yes
@@ -385,6 +386,20 @@ def cert_sans(path: Path) -> list[str]:
     )
 
 
+def _normalized_pem(text: str) -> str:
+    return "\n".join(line.rstrip() for line in text.strip().splitlines())
+
+
+def public_key_matches(leaf: Path, key: Path) -> bool:
+    """True si la clave privada corresponde a la clave pública del certificado."""
+    try:
+        cert_pub = openssl("x509", "-in", str(leaf), "-noout", "-pubkey")
+        key_pub = openssl("pkey", "-in", str(key), "-pubout")
+    except MailCertError:
+        return False
+    return _normalized_pem(cert_pub) == _normalized_pem(key_pub)
+
+
 def verify_chain(settings: Settings, leaf: Path) -> None:
     for needed in (settings.ca_root, settings.ca_intermediate):
         if not needed.exists():
@@ -513,6 +528,27 @@ def tls_check(settings: Settings, port: int) -> None:
         reason = next(
             (line.strip() for line in text.splitlines() if "Verify return code" in line),
             "sin handshake",
+        )
+        raise MailCertError(f"puerto {port}: {reason}", EXIT_VERIFY)
+
+
+def tls_check_identity(settings: Settings, port: int, hostname: str) -> None:
+    """Como `tls_check`, pero además exige que el certificado cubra `hostname`."""
+    args = [
+        "s_client", "-connect", f"{settings.host}:{port}",
+        "-servername", hostname,
+        "-CAfile", str(settings.ca_root),
+        "-verify_hostname", hostname,
+        "-verify_return_error",
+    ]
+    if port == 587:
+        args = ["s_client", "-starttls", "smtp"] + args[1:]
+    proc = subprocess.run(["openssl", *args], input=b"", capture_output=True)
+    text = (proc.stdout + proc.stderr).decode("utf-8", "replace")
+    if "Verify return code: 0 (ok)" not in text:
+        reason = next(
+            (line.strip() for line in text.splitlines() if "Verify return code" in line),
+            "sin handshake o identidad incorrecta",
         )
         raise MailCertError(f"puerto {port}: {reason}", EXIT_VERIFY)
 
@@ -780,6 +816,232 @@ def _shell_lines(argv: list[str]) -> list[str]:
 # --------------------------------------------------------------------------- #
 
 
+# --------------------------------------------------------------------------- #
+# Auditoría de solo lectura
+# --------------------------------------------------------------------------- #
+
+
+def audit_certificate(settings: Settings, directory: Path, container_info: dict | None) -> dict:
+    """Audita un certificado sin escribir ni recargar nada.
+
+    Comprueba archivos, metadatos, par clave/certificado, cadena, SAN, vigencia,
+    montaje, serial servido y TLS con identidad por puerto.
+    """
+    domain = directory.name
+    scoped = _scoped(settings, domain)
+    report: dict = {
+        "domain": domain,
+        "path": str(directory),
+        "files": {},
+        "meta": {},
+        "checks": {},
+        "issues": [],
+        "warnings": [],
+    }
+
+    def issue(message: str) -> None:
+        report["issues"].append(message)
+
+    def warn(message: str) -> None:
+        report["warnings"].append(message)
+
+    leaf = directory / "leaf.crt"
+    key = directory / "privkey.key"
+    chain = directory / "fullchain.crt"
+    meta_path = directory / "meta.json"
+
+    for name, path in (
+        ("leaf", leaf), ("privkey", key), ("fullchain", chain), ("meta", meta_path)
+    ):
+        report["files"][name] = path.exists()
+        if not path.exists():
+            issue(f"falta {name}: {path}")
+
+    meta: dict = {}
+    if meta_path.exists():
+        try:
+            meta = json.loads(meta_path.read_text())
+            report["meta"] = {
+                "serial": meta.get("serial"),
+                "not_after": meta.get("not_after"),
+                "sans": meta.get("sans", []),
+            }
+        except (OSError, json.JSONDecodeError) as exc:
+            issue(f"meta.json inválido: {exc}")
+
+    if leaf.exists():
+        try:
+            serial = cert_serial(leaf)
+            report["checks"]["serial"] = serial
+            if meta.get("serial") and serial != meta["serial"]:
+                issue("el serial del certificado no coincide con meta.json")
+        except (MailCertError, IndexError) as exc:
+            issue(f"no se pudo leer el serial: {exc}")
+
+        try:
+            sans = cert_sans(leaf)
+            report["checks"]["sans"] = sans
+            expected = sorted(meta.get("sans", []))
+            if expected and sans != expected:
+                issue("los SAN del certificado no coinciden con meta.json")
+        except MailCertError as exc:
+            issue(f"no se pudieron leer los SAN: {exc}")
+
+        try:
+            not_before, not_after = cert_dates(leaf)
+            total = (not_after - not_before).total_seconds()
+            left = (not_after - now_utc()).total_seconds()
+            days = left / 86400
+            pct = (left / total * 100) if total > 0 else 0
+            report["checks"]["not_after"] = not_after.isoformat(timespec="seconds")
+            report["checks"]["days_left"] = round(days, 1)
+            report["checks"]["life_percent"] = round(pct, 1)
+            if left <= 0:
+                issue("certificado vencido")
+            elif renew_needed(scoped, leaf):
+                issue(
+                    f"certificado por debajo del umbral de renovación "
+                    f"({days:.1f} días, {pct:.0f}%)"
+                )
+        except (MailCertError, IndexError, ValueError) as exc:
+            issue(f"no se pudieron leer las fechas: {exc}")
+
+        try:
+            verify_chain(scoped, leaf)
+            report["checks"]["chain"] = True
+        except MailCertError as exc:
+            report["checks"]["chain"] = False
+            issue(f"cadena inválida: {exc}")
+
+    if leaf.exists() and key.exists():
+        matches = public_key_matches(leaf, key)
+        report["checks"]["key_matches"] = matches
+        if not matches:
+            issue("la clave privada no corresponde al certificado")
+
+    if chain.exists() and meta.get("sha256_fullchain"):
+        digest = hashlib.sha256(chain.read_bytes()).hexdigest()
+        report["checks"]["sha256_fullchain"] = digest
+        if digest != meta["sha256_fullchain"]:
+            issue("fullchain.crt no coincide con meta.json")
+    if key.exists() and meta.get("sha256_privkey"):
+        digest = hashlib.sha256(key.read_bytes()).hexdigest()
+        if digest != meta["sha256_privkey"]:
+            issue("privkey.key no coincide con meta.json")
+
+    deployment = {
+        "mounted": False,
+        "ssl_type": None,
+        "presented_serial": None,
+    }
+    report["deployment"] = deployment
+
+    if container_info is None:
+        issue(f"no se pudo inspeccionar el contenedor '{scoped.container}'")
+    else:
+        state = delivered_state(scoped, container_info)
+        deployment["ssl_type"] = state["ssl_type"]
+        deployment["mounted"] = state["mount"] == str(directory)
+        if not deployment["mounted"]:
+            warn(f"no es el certificado montado en {scoped.source_dir}")
+        if state["ssl_type"] != "manual":
+            issue(f"SSL_TYPE no es manual: {state['ssl_type']!r}")
+        try:
+            presented = _presented_serial(scoped)
+            deployment["presented_serial"] = presented
+            if meta.get("serial") and presented != meta["serial"]:
+                issue(
+                    f"el puerto 993 presenta {presented}, "
+                    f"en disco {meta.get('serial')}"
+                )
+        except MailCertError as exc:
+            issue(f"no se pudo leer el certificado presentado: {exc}")
+
+        for port in scoped.ports:
+            try:
+                tls_check_identity(scoped, port, domain)
+                report["checks"][f"tls_{port}"] = True
+            except MailCertError as exc:
+                report["checks"][f"tls_{port}"] = False
+                issue(str(exc))
+
+    return report
+
+
+def cmd_audit(settings: Settings, args: argparse.Namespace) -> int:
+    targets = managed_cert_dirs(settings)
+    if settings.cert_dir.exists() and settings.cert_dir not in targets:
+        targets.insert(0, settings.cert_dir)
+
+    container_info: dict | None = None
+    container_error: str | None = None
+    try:
+        container_info = inspect_container(settings.container)
+    except MailCertError as exc:
+        container_error = str(exc)
+
+    if not targets and container_error is None:
+        if args.json:
+            print(json.dumps({"ok": False, "certificates": [], "error": "sin certificados"},
+                             indent=2))
+        else:
+            print(f"no hay certificados gestionados en {settings.certs_dir}")
+        return EXIT_VERIFY
+
+    reports = [audit_certificate(settings, directory, container_info) for directory in targets]
+    ok = not container_error and all(not report["issues"] for report in reports)
+
+    if args.json:
+        print(json.dumps(
+            {
+                "ok": ok,
+                "container": settings.container,
+                "container_error": container_error,
+                "certificates": reports,
+            },
+            indent=2,
+        ))
+        return EXIT_OK if ok else EXIT_VERIFY
+
+    print(f"audit: {settings.container}")
+    if container_error:
+        print(f"  contenedor: FALLA ({container_error})")
+    for report in reports:
+        print(f"\n{report['domain']}")
+        print(f"  ruta      {report['path']}")
+        checks = report["checks"]
+        if "serial" in checks:
+            print(f"  serial    {checks['serial']}")
+        if "sans" in checks:
+            print(f"  sans      {', '.join(checks['sans'])}")
+        if "not_after" in checks:
+            print(
+                f"  vigencia  {checks['not_after']} "
+                f"({checks['days_left']} días, {checks['life_percent']:.0f}%)"
+            )
+        print(f"  clave     {'coincide' if checks.get('key_matches') else 'FALLA'}")
+        print(f"  cadena    {'ok' if checks.get('chain') else 'FALLA'}")
+        deployment = report["deployment"]
+        if deployment["presented_serial"]:
+            print(f"  servido   serial {deployment['presented_serial']}")
+        print(f"  montaje   {'sí' if deployment['mounted'] else 'no'}")
+        for port in settings.ports:
+            result = checks.get(f"tls_{port}")
+            if result is not None:
+                print(f"  tls {port:<4}  {'ok' if result else 'FALLA'}")
+        for warning in report["warnings"]:
+            print(f"  aviso     {warning}")
+        for problem in report["issues"]:
+            print(f"  falla     {problem}")
+
+    total_issues = sum(len(report["issues"]) for report in reports)
+    if ok:
+        print("\nresultado: OK")
+    else:
+        print(f"\nresultado: {total_issues} falla(s)")
+    return EXIT_OK if ok else EXIT_VERIFY
+
+
 def cmd_status(settings: Settings) -> int:
     meta_path = settings.cert_dir / "meta.json"
     if not meta_path.exists():
@@ -962,6 +1224,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("status", help="estado del certificado y de la entrega")
     sub.add_parser("check", help="verifica cadena, entrega y TLS en los tres puertos")
+    audit = sub.add_parser("audit", help="audita todos los certificados sin escribir nada")
+    audit.add_argument("--json", action="store_true", help="salida JSON para automatización")
 
     issue = sub.add_parser("issue", help="emite (si hace falta) y entrega")
     issue.add_argument("--deliver", choices=["mail", "none"], default="mail")
@@ -988,6 +1252,8 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_status(settings)
         if args.command == "check":
             return cmd_check(settings)
+        if args.command == "audit":
+            return cmd_audit(settings, args)
         if args.command == "issue":
             return cmd_issue(settings, args)
         if args.command == "renew":

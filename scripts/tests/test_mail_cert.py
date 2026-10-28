@@ -326,3 +326,71 @@ def test_delivery_matches_falla_si_no_responden_los_puertos(settings, monkeypatc
 
     monkeypatch.setattr(mail_cert, "_presented_serial", boom)
     assert mail_cert.delivery_matches(settings, info, {"serial": "AA11"}) is False
+
+
+@pytest.mark.skipif(shutil.which("openssl") is None, reason="sin openssl")
+def test_public_key_matches_detecta_par_correcto_y_ajeno(tmp_path: Path) -> None:
+    cert = tmp_path / "cert.crt"
+    key = tmp_path / "key.pem"
+    other_key = tmp_path / "other.pem"
+    subprocess.run(
+        ["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",
+         "-subj", "/CN=mail.test", "-keyout", str(key), "-out", str(cert)],
+        check=True, capture_output=True,
+    )
+    subprocess.run(
+        ["openssl", "genpkey", "-algorithm", "RSA", "-pkeyopt", "rsa_keygen_bits:2048",
+         "-out", str(other_key)],
+        check=True, capture_output=True,
+    )
+    assert mail_cert.public_key_matches(cert, key) is True
+    assert mail_cert.public_key_matches(cert, other_key) is False
+
+
+@pytest.mark.skipif(shutil.which("openssl") is None, reason="sin openssl")
+def test_audit_detecta_clave_incorrecta_y_no_escribe(settings, tmp_path: Path, monkeypatch) -> None:
+    settings.cert_dir.mkdir(parents=True)
+    leaf = settings.cert_dir / "leaf.crt"
+    key = settings.cert_dir / "privkey.key"
+    subprocess.run(
+        ["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "30",
+         "-subj", "/CN=mail.lucas.spanel", "-addext",
+         "subjectAltName=DNS:mail.lucas.spanel,DNS:mail.spanel.local",
+         "-keyout", str(key), "-out", str(leaf)],
+        check=True, capture_output=True,
+    )
+    other_key = tmp_path / "other.pem"
+    subprocess.run(
+        ["openssl", "genpkey", "-algorithm", "RSA", "-pkeyopt", "rsa_keygen_bits:2048",
+         "-out", str(other_key)],
+        check=True, capture_output=True,
+    )
+    (settings.cert_dir / "fullchain.crt").write_bytes(leaf.read_bytes())
+    (settings.cert_dir / "privkey.key").write_bytes(other_key.read_bytes())
+    meta = {
+        "serial": mail_cert.cert_serial(leaf),
+        "sans": mail_cert.cert_sans(leaf),
+    }
+    (settings.cert_dir / "meta.json").write_text(json.dumps(meta))
+
+    info = inspect_fixture()
+    info["Config"]["Env"] += [
+        "SSL_TYPE=manual",
+        f"SSL_CERT_PATH={settings.source_dir}/fullchain.crt",
+        f"SSL_KEY_PATH={settings.source_dir}/privkey.key",
+    ]
+    info["Mounts"].append(
+        {"Type": "bind", "Source": str(settings.cert_dir), "Destination": settings.source_dir, "RW": False}
+    )
+    monkeypatch.setattr(mail_cert, "verify_chain", lambda st, lf: None)
+    monkeypatch.setattr(mail_cert, "_presented_serial", lambda st: meta["serial"])
+    monkeypatch.setattr(mail_cert, "tls_check_identity", lambda st, port, host: None)
+
+    before = {path.name: path.stat().st_mtime_ns for path in settings.cert_dir.iterdir()}
+    report = mail_cert.audit_certificate(settings, settings.cert_dir, info)
+    after = {path.name: path.stat().st_mtime_ns for path in settings.cert_dir.iterdir()}
+
+    assert report["checks"]["key_matches"] is False
+    assert any("clave privada" in issue for issue in report["issues"])
+    assert before == after
+
