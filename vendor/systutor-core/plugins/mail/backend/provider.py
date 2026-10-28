@@ -10,6 +10,12 @@ from systutor.core.errors import AppError, NotFoundError
 
 logger = logging.getLogger(__name__)
 
+# DMS keeps file-provisioned mailboxes in this single config file. Reading it is O(1);
+# `setup email list` is O(accounts) because it shells out to `doveadm quota get` and greps
+# aliases for every mailbox (see DMS target/bin/listmailuser). With quotas enabled that is
+# one subprocess per account, which is why the list felt like it painted one email at a time.
+DMS_ACCOUNTS_FILE = "/tmp/docker-mailserver/postfix-accounts.cf"
+
 
 class MailProvider(ABC):
     @abstractmethod
@@ -33,6 +39,42 @@ def _validate_email(email: str) -> None:
 def _validate_container(container: str) -> None:
     if not container or not container.replace("-", "").replace("_", "").isalnum():
         raise AppError("Invalid container name", status_code=500, code="invalid_config")
+
+
+def parse_accounts_file(output: str) -> list[str]:
+    """Parses DMS `postfix-accounts.cf`: `email|password-hash|attributes` per line.
+
+    Only the first column is used. Comments and blank lines are ignored. The hash and
+    attributes are never logged, returned, or stored.
+    """
+    accounts: list[str] = []
+    for raw in output.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        email = line.split("|", 1)[0].strip()
+        if "@" in email and email not in accounts:
+            accounts.append(email)
+    return accounts
+
+
+def parse_setup_email_list(output: str) -> list[str]:
+    """Parses the output of `setup email list` (slow path, used only as fallback)."""
+    if not output:
+        return []
+    accounts: list[str] = []
+    for line in output.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+        email = parts[1] if parts[0] == "*" else parts[0]
+        if "@" in email and email not in accounts:
+            accounts.append(email)
+    return accounts
+
 
 
 def build_ssh_command(
@@ -127,6 +169,7 @@ class DockerMailServerProvider(MailProvider):
         use_ssh: bool = False,
         ssh_control_path: str | None = None,
         ssh_control_persist: int = 60,
+        accounts_source: str = "auto",
     ) -> None:
         self._host = host
         self._port = port
@@ -136,6 +179,7 @@ class DockerMailServerProvider(MailProvider):
         self._use_ssh = use_ssh
         self._ssh_control_path = ssh_control_path
         self._ssh_control_persist = ssh_control_persist
+        self._accounts_source = accounts_source.strip().lower() or "auto"
 
     def _exec(self, docker_cmd: str, stdin_data: str | None = None) -> str:
         container = shlex.quote(self._container)
@@ -168,21 +212,25 @@ class DockerMailServerProvider(MailProvider):
 
     def list_accounts(self) -> list[str]:
         _validate_container(self._container)
+
+        if self._accounts_source != "setup":
+            try:
+                output = self._exec(
+                    f"docker exec {{container}} cat {DMS_ACCOUNTS_FILE}"
+                )
+            except AppError as exc:
+                if self._accounts_source == "file":
+                    raise
+                # File provisioning missing (or LDAP): keep the old, slower command.
+                logger.info(
+                    "mail accounts file unavailable (%s), falling back to setup email list",
+                    exc,
+                )
+            else:
+                return parse_accounts_file(output)
+
         output = self._exec("docker exec {container} setup email list")
-        if not output:
-            return []
-        accounts = []
-        for line in output.splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            parts = line.split()
-            if len(parts) < 2:
-                continue
-            email = parts[1] if parts[0] == "*" else parts[0]
-            if "@" in email:
-                accounts.append(email)
-        return accounts
+        return parse_setup_email_list(output)
 
     def create_account(self, email: str, password: str) -> None:
         _validate_email(email)

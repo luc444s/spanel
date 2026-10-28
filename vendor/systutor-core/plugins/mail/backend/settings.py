@@ -53,6 +53,10 @@ class MailSettings(BaseModel):
     # exactly the slow load the user sees.
     mail_accounts_cache_stale_ttl: int = 86_400
     mail_accounts_cache_swr: bool = True
+    # A.SPEC 0039: "auto" reads postfix-accounts.cf directly (one file read) and falls
+    # back to `setup email list` if the file is not there. "file" never falls back;
+    # "setup" keeps the old O(accounts) command (needed for ACCOUNT_PROVISIONER=LDAP).
+    mail_accounts_source: str = "auto"
     # Empty disables SSH multiplexing, which keeps the argv identical to the pre-0006 one.
     mail_ssh_control_path: str = ""
     mail_ssh_control_persist: int = 60
@@ -81,6 +85,7 @@ def register_mail_settings() -> None:
         ),
         mail_accounts_cache_swr=os.getenv("MAIL_ACCOUNTS_CACHE_SWR", "true").lower()
         in ("true", "1", "yes"),
+        mail_accounts_source=os.getenv("MAIL_ACCOUNTS_SOURCE", "auto").lower(),
         mail_ssh_control_path=os.getenv("MAIL_SSH_CONTROL_PATH", ""),
         mail_ssh_control_persist=int(os.getenv("MAIL_SSH_CONTROL_PERSIST", "60")),
     )

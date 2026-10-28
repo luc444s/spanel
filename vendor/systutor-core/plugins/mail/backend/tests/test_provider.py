@@ -14,11 +14,15 @@ from pathlib import Path
 import pytest
 
 from plugins.mail.backend.provider import (
+    DMS_ACCOUNTS_FILE,
     DockerMailServerProvider,
     _prepare_control_dir,
     build_ssh_command,
+    parse_accounts_file,
+    parse_setup_email_list,
 )
 from plugins.mail.backend.settings import MailSettings
+from systutor.core.errors import AppError
 
 BASE = {"user": "lucas", "host": "100.67.5.50", "port": 22, "remote_cmd": "true"}
 
@@ -256,3 +260,99 @@ def test_provider_defaults_disable_multiplexing():
 def test_control_persist_is_passed_through(persist: int):
     cmd = build_ssh_command(**BASE, control_path="/tmp/cm", control_persist=persist)
     assert f"ControlPersist={persist}" in cmd
+
+
+# --- A.SPEC 0039: list accounts from the config file, not O(accounts) ----------
+
+
+def _provider(**kwargs) -> DockerMailServerProvider:
+    return DockerMailServerProvider(
+        host="h", port=22, user="u", password="p", container="c", **kwargs
+    )
+
+
+def test_parse_accounts_file_ignores_comments_hashes_and_duplicates():
+    parsed = parse_accounts_file(
+        "# comment\n"
+        "a@acme.com|$6$hash|userdb_quota_storage_size=1G\n"
+        "\n"
+        "b@acme.com|$6$hash\n"
+        "a@acme.com|$6$hash\n"
+        "not-an-email|$6$hash\n"
+    )
+
+    assert parsed == ["a@acme.com", "b@acme.com"]
+
+
+def test_parse_accounts_file_accepts_extra_pipes_without_leaking_them():
+    parsed = parse_accounts_file("a@acme.com|hash|quota=1G|extra\n")
+    assert parsed == ["a@acme.com"]
+
+
+def test_parse_setup_email_list_keeps_the_existing_contract():
+    parsed = parse_setup_email_list(
+        "* a@acme.com ( 1 MiB / 2 MiB ) [50%]\n\n* b@acme.com\n"
+    )
+    assert parsed == ["a@acme.com", "b@acme.com"]
+
+
+def test_list_accounts_reads_only_the_accounts_file(monkeypatch):
+    provider = _provider()
+    calls: list[str] = []
+
+    def fake_exec(command, stdin_data=None):
+        calls.append(command)
+        return "a@acme.com|$6$hash|quota\nb@acme.com|$6$hash\n"
+
+    monkeypatch.setattr(provider, "_exec", fake_exec)
+
+    assert provider.list_accounts() == ["a@acme.com", "b@acme.com"]
+    assert calls == [f"docker exec {{container}} cat {DMS_ACCOUNTS_FILE}"]
+    assert all("setup email list" not in call for call in calls)
+
+
+def test_list_accounts_falls_back_when_the_file_is_unavailable(monkeypatch):
+    provider = _provider()
+    calls: list[str] = []
+
+    def fake_exec(command, stdin_data=None):
+        calls.append(command)
+        if "cat " in command:
+            raise AppError("missing", status_code=500, code="dms_error")
+        return "* a@acme.com\n"
+
+    monkeypatch.setattr(provider, "_exec", fake_exec)
+
+    assert provider.list_accounts() == ["a@acme.com"]
+    assert calls[-1] == "docker exec {container} setup email list"
+
+
+def test_explicit_setup_source_never_reads_the_file(monkeypatch):
+    provider = _provider(accounts_source="setup")
+    calls: list[str] = []
+
+    def fake_exec(command, stdin_data=None):
+        calls.append(command)
+        return "* a@acme.com\n"
+
+    monkeypatch.setattr(provider, "_exec", fake_exec)
+
+    assert provider.list_accounts() == ["a@acme.com"]
+    assert calls == ["docker exec {container} setup email list"]
+
+
+def test_explicit_file_source_does_not_fall_back(monkeypatch):
+    provider = _provider(accounts_source="file")
+
+    def fake_exec(command, stdin_data=None):
+        raise AppError("missing", status_code=500, code="dms_error")
+
+    monkeypatch.setattr(provider, "_exec", fake_exec)
+
+    with pytest.raises(AppError):
+        provider.list_accounts()
+
+
+def test_default_accounts_source_is_auto():
+    assert MailSettings().mail_accounts_source == "auto"
+    assert _provider()._accounts_source == "auto"

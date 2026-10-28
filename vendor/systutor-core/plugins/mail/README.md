@@ -46,6 +46,21 @@ provider. Creating a mailbox updates the cached list in place instead of droppin
 refetch that follows a create is also instant. Changes made **outside** the app become
 visible on the first visit after the TTL, when the background refresh runs.
 
+## Account listing without the O(accounts) command
+
+DMS `setup email list` walks every mailbox: for each one it runs `doveadm quota get`
+(when quotas are enabled) and greps the aliases file. With many mailboxes that is one
+subprocess per account, which is why the list used to appear to paint one email at a
+time.
+
+`MAIL_ACCOUNTS_SOURCE` selects how the provider reads the list:
+
+- `auto` (default): one `cat` of `/tmp/docker-mailserver/postfix-accounts.cf`, taking
+  only the email column. If the file is missing, it falls back to `setup email list`.
+- `file`: same, but never falls back; a missing file is an error.
+- `setup`: the old command. Use it when `ACCOUNT_PROVISIONER=LDAP`, where the file is
+  not the source of truth.
+
 ## SSH connection reuse
 
 `MAIL_SSH_CONTROL_PATH` enables OpenSSH `ControlMaster`, so the provider reuses one

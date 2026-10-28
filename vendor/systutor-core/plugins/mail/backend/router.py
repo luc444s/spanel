@@ -37,6 +37,7 @@ def _get_mail_service(
         use_ssh=settings.mail_use_ssh,
         ssh_control_path=settings.mail_ssh_control_path or None,
         ssh_control_persist=settings.mail_ssh_control_persist,
+        accounts_source=settings.mail_accounts_source,
     )
     return MailService(provider=provider, db=db, app=request.app)
 
