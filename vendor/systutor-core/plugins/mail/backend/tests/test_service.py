@@ -8,6 +8,8 @@ central claim of A.SPEC 0001 (two reads => one provider call).
 from __future__ import annotations
 
 import json
+import time
+from collections.abc import Callable
 from types import SimpleNamespace
 from typing import Any
 
@@ -104,13 +106,43 @@ class FakeCache(CacheBackend):
         self.store.clear()
 
 
+class CapturingRefreshRunner:
+    """Records the scheduled refresh so a test can run it synchronously."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+        self.fn: Callable[[], None] | None = None
+
+    def __call__(self, fn: Callable[[], None]) -> None:
+        self.calls += 1
+        self.fn = fn
+
+    def run(self) -> None:
+        assert self.fn is not None
+        self.fn()
+
+
+def seed_cached_accounts(
+    cache: FakeCache,
+    accounts: list[str],
+    *,
+    age: float,
+) -> None:
+    cache.store[ACCOUNTS_CACHE_KEY] = json.dumps(
+        {"accounts": accounts, "stored_at": time.time() - age}
+    )
+
+
 def make_service(
     provider: MailProvider | None = None,
     cache: FakeCache | None = None,
     enabled: bool = True,
     ttl: int = 60,
+    stale_ttl: int = 86_400,
+    swr: bool = True,
     domains: dict[str, str] | None = None,
     managed: dict[str, list[str]] | None = None,
+    refresh_runner: Callable[[Callable[[], None]], None] | None = None,
 ) -> MailService:
     if domains is None:
         domains = {TENANT_A: "acme.com", TENANT_B: "globex.com"}
@@ -133,8 +165,15 @@ def make_service(
         provider=provider or CountingMailProvider(),
         db=FakeSession(domains),  # type: ignore[arg-type]
         cache_backend=cache if cache is not None else FakeCache(),
-        settings=MailSettings(mail_accounts_cache_enabled=enabled, mail_accounts_cache_ttl=ttl),
+        settings=MailSettings(
+            mail_accounts_cache_enabled=enabled,
+            mail_accounts_cache_ttl=ttl,
+            mail_accounts_cache_stale_ttl=stale_ttl,
+            mail_accounts_cache_swr=swr,
+        ),
         app=app,
+        # No threads in tests: the refresh is either a no-op or injected explicitly.
+        refresh_runner=refresh_runner if refresh_runner is not None else (lambda _fn: None),
     )
 
 
@@ -182,7 +221,10 @@ def test_cache_hit_preserves_tenant_isolation():
 
     first = service.list_accounts(TENANT_A)
     # The cache now holds the RAW list, so a second tenant still gets its own subset.
-    assert json.loads(cache.store[ACCOUNTS_CACHE_KEY]) == ["a@acme.com", "b@globex.com"]
+    assert json.loads(cache.store[ACCOUNTS_CACHE_KEY])["accounts"] == [
+        "a@acme.com",
+        "b@globex.com",
+    ]
 
     second_a = service.list_accounts(TENANT_A)
     second_b = service.list_accounts(TENANT_B)
@@ -205,8 +247,8 @@ def test_list_accounts_populates_cache_on_miss():
     service.list_accounts(TENANT_A)
 
     assert cache.sets == 1
-    assert cache.last_ttl == 60
-    assert json.loads(cache.store[ACCOUNTS_CACHE_KEY]) == ["a@acme.com"]
+    assert cache.last_ttl == 86_400
+    assert json.loads(cache.store[ACCOUNTS_CACHE_KEY])["accounts"] == ["a@acme.com"]
 
 
 def test_second_list_does_not_call_provider():
@@ -218,6 +260,103 @@ def test_second_list_does_not_call_provider():
 
     assert provider.list_calls == 1
     assert first == second
+
+
+# --- A.SPEC 0038: stale-while-revalidate -------------------------------------
+
+
+def test_expired_entry_is_served_and_refresh_scheduled():
+    provider = CountingMailProvider(["new@acme.com"])
+    cache = FakeCache()
+    runner = CapturingRefreshRunner()
+    seed_cached_accounts(cache, ["old@acme.com"], age=120)
+    service = make_service(provider, cache=cache, refresh_runner=runner)
+
+    result = service.list_accounts(TENANT_A)
+
+    assert result.accounts == ["old@acme.com"]
+    assert provider.list_calls == 0
+    assert runner.calls == 1
+
+    runner.run()
+
+    assert provider.list_calls == 1
+    assert json.loads(cache.store[ACCOUNTS_CACHE_KEY])["accounts"] == ["new@acme.com"]
+
+
+def test_fresh_entry_is_served_without_refresh():
+    provider = CountingMailProvider(["new@acme.com"])
+    cache = FakeCache()
+    runner = CapturingRefreshRunner()
+    seed_cached_accounts(cache, ["old@acme.com"], age=10)
+    service = make_service(provider, cache=cache, refresh_runner=runner)
+
+    result = service.list_accounts(TENANT_A)
+
+    assert result.accounts == ["old@acme.com"]
+    assert runner.calls == 0
+    assert provider.list_calls == 0
+
+
+def test_entry_older_than_stale_cap_blocks_on_provider():
+    provider = CountingMailProvider(["new@acme.com"])
+    cache = FakeCache()
+    runner = CapturingRefreshRunner()
+    seed_cached_accounts(cache, ["old@acme.com"], age=90_000)
+    service = make_service(provider, cache=cache, refresh_runner=runner)
+
+    result = service.list_accounts(TENANT_A)
+
+    assert result.accounts == ["new@acme.com"]
+    assert provider.list_calls == 1
+    assert runner.calls == 0
+
+
+def test_swr_disabled_blocks_on_expired_entry():
+    provider = CountingMailProvider(["new@acme.com"])
+    cache = FakeCache()
+    runner = CapturingRefreshRunner()
+    seed_cached_accounts(cache, ["old@acme.com"], age=120)
+    service = make_service(provider, cache=cache, swr=False, refresh_runner=runner)
+
+    result = service.list_accounts(TENANT_A)
+
+    assert result.accounts == ["new@acme.com"]
+    assert provider.list_calls == 1
+    assert runner.calls == 0
+
+
+def test_legacy_list_entry_is_served_and_upgraded():
+    provider = CountingMailProvider(["new@acme.com"])
+    cache = FakeCache()
+    runner = CapturingRefreshRunner()
+    cache.store[ACCOUNTS_CACHE_KEY] = json.dumps(["old@acme.com"])
+    service = make_service(provider, cache=cache, refresh_runner=runner)
+
+    result = service.list_accounts(TENANT_A)
+
+    assert result.accounts == ["old@acme.com"]
+    assert provider.list_calls == 0
+    assert runner.calls == 1
+
+    runner.run()
+
+    assert json.loads(cache.store[ACCOUNTS_CACHE_KEY])["accounts"] == ["new@acme.com"]
+
+
+def test_background_refresh_failure_keeps_serving_stale():
+    provider = CountingMailProvider(["new@acme.com"])
+    provider.list_error = AppError("boom", status_code=500, code="dms_error")
+    cache = FakeCache()
+    runner = CapturingRefreshRunner()
+    seed_cached_accounts(cache, ["old@acme.com"], age=120)
+    service = make_service(provider, cache=cache, refresh_runner=runner)
+
+    result = service.list_accounts(TENANT_A)
+    runner.run()
+
+    assert result.accounts == ["old@acme.com"]
+    assert json.loads(cache.store[ACCOUNTS_CACHE_KEY])["accounts"] == ["old@acme.com"]
 
 
 def test_single_cache_key_shared_across_tenants():
@@ -258,7 +397,7 @@ def test_create_account_still_calls_provider():
     assert provider.accounts == ["nuevo@acme.com"]
 
 
-def test_create_account_invalidates_cache():
+def test_create_account_updates_cache_without_refetch():
     provider = CountingMailProvider(["a@acme.com"])
     cache = FakeCache()
     service = make_service(provider, cache=cache)
@@ -267,11 +406,17 @@ def test_create_account_invalidates_cache():
     assert cache.store  # warm
     service.create_account(TENANT_A, "user-1", "nuevo", "password123")
 
-    assert cache.deletes == 1
-    assert cache.store == {}
+    # A.SPEC 0038: the cached list is updated in place, so the refetch triggered by the
+    # UI does not land on an empty cache and pay the full provider round trip again.
+    assert cache.deletes == 0
+    assert json.loads(cache.store[ACCOUNTS_CACHE_KEY])["accounts"] == [
+        "a@acme.com",
+        "nuevo@acme.com",
+    ]
+    assert provider.list_calls == 1
 
     after = service.list_accounts(TENANT_A)
-    assert provider.list_calls == 2
+    assert provider.list_calls == 1
     assert after.accounts == ["a@acme.com", "nuevo@acme.com"]
 
 
@@ -434,7 +579,7 @@ def test_corrupt_cache_value_treated_as_miss():
 
     assert provider.list_calls == 1
     assert result.accounts == ["a@acme.com"]
-    assert json.loads(cache.store[ACCOUNTS_CACHE_KEY]) == ["a@acme.com"]
+    assert json.loads(cache.store[ACCOUNTS_CACHE_KEY])["accounts"] == ["a@acme.com"]
 
 
 def test_cache_value_with_wrong_shape_treated_as_miss():

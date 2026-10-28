@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FormEvent, useEffect, useState } from "react";
-
 import { changeMailAccountPassword, createMailAccount, listMailAccounts, mailKeys } from "../api";
+import type { MailAccountsResponse } from "../api";
 import { CertificatesDialog } from "../components/CertificatesDialog";
 import { useAuthStore } from "../../../../../../apps/web/src/features/auth/store";
 import { Button } from "@systutor/shell/ui/button";
@@ -10,6 +9,7 @@ import { Input, newCredentialProps, noAutofillProps } from "@systutor/shell/ui/i
 import { Alert } from "@systutor/shell/ui/alert";
 import { Pagination } from "@systutor/shell/ui/pagination";
 import { toast } from "@systutor/shell/ui/toast";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 const ACCOUNT_ROWS_PER_COLUMN = 15;
 const ACCOUNT_COLUMNS = 3;
@@ -27,9 +27,57 @@ const ACCOUNT_PAGE_SIZE = ACCOUNT_ROWS_PER_COLUMN * ACCOUNT_COLUMNS;
 const CREATE_TOAST = "mail:create-account";
 const PASSWORD_TOAST = "mail:change-password";
 
-// Matches the backend cache TTL (MAIL_ACCOUNTS_CACHE_TTL) so the UI does not ask for
-// a refetch while the server would still answer from its own cache anyway.
-const ACCOUNTS_STALE_TIME_MS = 60_000;
+// Matches the backend cache TTL (MAIL_ACCOUNTS_CACHE_TTL). The backend refreshes
+// expired entries in the background, so a refetch is cheap; this only avoids asking
+// while the answer is guaranteed to be the same.
+const ACCOUNTS_STALE_TIME_MS = 300_000;
+const SNAPSHOT_PREFIX = "systutor.mail.accounts";
+
+type AccountsSnapshot = {
+  tenantId: string;
+  savedAt: number;
+  data: MailAccountsResponse;
+};
+
+// Last successful response, kept per tenant in sessionStorage. It lets the page paint
+// the list immediately on a reload or a fresh tab instead of blocking on a round trip
+// to the mail server. It is discarded when the tab closes and never shared across
+// tenants.
+function readAccountsSnapshot(tenantId: string): AccountsSnapshot | null {
+  if (typeof window === "undefined" || !tenantId) {
+    return null;
+  }
+  try {
+    const raw = window.sessionStorage.getItem(`${SNAPSHOT_PREFIX}.${tenantId}`);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw) as AccountsSnapshot;
+    if (
+      parsed?.tenantId !== tenantId ||
+      typeof parsed.savedAt !== "number" ||
+      !Array.isArray(parsed.data?.accounts) ||
+      !Array.isArray(parsed.data?.domains)
+    ) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeAccountsSnapshot(tenantId: string, data: MailAccountsResponse) {
+  if (typeof window === "undefined" || !tenantId) {
+    return;
+  }
+  try {
+    const snapshot: AccountsSnapshot = { tenantId, savedAt: Date.now(), data };
+    window.sessionStorage.setItem(`${SNAPSHOT_PREFIX}.${tenantId}`, JSON.stringify(snapshot));
+  } catch {
+    // A full or disabled sessionStorage only costs the instant paint, never the list.
+  }
+}
 
 function useIsPortrait() {
   const [isPortrait, setIsPortrait] = useState(false);
@@ -56,6 +104,7 @@ function useIsPortrait() {
 export default function MailAccountsPage() {
   const queryClient = useQueryClient();
   const permissions = useAuthStore((state) => state.permissions);
+  const tenantId = useAuthStore((state) => state.currentTenant?.id ?? "");
   const canReadCertificates = permissions.includes("mail.certificates.read");
   const canManageCertificates = permissions.includes("mail.certificates.manage");
   const isPortrait = useIsPortrait();
@@ -72,14 +121,38 @@ export default function MailAccountsPage() {
   const [accountsPage, setAccountsPage] = useState(1);
   const [showCertificates, setShowCertificates] = useState(false);
 
-  // staleTime is declared here, not in providers.tsx, so the account list is not
-  // re-fetched on every navigation. Invalidation after create/password-change
-  // still refetches because invalidateQueries bypasses staleTime.
+  // The last snapshot for this tenant paints the table before any request resolves.
+  // The query still revalidates in the background, so an out-of-app change appears as
+  // soon as the backend answers.
+  const snapshot = useMemo(() => readAccountsSnapshot(tenantId), [tenantId]);
+
   const accountsQuery = useQuery({
     queryKey: mailKeys.accounts,
     queryFn: listMailAccounts,
     staleTime: ACCOUNTS_STALE_TIME_MS,
+    initialData: snapshot?.data,
+    initialDataUpdatedAt: snapshot?.savedAt,
   });
+
+  // The tenant context can hydrate one render after the route mounts. Seed the query as
+  // soon as it is known so a reload still paints before the request resolves.
+  useEffect(() => {
+    if (!tenantId) {
+      return;
+    }
+    const stored = readAccountsSnapshot(tenantId);
+    if (stored && !queryClient.getQueryData(mailKeys.accounts)) {
+      queryClient.setQueryData(mailKeys.accounts, stored.data, {
+        updatedAt: stored.savedAt,
+      });
+    }
+  }, [tenantId, queryClient]);
+
+  useEffect(() => {
+    if (accountsQuery.data) {
+      writeAccountsSnapshot(tenantId, accountsQuery.data);
+    }
+  }, [accountsQuery.data, tenantId]);
   const accounts = accountsQuery.data?.accounts ?? [];
   const tenantDomains = accountsQuery.data?.domains ?? [];
   const responseDomain = accountsQuery.data?.domain ?? "";
@@ -126,10 +199,19 @@ export default function MailAccountsPage() {
 
   const createMutation = useMutation({
     mutationFn: createMailAccount,
-    onSuccess: () => {
-      // Not awaited: the new mailbox has to show up, but the user should not wait for
-      // the refetch to read the confirmation.
-      void queryClient.invalidateQueries({ queryKey: mailKeys.accounts });
+    onSuccess: (result) => {
+      // The backend already wrote the mailbox, so the list can be updated locally and
+      // the user does not wait for a refetch against the mail server. The 5 minute
+      // staleTime reconciles any difference later.
+      const email = result.email;
+      if (email) {
+        queryClient.setQueryData<MailAccountsResponse>(mailKeys.accounts, (previous) => {
+          if (!previous || previous.accounts.includes(email)) {
+            return previous;
+          }
+          return { ...previous, accounts: [...previous.accounts, email].sort() };
+        });
+      }
       toast.success("Cuenta creada", { id: CREATE_TOAST });
     },
     onError: (e: Error) => toast.error(e.message, { id: CREATE_TOAST }),
@@ -160,11 +242,11 @@ export default function MailAccountsPage() {
     createMutation.mutate({ username, password, domain: selectedCreateDomain || undefined });
   }
 
-  if (accountsQuery.isLoading) {
+  if (accountsQuery.isLoading && !accountsQuery.data) {
     return <div className="flex min-h-[200px] items-center justify-center text-sm text-muted-foreground">Cargando...</div>;
   }
 
-  if (accountsQuery.error) {
+  if (accountsQuery.error && !accountsQuery.data) {
     return <Alert title="Error">No se pudieron cargar las cuentas.</Alert>;
   }
 
@@ -181,7 +263,12 @@ export default function MailAccountsPage() {
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-foreground">Correos — {domain}</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-lg font-semibold text-foreground">Correos — {domain}</h1>
+          {accountsQuery.isFetching && (
+            <span className="text-xs text-muted-foreground">Actualizando...</span>
+          )}
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           {canReadCertificates ? (
             <Button size="sm" variant="secondary" onClick={() => setShowCertificates(true)}>
@@ -193,6 +280,12 @@ export default function MailAccountsPage() {
           </Button>
         </div>
       </div>
+
+      {accountsQuery.error && (
+        <Alert title="No se pudo actualizar">
+          Se muestra la última lista conocida. {accountsQuery.error.message}
+        </Alert>
+      )}
 
       <Dialog open={showCreate} title="Crear correo" onClose={closeCreateDialog}>
         <form className="space-y-3" onSubmit={handleSubmitCreate}>

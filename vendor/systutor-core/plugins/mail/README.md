@@ -38,11 +38,13 @@ MAIL_SSH_CONTROL_PERSIST=60
 `MAIL_ACCOUNTS_CACHE_ENABLED=false` disables the cache entirely: every read goes
 straight to the mail server. This is the kill switch for production.
 
-`MAIL_ACCOUNTS_CACHE_TTL` is deliberately **wider** than the frontend `staleTime`
-(60 s). The client refetches every minute, and now that refetch is answered by Redis
-instead of a trip to the mail server. Writes made from the app invalidate the key
-immediately, so this TTL only bounds how long a mailbox added **outside** the app stays
-invisible.
+`MAIL_ACCOUNTS_CACHE_TTL` is the freshness window. After it passes, `MAIL_ACCOUNTS_CACHE_SWR`
+(default on) serves the cached list and refreshes it in the background, so a visit never
+waits for `docker exec` just because the TTL elapsed. `MAIL_ACCOUNTS_CACHE_STALE_TTL` is the
+hard cap: an entry older than that is no longer served stale and the request blocks on the
+provider. Creating a mailbox updates the cached list in place instead of dropping it, so the
+refetch that follows a create is also instant. Changes made **outside** the app become
+visible on the first visit after the TTL, when the background refresh runs.
 
 ## SSH connection reuse
 

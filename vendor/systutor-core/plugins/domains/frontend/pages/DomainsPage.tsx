@@ -100,6 +100,7 @@ export default function DomainsPage() {
 
   const items = domainsQuery.data?.items ?? [];
   const sites = domainsQuery.data?.sites ?? [];
+  const selectedSite = sites.find((site) => site.site_id === siteId);
 
   const createMutation = useMutation({
     mutationFn: createDomain,
@@ -149,7 +150,7 @@ export default function DomainsPage() {
         </div>
         {canManage && (
           <Button size="sm" onClick={openAdd} disabled={sites.length === 0}>
-            Agregar dominio
+            Agregar dominio extra
           </Button>
         )}
       </div>
@@ -167,7 +168,9 @@ export default function DomainsPage() {
           className="rounded-md border border-border bg-card px-3 py-4 text-sm
             text-muted-foreground"
         >
-          Todavía no hay dominios. Creá un sitio en Hosting o agregá un dominio extra.
+          {sites.length === 0
+            ? "Todavía no hay sitios. Creá uno en Hosting para publicar dominios extra."
+            : "Todavía no hay dominios extra. Agregá uno para publicar este sitio en otro nombre."}
         </p>
       ) : (
         <div className="overflow-x-auto rounded-md border border-border">
@@ -207,7 +210,7 @@ export default function DomainsPage() {
                           Hosting 🔒
                         </span>
                       ) : (
-                        <span className="text-foreground">Plugin</span>
+                        <span className="text-foreground">Extra</span>
                       )}
                     </td>
                     <td className="px-3 py-2">
@@ -261,7 +264,7 @@ export default function DomainsPage() {
         </div>
       )}
 
-      <Dialog open={addOpen} title="Agregar dominio" onClose={() => setAddOpen(false)}>
+      <Dialog open={addOpen} title="Agregar dominio extra" onClose={() => setAddOpen(false)}>
         <form className="space-y-3" onSubmit={submit}>
           <label className="block space-y-1 text-sm text-foreground">
             <span>Sitio</span>
@@ -277,6 +280,11 @@ export default function DomainsPage() {
                 </option>
               ))}
             </select>
+            <span className="text-xs text-muted-foreground">
+              {selectedSite
+                ? `El dominio se publicará en este sitio (${selectedSite.container}).`
+                : "Elegí el sitio donde se publicará el dominio."}
+            </span>
           </label>
           <label className="block space-y-1 text-sm text-foreground">
             <span>Dominio</span>

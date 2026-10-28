@@ -47,6 +47,12 @@ class MailSettings(BaseModel):
     # invalidate immediately, so this only bounds how long a change made OUTSIDE the app
     # stays invisible.
     mail_accounts_cache_ttl: int = 300
+    # A.SPEC 0038: after the freshness window the cached list is still served while a
+    # background refresh talks to DMS, as long as it is younger than this cap. Without it
+    # a visit that lands just after the TTL pays the full `docker exec` again, which is
+    # exactly the slow load the user sees.
+    mail_accounts_cache_stale_ttl: int = 86_400
+    mail_accounts_cache_swr: bool = True
     # Empty disables SSH multiplexing, which keeps the argv identical to the pre-0006 one.
     mail_ssh_control_path: str = ""
     mail_ssh_control_persist: int = 60
@@ -70,6 +76,11 @@ def register_mail_settings() -> None:
             "MAIL_ACCOUNTS_CACHE_ENABLED", "true"
         ).lower() in ("true", "1", "yes"),
         mail_accounts_cache_ttl=int(os.getenv("MAIL_ACCOUNTS_CACHE_TTL", "300")),
+        mail_accounts_cache_stale_ttl=int(
+            os.getenv("MAIL_ACCOUNTS_CACHE_STALE_TTL", "86400")
+        ),
+        mail_accounts_cache_swr=os.getenv("MAIL_ACCOUNTS_CACHE_SWR", "true").lower()
+        in ("true", "1", "yes"),
         mail_ssh_control_path=os.getenv("MAIL_SSH_CONTROL_PATH", ""),
         mail_ssh_control_persist=int(os.getenv("MAIL_SSH_CONTROL_PERSIST", "60")),
     )

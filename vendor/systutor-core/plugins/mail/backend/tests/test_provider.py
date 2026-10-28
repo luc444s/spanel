@@ -221,10 +221,11 @@ def test_default_cache_ttl_is_300():
     assert MailSettings().mail_accounts_cache_ttl == 300
 
 
-def test_frontend_stale_time_is_narrower_than_the_cache_ttl():
+def test_frontend_stale_time_does_not_exceed_the_cache_ttl():
     """
-    The whole point of the 300: the client refetches at 60 s and the backend still has the
-    list, so the refetch is a Redis hit instead of a trip to the mail server.
+    A.SPEC 0038: the frontend no longer needs to refetch before the backend TTL. The
+    backend serves the expired entry while it refreshes, so 300 s on both sides is not a
+    stampede, it is the moment a cheap background refresh starts.
     """
     mail_plugin = Path(__file__).resolve().parents[2]
     frontend_source = mail_plugin / "frontend" / "pages" / "MailAccountsPage.tsx"
@@ -235,7 +236,9 @@ def test_frontend_stale_time_is_narrower_than_the_cache_ttl():
         ).split("=")[1].strip().rstrip(";")
     )
 
-    assert stale_ms / 1000 < MailSettings().mail_accounts_cache_ttl
+    assert stale_ms / 1000 <= MailSettings().mail_accounts_cache_ttl
+    assert MailSettings().mail_accounts_cache_swr is True
+    assert MailSettings().mail_accounts_cache_stale_ttl > MailSettings().mail_accounts_cache_ttl
 
 
 # --- el provider acepta los dos argumentos nuevos ------------------------------
