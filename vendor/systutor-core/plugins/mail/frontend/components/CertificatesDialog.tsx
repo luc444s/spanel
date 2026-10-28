@@ -170,11 +170,6 @@ export function CertificatesDialog({
               />
             ))}
           </div>
-
-          <p className="text-xs text-muted-foreground">
-            Doble clic en un certificado para ver alertas y administrarlo. La emisión la
-            ejecuta el agente privilegiado del host; la web nunca recibe claves privadas.
-          </p>
         </div>
       </Dialog>
 
