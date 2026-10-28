@@ -1,8 +1,28 @@
 {
   "permissions": [
-    {"name": "mail.accounts.read", "description": "View mail accounts for tenant domain"},
-    {"name": "mail.accounts.all", "description": "View mail accounts across every tenant domain"},
-    {"name": "mail.accounts.create", "description": "Create new mail accounts"},
-    {"name": "mail.account.password", "description": "Change mail account passwords"}
+    {
+      "name": "mail.accounts.read",
+      "description": "View mail accounts for tenant domain"
+    },
+    {
+      "name": "mail.accounts.all",
+      "description": "View mail accounts across every tenant domain"
+    },
+    {
+      "name": "mail.accounts.create",
+      "description": "Create new mail accounts"
+    },
+    {
+      "name": "mail.account.password",
+      "description": "Change mail account passwords"
+    },
+    {
+      "name": "mail.certificates.read",
+      "description": "View the mail TLS certificate inventory of the tenant domains"
+    },
+    {
+      "name": "mail.certificates.manage",
+      "description": "Request issuance, force renewal and refresh the certificate agent"
+    }
   ]
 }

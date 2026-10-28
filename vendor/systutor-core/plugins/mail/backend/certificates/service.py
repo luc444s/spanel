@@ -9,20 +9,16 @@ from __future__ import annotations
 from fastapi import FastAPI
 from sqlalchemy.orm import Session
 
-from plugins.domains.backend.certificates.config import CertificatesConfig
-from plugins.domains.backend.certificates.health import (
+from plugins.mail.backend.certificates.config import CertificatesConfig
+from plugins.mail.backend.certificates.health import (
     alert_view,
     health_view,
     load_alerts,
 )
-from plugins.domains.backend.certificates.inventory import Inventory, load_inventory
-from plugins.domains.backend.certificates.jobs import ActiveJobError, JobStore
-from plugins.domains.backend.certificates.models import Certificate
-from plugins.domains.backend.certificates.validation import (
-    CertificateValidationError,
-    normalize_hostname,
-)
-from plugins.domains.backend.schemas import (
+from plugins.mail.backend.certificates.inventory import Inventory, load_inventory
+from plugins.mail.backend.certificates.jobs import ActiveJobError, JobStore
+from plugins.mail.backend.certificates.models import Certificate
+from plugins.mail.backend.certificates.schemas import (
     CertificateAlertsResponse,
     CertificateHealthResponse,
     CertificateItem,
@@ -30,6 +26,10 @@ from plugins.domains.backend.schemas import (
     CertificateRefreshResponse,
     CertificateRequestResponse,
     CertificatesResponse,
+)
+from plugins.mail.backend.certificates.validation import (
+    CertificateValidationError,
+    normalize_hostname,
 )
 from systutor.contracts.domain_ownership import list_sites
 from systutor.core.errors import AppError, NotFoundError
@@ -47,7 +47,7 @@ class CertificatesService:
     ) -> None:
         self._db = db
         self._app = app
-        configured = getattr(app.state, "certificates_config", None)
+        configured = getattr(app.state, "mail_certificates_config", None)
         self._config = config or configured or CertificatesConfig.from_env()
         self._jobs = JobStore(self._config)
         self._load_inventory = load_inventory
@@ -69,19 +69,8 @@ class CertificatesService:
             for site in sites
             if (site.primary_domain or "").strip()
         )
-        # Los dominios extra también pertenecen al tenant: si se gestionan en
-        # Dominios, su certificado mail.<dominio> debe ser visible allí. El
-        # proxy puede no estar disponible (p. ej. en tests); en ese caso se
-        # conserva la visibilidad por dominios primarios.
-        try:
-            from plugins.domains.backend.service import DomainsService
-
-            items, _sites = DomainsService(self._db, self._app).list_domains(
-                tenant_id, can_manage=False
-            )
-            domains.update(item.domain.strip().lower() for item in items)
-        except Exception:  # noqa: BLE001 - proxy ausente: solo primarios
-            pass
+        # El correo usa el dominio primario del sitio. Los dominios extra son
+        # rutas web del proxy y no se mezclan aquí.
         return domains
 
     def _inventory(self) -> Inventory:
@@ -106,7 +95,7 @@ class CertificatesService:
             needle = normalize_hostname(hostname)
         except CertificateValidationError as exc:
             raise AppError(
-                str(exc), status_code=422, code="domains.certificates_invalid_hostname"
+                str(exc), status_code=422, code="mail.certificates_invalid_hostname"
             ) from exc
         inventory = self._inventory()
         certificate = inventory.find(needle)
@@ -124,11 +113,20 @@ class CertificatesService:
 
     # ---- lectura ---------------------------------------------------------
 
-    def list_certificates(self, tenant_context: TenantContext) -> CertificatesResponse:
+    def list_certificates(
+        self, tenant_context: TenantContext, *, tenant_only: bool = False
+    ) -> CertificatesResponse:
         inventory = self._inventory()
+        domains = self._tenant_domains(tenant_context.current_tenant_id)
+        is_platform = tenant_context.is_platform and not tenant_only
         items = [
             CertificateItem(**cert.to_dict())
-            for cert in self._visible(inventory, tenant_context)
+            for cert in inventory.certificates
+            if cert.visible_to(
+                tenant_id=tenant_context.current_tenant_id,
+                is_platform=is_platform,
+                tenant_domains=domains,
+            )
         ]
         return CertificatesResponse(
             items=items,
@@ -176,7 +174,7 @@ class CertificatesService:
             job = self._jobs.job(certificate.hostname, job_id)
         except CertificateValidationError as exc:
             raise AppError(
-                str(exc), status_code=422, code="domains.certificate_job_invalid"
+                str(exc), status_code=422, code="mail.certificate_job_invalid"
             ) from exc
         if job is None:
             raise NotFoundError("Solicitud desconocida")
@@ -206,11 +204,11 @@ class CertificatesService:
             raise AppError(
                 "El certificado global no se regenera desde el panel",
                 status_code=409,
-                code="domains.certificate_global",
+                code="mail.certificate_global",
             )
         if action not in ("ensure", "force"):
             raise AppError(
-                "Acción inválida", status_code=422, code="domains.certificate_invalid_action"
+                "Acción inválida", status_code=422, code="mail.certificate_invalid_action"
             )
 
         try:
@@ -224,12 +222,12 @@ class CertificatesService:
             raise
         except CertificateValidationError as exc:
             raise AppError(
-                str(exc), status_code=422, code="domains.certificate_invalid_hostname"
+                str(exc), status_code=422, code="mail.certificate_invalid_hostname"
             ) from exc
 
         self._audit(
             tenant_context,
-            action="domains.certificate.requested",
+            action="mail.certificate.requested",
             hostname=certificate.hostname,
             details={"job_id": job_id, "action": action, "reason": reason or "manual"},
         )
@@ -238,7 +236,7 @@ class CertificatesService:
             hostname=certificate.hostname,
             state="queued",
             poll_url=(
-                "/api/v1/plugins/domains/certificates/"
+                "/api/v1/plugins/mail/certificates/"
                 f"{certificate.hostname}/jobs/{job_id}"
             ),
         )
@@ -249,7 +247,7 @@ class CertificatesService:
         )
         self._audit(
             tenant_context,
-            action="domains.certificate.refreshed",
+            action="mail.certificate.refreshed",
             hostname=None,
             details={"request_id": request_id},
         )
@@ -264,7 +262,7 @@ class CertificatesService:
             raise AppError(
                 "Solo el administrador de infraestructura puede ejecutar esta acción",
                 status_code=403,
-                code="domains.certificate_admin_only",
+                code="mail.certificate_admin_only",
             )
 
     def admin_action(
@@ -279,7 +277,7 @@ class CertificatesService:
 
         if action not in self.ADMIN_ACTIONS:
             raise AppError(
-                "Acción inválida", status_code=422, code="domains.certificate_invalid_action"
+                "Acción inválida", status_code=422, code="mail.certificate_invalid_action"
             )
         certificate = self._visible_certificate(tenant_context, hostname)
         self._require_platform(tenant_context)
@@ -290,7 +288,7 @@ class CertificatesService:
             raise AppError(
                 "El certificado global no se instala ni revierte desde el panel",
                 status_code=409,
-                code="domains.certificate_global",
+                code="mail.certificate_global",
             )
         try:
             job_id = self._jobs.create_request(
@@ -301,14 +299,14 @@ class CertificatesService:
             )
         except CertificateValidationError as exc:
             raise AppError(
-                str(exc), status_code=422, code="domains.certificate_invalid_hostname"
+                str(exc), status_code=422, code="mail.certificate_invalid_hostname"
             ) from exc
 
         audit_action = {
-            "verify": "domains.certificate.verified",
-            "sync": "domains.certificate.synced",
-            "install": "domains.certificate.installed",
-            "rollback": "domains.certificate.rolled_back",
+            "verify": "mail.certificate.verified",
+            "sync": "mail.certificate.synced",
+            "install": "mail.certificate.installed",
+            "rollback": "mail.certificate.rolled_back",
         }[action]
         self._audit(
             tenant_context,
@@ -321,7 +319,7 @@ class CertificatesService:
             hostname=certificate.hostname,
             state="queued",
             poll_url=(
-                "/api/v1/plugins/domains/certificates/"
+                "/api/v1/plugins/mail/certificates/"
                 f"{certificate.hostname}/jobs/{job_id}"
             ),
         )

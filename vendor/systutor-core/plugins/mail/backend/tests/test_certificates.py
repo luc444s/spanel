@@ -11,21 +11,21 @@ from pathlib import Path
 import pytest
 from fastapi import FastAPI
 
-from plugins.domains.backend.certificates import service as service_module
-from plugins.domains.backend.certificates.config import CertificatesConfig
-from plugins.domains.backend.certificates.inventory import InventoryError, load_inventory
-from plugins.domains.backend.certificates.jobs import (
+from plugins.mail.backend.certificates import service as service_module
+from plugins.mail.backend.certificates.config import CertificatesConfig
+from plugins.mail.backend.certificates.inventory import InventoryError, load_inventory
+from plugins.mail.backend.certificates.jobs import (
     ActiveJobError,
     JobStore,
     atomic_write_json,
 )
-from plugins.domains.backend.certificates.models import Certificate
-from plugins.domains.backend.certificates.service import CertificatesService
-from plugins.domains.backend.certificates.validation import (
+from plugins.mail.backend.certificates.models import Certificate
+from plugins.mail.backend.certificates.schemas import CertificateItem
+from plugins.mail.backend.certificates.service import CertificatesService
+from plugins.mail.backend.certificates.validation import (
     CertificateValidationError,
     validate_emission_request,
 )
-from plugins.domains.backend.schemas import CertificateItem
 from systutor.contracts.domain_ownership import OwnedSite, register_site_provider
 from systutor.core.errors import AppError, NotFoundError
 from systutor.kernel.tenants.context import TenantContext
@@ -181,6 +181,22 @@ def test_old_state_is_stale(tmp_path):
     write_state(config.state_path, [cert_payload("mail.systutor.com")], generated_at=old)
 
     assert load_inventory(config).stale is True
+
+
+def test_agent_interval_in_health_extends_the_staleness_window(tmp_path):
+    config = config_for(tmp_path)
+    recent = iso(datetime.now(UTC) - timedelta(minutes=18))
+    payload = {
+        "version": 1,
+        "generated_at": recent,
+        "agent": {"last_seen": recent},
+        "health": {"agent": {"interval_seconds": 600}},
+        "certificates": [cert_payload("mail.systutor.com")],
+    }
+    config.state_path.parent.mkdir(parents=True, exist_ok=True)
+    config.state_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    assert load_inventory(config).stale is False
 
 
 def test_agent_interval_extends_the_staleness_window(tmp_path):
@@ -384,6 +400,14 @@ def test_tenant_only_sees_own_domains_and_admin_sees_all(tmp_path, fake_audit):
     with pytest.raises(NotFoundError):
         service.get_certificate(ctx("t1"), DEFAULT)
 
+    # La vista de Correos pide tenant_only: incluso el admin de plataforma ve
+    # solo el dominio del tenant actual.
+    scoped = service.list_certificates(
+        TenantContext("t1", None, "admin", ("core.platform.admin",), None),
+        tenant_only=True,
+    )
+    assert [item.hostname for item in scoped.items] == ["mail.systutor.com"]
+
 
 def test_request_creates_job_and_audits(tmp_path, fake_audit):
     config = config_for(tmp_path)
@@ -392,19 +416,19 @@ def test_request_creates_job_and_audits(tmp_path, fake_audit):
     service = CertificatesService(FakeDb(), app, config=config)
 
     response = service.request_certificate(
-        TenantContext("t1", None, "u1", ("domains.certificates.manage",), None),
+        TenantContext("t1", None, "u1", ("mail.certificates.manage",), None),
         "mail.systutor.com",
         action="force",
         reason="manual",
     )
     assert response.state == "queued"
     assert (config.requests_dir / f"{response.job_id}.json").exists()
-    assert fake_audit[-1]["action"] == "domains.certificate.requested"
+    assert fake_audit[-1]["action"] == "mail.certificate.requested"
     assert fake_audit[-1]["details"]["action"] == "force"
 
     with pytest.raises(ActiveJobError):
         service.request_certificate(
-            TenantContext("t1", None, "u2", ("domains.certificates.manage",), None),
+            TenantContext("t1", None, "u2", ("mail.certificates.manage",), None),
             "mail.systutor.com",
         )
 
@@ -420,7 +444,7 @@ def test_cf_mail_cannot_be_requested(tmp_path, fake_audit):
             TenantContext("t1", None, "admin", ("core.platform.admin",), None), DEFAULT
         )
     assert exc.value.status_code == 409
-    assert exc.value.code == "domains.certificate_global"
+    assert exc.value.code == "mail.certificate_global"
     assert not config.requests_dir.exists() or not list(config.requests_dir.glob("*.json"))
 
 
@@ -431,7 +455,7 @@ def test_refresh_writes_request(tmp_path, fake_audit):
     service = CertificatesService(FakeDb(), app, config=config)
 
     response = service.refresh(
-        TenantContext("t1", None, "admin", ("domains.certificates.manage",), None)
+        TenantContext("t1", None, "admin", ("mail.certificates.manage",), None)
     )
     assert response.requested is True
     files = list(config.requests_dir.glob("refresh-*.json"))
@@ -439,7 +463,7 @@ def test_refresh_writes_request(tmp_path, fake_audit):
     payload = json.loads(files[0].read_text(encoding="utf-8"))
     assert payload["action"] == "refresh"
     assert stat.S_IMODE(files[0].stat().st_mode) == 0o600
-    assert fake_audit[-1]["action"] == "domains.certificate.refreshed"
+    assert fake_audit[-1]["action"] == "mail.certificate.refreshed"
 
 
 def test_inventory_error_is_503(tmp_path, fake_audit):

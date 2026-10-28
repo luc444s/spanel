@@ -1,8 +1,12 @@
 {
   "events": [
-    {"name": "domains.domain.added", "description": "An extra domain was added to a site"},
-    {"name": "domains.domain.removed", "description": "An extra domain was removed from a site"},
-    {"name": "domains.certificate.requested", "description": "A mail TLS certificate issuance was requested"},
-    {"name": "domains.certificate.refreshed", "description": "A refresh of the certificate agent state was requested"}
+    {
+      "name": "domains.domain.added",
+      "description": "An extra domain was added to a site"
+    },
+    {
+      "name": "domains.domain.removed",
+      "description": "An extra domain was removed from a site"
+    }
   ]
 }

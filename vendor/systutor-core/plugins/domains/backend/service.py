@@ -36,6 +36,7 @@ from systutor.contracts.site_namespace import domain_in_suffix, get_site_suffix
 from systutor.core.errors import AppError, NotFoundError
 from systutor.kernel.audit.service import record_audit
 from systutor.kernel.tenants.context import TenantContext
+from systutor.kernel.tenants.service import list_tenants
 
 
 class DomainsService:
@@ -92,6 +93,7 @@ class DomainsService:
         *,
         can_manage: bool,
         include_outside: bool = False,
+        tenant_name: str | None = None,
     ) -> tuple[list[DomainItem], list[SiteOption]]:
         suffix = get_site_suffix(self._app, self._db, tenant_id)
         sites = self._visible_sites(tenant_id)
@@ -123,6 +125,8 @@ class DomainsService:
                 editable=editable,
                 conflict=conflict,
                 outside_tenant=outside,
+                tenant_id=tenant_id,
+                tenant_name=tenant_name,
             )
 
         extras_by_domain = {row.domain.lower(): row for row in extras}
@@ -164,6 +168,29 @@ class DomainsService:
                 items.append(row)
 
         return items, sorted(sites.values(), key=lambda option: option.container)
+
+    def list_all_domains(self) -> tuple[list[DomainItem], list[SiteOption]]:
+        """Vista de plataforma: agrega los dominios de todos los tenants.
+
+        Si el proxy no está disponible para un tenant se omite ese tenant en
+        lugar de romper la vista completa.
+        """
+
+        items: list[DomainItem] = []
+        sites: list[SiteOption] = []
+        for tenant in list_tenants(self._db):
+            try:
+                tenant_items, tenant_sites = self.list_domains(
+                    tenant.id,
+                    can_manage=False,
+                    include_outside=True,
+                    tenant_name=tenant.name,
+                )
+            except AppError:
+                continue
+            items.extend(tenant_items)
+            sites.extend(tenant_sites)
+        return items, sites
 
     def check_domain(self, tenant_context: TenantContext, domain: str) -> DomainCheckResponse:
         """Disponibilidad de un dominio para el tenant actual, sin reservar.

@@ -570,13 +570,12 @@ class HostingService:
         )
         self._db.delete(site)
 
-    def list_sites(self, tenant_id: str) -> HostingSiteListResponse:
-        """Only the rows owned by the tenant; Docker is asked about those alone."""
-        stmt: Select[tuple[HostingSite]] = (
-            select(HostingSite)
-            .where(HostingSite.tenant_id == tenant_id)
-            .order_by(HostingSite.container_name.asc())
-        )
+    def list_sites(self, tenant_id: str | None) -> HostingSiteListResponse:
+        """Rows of one tenant, or all tenants for a platform-wide read view."""
+        stmt: Select[tuple[HostingSite]] = select(HostingSite)
+        if tenant_id is not None:
+            stmt = stmt.where(HostingSite.tenant_id == tenant_id)
+        stmt = stmt.order_by(HostingSite.container_name.asc())
         summaries: list[HostingSiteSummary] = []
         for site in self._db.scalars(stmt):
             info = self._inspect(site.container_name)

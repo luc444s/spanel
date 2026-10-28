@@ -8,20 +8,15 @@
   "frontend_entrypoint": "frontend/register.ts",
   "permissions": [
     "domains.domains.read",
-    "domains.domains.manage",
-    "domains.certificates.read",
-    "domains.certificates.manage"
+    "domains.domains.manage"
   ],
   "tenant_admin_permissions": [
     "domains.domains.read",
-    "domains.domains.manage",
-    "domains.certificates.read"
+    "domains.domains.manage"
   ],
   "events": [
     "domains.domain.added",
-    "domains.domain.removed",
-    "domains.certificate.requested",
-    "domains.certificate.refreshed"
+    "domains.domain.removed"
   ],
-  "description": "Dominios web: primarios de Hosting en lectura y extras del proxy; inventario TLS de correo"
+  "description": "Dominios web: primarios de Hosting en lectura y extras del proxy"
 }

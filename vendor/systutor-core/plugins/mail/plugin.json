@@ -10,16 +10,21 @@
     "mail.accounts.read",
     "mail.accounts.all",
     "mail.accounts.create",
-    "mail.account.password"
+    "mail.account.password",
+    "mail.certificates.read",
+    "mail.certificates.manage"
   ],
   "tenant_admin_permissions": [
     "mail.accounts.read",
     "mail.accounts.create",
-    "mail.account.password"
+    "mail.account.password",
+    "mail.certificates.read"
   ],
   "events": [
     "mail.account.created",
-    "mail.account.password_changed"
+    "mail.account.password_changed",
+    "mail.certificate.requested",
+    "mail.certificate.refreshed"
   ],
-  "description": "Minimalist mail account management via Docker Mailserver"
+  "description": "Mail account management and TLS certificate inventory via Docker Mailserver"
 }

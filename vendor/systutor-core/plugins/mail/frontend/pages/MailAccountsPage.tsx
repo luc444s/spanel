@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FormEvent, useEffect, useState } from "react";
 
 import { changeMailAccountPassword, createMailAccount, listMailAccounts, mailKeys } from "../api";
+import { CertificatesDialog } from "../components/CertificatesDialog";
+import { useAuthStore } from "../../../../../../apps/web/src/features/auth/store";
 import { Button } from "@systutor/shell/ui/button";
 import { Dialog } from "@systutor/shell/ui/dialog";
 import { Input, newCredentialProps, noAutofillProps } from "@systutor/shell/ui/input";
@@ -53,6 +55,9 @@ function useIsPortrait() {
 
 export default function MailAccountsPage() {
   const queryClient = useQueryClient();
+  const permissions = useAuthStore((state) => state.permissions);
+  const canReadCertificates = permissions.includes("mail.certificates.read");
+  const canManageCertificates = permissions.includes("mail.certificates.manage");
   const isPortrait = useIsPortrait();
   const [selected, setSelected] = useState<string | null>(null);
   const [newPass, setNewPass] = useState("");
@@ -64,6 +69,7 @@ export default function MailAccountsPage() {
   const [createConfirm, setCreateConfirm] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
   const [accountsPage, setAccountsPage] = useState(1);
+  const [showCertificates, setShowCertificates] = useState(false);
 
   // staleTime is declared here, not in providers.tsx, so the account list is not
   // re-fetched on every navigation. Invalidation after create/password-change
@@ -170,9 +176,16 @@ export default function MailAccountsPage() {
     <section className="space-y-3">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold text-foreground">Correos — {domain}</h1>
-        <Button size="sm" onClick={() => { setShowCreate(true); setCreateError(null); }}>
-          Agregar correo
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {canReadCertificates ? (
+            <Button size="sm" variant="secondary" onClick={() => setShowCertificates(true)}>
+              Certificados TLS
+            </Button>
+          ) : null}
+          <Button size="sm" onClick={() => { setShowCreate(true); setCreateError(null); }}>
+            Agregar correo
+          </Button>
+        </div>
       </div>
 
       <Dialog open={showCreate} title="Crear correo" onClose={closeCreateDialog}>
@@ -259,6 +272,13 @@ export default function MailAccountsPage() {
           </div>
         </form>
       </Dialog>
+
+      <CertificatesDialog
+        open={showCertificates && canReadCertificates}
+        canManage={canManageCertificates}
+        visibleDomains={domain && domain !== "all" ? [domain] : undefined}
+        onClose={() => setShowCertificates(false)}
+      />
     </section>
   );
 }

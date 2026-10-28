@@ -18,6 +18,20 @@ def get_tenant_by_id(db: Session, tenant_id: str) -> Tenant | None:
     return db.scalar(stmt)
 
 
+def list_tenants(db: Session, *, only_active: bool = False) -> list[Tenant]:
+    """All tenants, for platform-wide read views.
+
+    Callers must check `TenantContext.is_platform` before using this; the
+    kernel does not hide data here because the authorization belongs to the
+    endpoint that needs the cross-tenant view.
+    """
+
+    stmt: Select[tuple[Tenant]] = select(Tenant).order_by(Tenant.name.asc())
+    if only_active:
+        stmt = stmt.where(Tenant.is_active.is_(True))
+    return list(db.scalars(stmt))
+
+
 def get_branch_by_id(db: Session, branch_id: str) -> Branch | None:
     stmt: Select[tuple[Branch]] = select(Branch).where(Branch.id == branch_id)
     return db.scalar(stmt)

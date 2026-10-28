@@ -13,9 +13,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from plugins.domains.backend.certificates.config import CertificatesConfig
-from plugins.domains.backend.certificates.models import Certificate, utcnow
-from plugins.domains.backend.certificates.validation import (
+from plugins.mail.backend.certificates.config import CertificatesConfig
+from plugins.mail.backend.certificates.models import Certificate, utcnow
+from plugins.mail.backend.certificates.validation import (
     CertificateValidationError,
     contains_secret_material,
     normalize_hostname,
@@ -29,7 +29,7 @@ class InventoryError(AppError):
         super().__init__(
             message,
             status_code=503,
-            code="domains.certificates_unavailable",
+            code="mail.certificates_unavailable",
         )
 
 
@@ -70,6 +70,12 @@ def _stale(
     # máximo configurado.
     agent = payload.get("agent")
     interval = agent.get("interval_seconds") if isinstance(agent, dict) else None
+    if not isinstance(interval, int) or interval <= 0:
+        health = payload.get("health")
+        health_agent = health.get("agent") if isinstance(health, dict) else None
+        interval = (
+            health_agent.get("interval_seconds") if isinstance(health_agent, dict) else None
+        )
     limit = max_age_seconds
     if isinstance(interval, int) and interval > 0:
         limit = max(limit, 2 * interval)

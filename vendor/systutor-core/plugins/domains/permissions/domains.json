@@ -1,8 +1,12 @@
 {
   "permissions": [
-    {"name": "domains.domains.read", "description": "View primary and extra domains with their certificate"},
-    {"name": "domains.domains.manage", "description": "Add and remove extra domains routed by the proxy"},
-    {"name": "domains.certificates.read", "description": "View the mail TLS certificate inventory of the tenant domains"},
-    {"name": "domains.certificates.manage", "description": "Request certificate issuance, force renewal and refresh agent state"}
+    {
+      "name": "domains.domains.read",
+      "description": "View primary and extra domains with their certificate"
+    },
+    {
+      "name": "domains.domains.manage",
+      "description": "Add and remove extra domains routed by the proxy"
+    }
   ]
 }

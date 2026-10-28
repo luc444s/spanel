@@ -1,7 +1,7 @@
 # Gestor de certificados TLS de correo
 
 Implementa las A.SPEC 0035 y 0036: inventario de certificados de correo, API en
-el plugin `domains`, modal **Certificados TLS** en Hosting, emisión bajo demanda
+el plugin `mail`, modal **Certificados TLS** en Correos, emisión bajo demanda
 mediante un agente privilegiado, verificación continua, alertas, instalación
 transaccional y rollback.
 
@@ -293,21 +293,21 @@ contenedor y nunca ejecuta `certbot renew`/`certbot certonly` en las rutas
 
 ## API
 
-Namespace `/api/v1/plugins/domains/certificates`.
+Namespace `/api/v1/plugins/mail/certificates`.
 
 | Método | Ruta | Permiso |
 |---|---|---|
-| GET | `/certificates` | `domains.certificates.read` |
-| GET | `/certificates/health` | `domains.certificates.read` |
-| GET | `/certificates/alerts` | `domains.certificates.read` |
-| GET | `/certificates/{hostname}` | `domains.certificates.read` |
-| GET | `/certificates/{hostname}/jobs/{job_id}` | `domains.certificates.read` |
-| POST | `/certificates/{hostname}/request` | `domains.certificates.manage` |
-| POST | `/certificates/refresh` | `domains.certificates.manage` |
-| POST | `/certificates/{hostname}/verify` | `domains.certificates.manage` + plataforma |
-| POST | `/certificates/{hostname}/sync` | `domains.certificates.manage` + plataforma |
-| POST | `/certificates/{hostname}/install` | `domains.certificates.manage` + plataforma |
-| POST | `/certificates/{hostname}/rollback` | `domains.certificates.manage` + plataforma |
+| GET | `/certificates` | `mail.certificates.read` |
+| GET | `/certificates/health` | `mail.certificates.read` |
+| GET | `/certificates/alerts` | `mail.certificates.read` |
+| GET | `/certificates/{hostname}` | `mail.certificates.read` |
+| GET | `/certificates/{hostname}/jobs/{job_id}` | `mail.certificates.read` |
+| POST | `/certificates/{hostname}/request` | `mail.certificates.manage` |
+| POST | `/certificates/refresh` | `mail.certificates.manage` |
+| POST | `/certificates/{hostname}/verify` | `mail.certificates.manage` + plataforma |
+| POST | `/certificates/{hostname}/sync` | `mail.certificates.manage` + plataforma |
+| POST | `/certificates/{hostname}/install` | `mail.certificates.manage` + plataforma |
+| POST | `/certificates/{hostname}/rollback` | `mail.certificates.manage` + plataforma |
 
 `POST .../request` acepta `{"action":"ensure"|"force","reason":"..."}`, escribe
 `requests/<uuid>.json` de forma atómica con modo `0600` y responde `202`:
@@ -317,7 +317,7 @@ Namespace `/api/v1/plugins/domains/certificates`.
   "job_id": "uuid",
   "hostname": "mail.systutor.com",
   "state": "queued",
-  "poll_url": "/api/v1/plugins/domains/certificates/mail.systutor.com/jobs/uuid"
+  "poll_url": "/api/v1/plugins/mail/certificates/mail.systutor.com/jobs/uuid"
 }
 ```
 
@@ -339,7 +339,7 @@ infraestructura (`core.platform.admin`). Un hostname de otro tenant responde
 alertas globales (por ejemplo agente viejo) y `cf-mail` son solo para admin.
 
 Las acciones `verify|sync|install|rollback` son solo del administrador de
-plataforma: un tenant con `domains.certificates.manage` recibe `403`; un
+plataforma: un tenant con `mail.certificates.manage` recibe `403`; un
 hostname ajeno responde `404`. Todas encolan un job y responden `202`, y el
 resultado se consulta con `/jobs/{job_id}`. Cada acción se registra en auditoría
 (`domains.certificate.verified|synced|installed|rolled_back`).
@@ -351,26 +351,28 @@ cambia.
 
 | Permiso | Quién | Alcance |
 |---|---|---|
-| `domains.certificates.read` | admin de infraestructura y tenants | propios dominios; admin ve todo |
-| `domains.certificates.manage` | solo admin de infraestructura | solicitar, forzar, refrescar, verificar, instalar, sincronizar y revertir |
+| `mail.certificates.read` | admin de infraestructura y tenants | propios dominios; admin ve todo |
+| `mail.certificates.manage` | solo admin de infraestructura | solicitar, forzar, refrescar, verificar, instalar, sincronizar y revertir |
 
-`domains.certificates.manage` **no** está en `tenant_admin_permissions`. Un
+`mail.certificates.manage` **no** está en `tenant_admin_permissions`. Un
 tenant puede consultar pero no ejecutar Certbot ni acciones de infraestructura.
 Las acciones 0036 exigen además `core.platform.admin`.
 
 ## UI
 
-En **Hosting**, doble clic sobre una fila abre **Certificados TLS** (subtítulo
-**Spanel · Infraestructura de correo**). La misma acción está en el detalle del
-sitio como botón **Certificados TLS**, para teclado y móvil.
+En **Correos**, el botón **Certificados TLS** abre el modal del mismo nombre
+(subtítulo **Spanel · Infraestructura de correo**). Muestra solo los
+certificados del dominio del tenant que se está viendo (`tenant_only=true`,
+incluso para el admin de plataforma); Dominios conserva únicamente los
+certificados web de Traefik.
 
-Cada fila muestra hostname, fuente/despliegue (`Certbot · SNI`,
-`Global · Predeterminado`), estado (`Válido`, `Por vencer`, `Vencido`, `Sin
-certificado`, `Pendiente`, `Error`), vencimiento y acciones. **Regenerar** usa
-`ensure`; **Forzar** pide confirmación con advertencia de rate limit de Let’s
-Encrypt. Los botones se deshabilitan sin `domains.certificates.manage`, con un
-job activo, para `cf-mail` o cuando el estado está viejo. Un fallo del agente se
-muestra una vez y no se reintenta en bucle.
+La lista no lleva acciones por fila: doble clic sobre un certificado abre un
+modal anidado con sus alertas, salud, seriales, probes SNI y las acciones.
+**Regenerar** usa `ensure`; **Forzar** pide confirmación con advertencia de rate
+limit de Let’s Encrypt. Los botones se deshabilitan sin
+`mail.certificates.manage`, con un job activo, para `cf-mail` o cuando el estado
+está viejo. Las alertas críticas bloquean solo lo destructivo. Un fallo del
+agente se muestra una vez y no se reintenta en bucle.
 
 Desde 0036 el modal muestra además **Estado del agente**, **Última
 verificación**, salud por certificado (`ok`, serial servido, puertos SNI) y las
@@ -440,7 +442,7 @@ viejo), las acciones destructivas quedan deshabilitadas hasta resolverla.
 ```bash
 PYTHONPATH=vendor/systutor-core:vendor/systutor-core/src \
   .venv/bin/python -m pytest \
-  vendor/systutor-core/plugins/domains/backend/tests \
+  vendor/systutor-core/plugins/mail/backend/tests \
   vendor/systutor-core/plugins/hosting/backend/tests -q
 
 PYTHONPATH=scripts .venv/bin/python -m pytest \

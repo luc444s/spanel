@@ -11,10 +11,10 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from plugins.domains.backend.certificates.config import CertificatesConfig
-from plugins.domains.backend.certificates.service import CertificatesService
-from plugins.domains.backend.router import _get_certificate_service
-from plugins.domains.backend.router import router as domains_router
+from plugins.mail.backend.certificates.config import CertificatesConfig
+from plugins.mail.backend.certificates.router import _get_certificate_service
+from plugins.mail.backend.certificates.router import router as certificates_router
+from plugins.mail.backend.certificates.service import CertificatesService
 from systutor.api.deps import get_db_session
 from systutor.contracts.domain_ownership import OwnedSite, register_site_provider
 from systutor.core.errors import register_exception_handlers
@@ -22,7 +22,7 @@ from systutor.kernel.auth.dependencies import get_current_tenant_context, get_cu
 from systutor.kernel.tenants.context import TenantContext
 
 DEFAULT = "cf-mail"
-BASE = "/api/v1/plugins/domains/certificates"
+BASE = "/api/v1/plugins/mail/certificates"
 
 
 class FakeDb:
@@ -93,7 +93,7 @@ def api(tmp_path, monkeypatch):
     )
     app = FastAPI()
     register_exception_handlers(app)
-    app.include_router(domains_router, prefix="/api/v1/plugins/domains")
+    app.include_router(certificates_router, prefix="/api/v1/plugins/mail")
 
     rows = [
         OwnedSite("s1", "t1", "site-1", "systutor.com"),
@@ -121,7 +121,7 @@ def api(tmp_path, monkeypatch):
 
 def test_list_filters_tenant_and_requires_read(api):
     build, _ = api
-    response = build(("domains.certificates.read",)).get(BASE)
+    response = build(("mail.certificates.read",)).get(BASE)
     assert response.status_code == 200
     body = response.json()
     assert [item["hostname"] for item in body["items"]] == ["mail.systutor.com"]
@@ -132,7 +132,7 @@ def test_list_filters_tenant_and_requires_read(api):
 
 def test_detail_hides_other_tenant_and_global(api):
     build, _ = api
-    client = build(("domains.certificates.read",))
+    client = build(("mail.certificates.read",))
     assert client.get(f"{BASE}/mail.systutor.com").status_code == 200
     assert client.get(f"{BASE}/mail.other.com").status_code == 404
     assert client.get(f"{BASE}/{DEFAULT}").status_code == 404
@@ -140,7 +140,7 @@ def test_detail_hides_other_tenant_and_global(api):
 
 def test_platform_admin_sees_global(api):
     build, _ = api
-    client = build(("domains.certificates.read", "core.platform.admin"))
+    client = build(("mail.certificates.read", "core.platform.admin"))
     body = client.get(BASE).json()
     assert {item["hostname"] for item in body["items"]} == {
         DEFAULT,
@@ -153,12 +153,12 @@ def test_request_requires_manage_and_returns_202(api):
     build, config = api
     payload = {"action": "ensure", "reason": "manual"}
 
-    assert build(("domains.certificates.read",)).post(
+    assert build(("mail.certificates.read",)).post(
         f"{BASE}/mail.systutor.com/request", json=payload
     ).status_code == 403
 
     response = build(
-        ("domains.certificates.read", "domains.certificates.manage")
+        ("mail.certificates.read", "mail.certificates.manage")
     ).post(f"{BASE}/mail.systutor.com/request", json=payload)
     assert response.status_code == 202
     body = response.json()
@@ -168,13 +168,13 @@ def test_request_requires_manage_and_returns_202(api):
     assert request_path.exists()
     assert stat.S_IMODE(request_path.stat().st_mode) == 0o600
     assert body["poll_url"].endswith(
-        f"/api/v1/plugins/domains/certificates/mail.systutor.com/jobs/{body['job_id']}"
+        f"/api/v1/plugins/mail/certificates/mail.systutor.com/jobs/{body['job_id']}"
     )
 
 
 def test_second_request_returns_409_with_existing_job(api):
     build, _ = api
-    client = build(("domains.certificates.read", "domains.certificates.manage"))
+    client = build(("mail.certificates.read", "mail.certificates.manage"))
     first = client.post(f"{BASE}/mail.systutor.com/request", json={"action": "ensure"})
     assert first.status_code == 202
     job_id = first.json()["job_id"]
@@ -183,12 +183,12 @@ def test_second_request_returns_409_with_existing_job(api):
     assert second.status_code == 409
     body = second.json()
     assert body["job_id"] == job_id
-    assert body["error"]["code"] == "domains.certificate_job_active"
+    assert body["error"]["code"] == "mail.certificate_job_active"
 
 
 def test_job_endpoint_returns_queued(api):
     build, _ = api
-    client = build(("domains.certificates.read", "domains.certificates.manage"))
+    client = build(("mail.certificates.read", "mail.certificates.manage"))
     job_id = client.post(
         f"{BASE}/mail.systutor.com/request", json={"action": "ensure"}
     ).json()["job_id"]
@@ -203,16 +203,16 @@ def test_job_endpoint_returns_queued(api):
 def test_cf_mail_request_is_conflict(api):
     build, _ = api
     client = build(
-        ("domains.certificates.read", "domains.certificates.manage", "core.platform.admin")
+        ("mail.certificates.read", "mail.certificates.manage", "core.platform.admin")
     )
     response = client.post(f"{BASE}/{DEFAULT}/request", json={"action": "ensure"})
     assert response.status_code == 409
-    assert response.json()["error"]["code"] == "domains.certificate_global"
+    assert response.json()["error"]["code"] == "mail.certificate_global"
 
 
 def test_invalid_hostname_and_extra_payload_are_rejected(api):
     build, _ = api
-    client = build(("domains.certificates.read", "domains.certificates.manage"))
+    client = build(("mail.certificates.read", "mail.certificates.manage"))
     assert client.get(f"{BASE}/bad_host!").status_code == 422
     response = client.post(
         f"{BASE}/mail.systutor.com/request",
@@ -224,12 +224,12 @@ def test_invalid_hostname_and_extra_payload_are_rejected(api):
 def test_refresh_requires_manage_and_writes_marker(api):
     build, config = api
     payload = {}
-    assert build(("domains.certificates.read",)).post(
+    assert build(("mail.certificates.read",)).post(
         f"{BASE}/refresh", json=payload
     ).status_code == 403
 
     response = build(
-        ("domains.certificates.read", "domains.certificates.manage")
+        ("mail.certificates.read", "mail.certificates.manage")
     ).post(f"{BASE}/refresh", json=payload)
     assert response.status_code == 200
     assert response.json()["requested"] is True
@@ -242,6 +242,6 @@ def test_state_with_private_key_is_not_served(api, tmp_path):
         '{"certificates": [], "note": "-----BEGIN PRIVATE KEY-----"}',
         encoding="utf-8",
     )
-    response = build(("domains.certificates.read",)).get(BASE)
+    response = build(("mail.certificates.read",)).get(BASE)
     assert response.status_code == 503
     assert "PRIVATE KEY" not in response.text

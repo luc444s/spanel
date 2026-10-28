@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
-from plugins.domains.backend.certificates.validation import parse_datetime
+from plugins.mail.backend.certificates.validation import parse_datetime
 
 Scope = Literal["global", "tenant"]
 Source = Literal["certbot", "static", "step-ca"]

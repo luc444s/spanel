@@ -62,11 +62,24 @@ def _get_hosting_service(db: Session = Depends(get_db_session)) -> HostingServic
 
 @router.get("", response_model=HostingSiteListResponse)
 def list_sites(
+    scope: str = "tenant",
     tenant_context: TenantContext = Depends(get_current_tenant_context),
     _current_user: User = Depends(require_permission("hosting.sites.read")),
     service: HostingService = Depends(_get_hosting_service),
 ) -> HostingSiteListResponse:
-    return service.list_sites(tenant_context.current_tenant_id)
+    if scope not in ("tenant", "all"):
+        raise AppError(
+            "scope debe ser 'tenant' o 'all'", status_code=422, code="hosting.invalid_scope"
+        )
+    if scope == "all" and not tenant_context.is_platform:
+        raise AppError(
+            "Solo el administrador de plataforma puede ver todos los tenants",
+            status_code=403,
+            code="hosting.platform_scope_forbidden",
+        )
+    return service.list_sites(
+        None if scope == "all" else tenant_context.current_tenant_id
+    )
 
 
 @router.post("", response_model=CreateSiteResponse, status_code=201)

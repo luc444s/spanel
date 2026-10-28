@@ -94,7 +94,7 @@ Entra:
   - `state.json` ampliado con `health`;
   - `alerts.json` o registro equivalente;
   - configuración de umbrales y canal de alerta.
-- Endpoints de lectura de salud en el plugin `domains`.
+- Endpoints de lectura de salud en el plugin `mail`.
 - Tests unitarios, de integración y live de solo lectura.
 - Documentación de operación, rollback y migración.
 
@@ -315,9 +315,9 @@ invariants:
 cd /data/data/com.termux/files/home/Proyectos/mailadmin
 PYTHONPATH=vendor/systutor-core:vendor/systutor-core/src \
   .venv/bin/python -m pytest \
-  vendor/systutor-core/plugins/domains/backend/tests \
+  vendor/systutor-core/plugins/mail/backend/tests \
   scripts/tests/test_mail_cert.py -q
-cd vendor/systutor-core && ruff check plugins/domains/backend
+cd vendor/systutor-core && ruff check plugins/mail/backend
 ```
 
 ### V1 — Auditoría continua
@@ -402,19 +402,23 @@ change_surface:
     - scripts/systemd/spanel-cert-audit.service
     - scripts/systemd/spanel-cert-deploy.service
     - scripts/spanel_cert_agent/certbot-deploy-hook.sh
-    - vendor/systutor-core/plugins/domains/backend/certificates/**
-    - vendor/systutor-core/plugins/domains/backend/router.py
-    - vendor/systutor-core/plugins/domains/backend/schemas.py
-    - vendor/systutor-core/plugins/domains/backend/tests/**
-    - vendor/systutor-core/plugins/domains/frontend/**
-    - vendor/systutor-core/plugins/domains/frontend/components/CertificatesDialog.tsx
-    - vendor/systutor-core/plugins/domains/frontend/pages/DomainsPage.tsx
+    - vendor/systutor-core/plugins/mail/backend/certificates/**
+    - vendor/systutor-core/plugins/mail/backend/router.py
+    - vendor/systutor-core/plugins/mail/backend/schemas.py
+    - vendor/systutor-core/plugins/mail/backend/tests/**
+    - vendor/systutor-core/plugins/mail/frontend/**
+    - vendor/systutor-core/plugins/mail/frontend/components/CertificatesDialog.tsx
+    - vendor/systutor-core/plugins/mail/frontend/pages/MailAccountsPage.tsx
     - docs/certificate-manager.md
   prohibited:
     - scripts/mail_cert.py
     - aspecs/0028-mail-cert-internal-tls.md
     - aspecs/0035-certificate-manager-domain-ui.md
-    - vendor/systutor-core/plugins/mail/**
+    - vendor/systutor-core/plugins/mail/backend/service.py
+    - vendor/systutor-core/plugins/mail/backend/provider.py
+    - vendor/systutor-core/plugins/mail/backend/settings.py
+    - vendor/systutor-core/plugins/mail/backend/audit.py
+    - vendor/systutor-core/plugins/mail/migrations/**
     - vendor/systutor-core/plugins/tenant/**
     - vendor/systutor-core/src/systutor/kernel/**
     - /etc/ssl/cf-mail.fullchain.crt

@@ -10,10 +10,10 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from plugins.domains.backend.certificates.config import CertificatesConfig
-from plugins.domains.backend.certificates.service import CertificatesService
-from plugins.domains.backend.router import _get_certificate_service
-from plugins.domains.backend.router import router as domains_router
+from plugins.mail.backend.certificates.config import CertificatesConfig
+from plugins.mail.backend.certificates.router import _get_certificate_service
+from plugins.mail.backend.certificates.router import router as certificates_router
+from plugins.mail.backend.certificates.service import CertificatesService
 from systutor.api.deps import get_db_session
 from systutor.contracts.domain_ownership import OwnedSite, register_site_provider
 from systutor.core.errors import register_exception_handlers
@@ -21,9 +21,9 @@ from systutor.kernel.auth.dependencies import get_current_tenant_context, get_cu
 from systutor.kernel.tenants.context import TenantContext
 
 DEFAULT = "cf-mail"
-BASE = "/api/v1/plugins/domains/certificates"
-ADMIN = ("domains.certificates.read", "domains.certificates.manage", "core.platform.admin")
-TENANT = ("domains.certificates.read",)
+BASE = "/api/v1/plugins/mail/certificates"
+ADMIN = ("mail.certificates.read", "mail.certificates.manage", "core.platform.admin")
+TENANT = ("mail.certificates.read",)
 
 
 class FakeDb:
@@ -162,7 +162,7 @@ def api(tmp_path, monkeypatch):
     )
     app = FastAPI()
     register_exception_handlers(app)
-    app.include_router(domains_router, prefix="/api/v1/plugins/domains")
+    app.include_router(certificates_router, prefix="/api/v1/plugins/mail")
 
     rows = [
         OwnedSite("s1", "t1", "site-1", "systutor.com"),
@@ -290,7 +290,7 @@ def test_admin_cannot_install_or_rollback_global_default(api):
 def test_tenant_admin_of_other_tenant_cannot_touch_foreign_hostname(api):
     build, _ = api
     response = build(
-        ("domains.certificates.read", "domains.certificates.manage"), tenant_id="t2"
+        ("mail.certificates.read", "mail.certificates.manage"), tenant_id="t2"
     ).post(f"{BASE}/mail.systutor.com/verify", json={})
     assert response.status_code == 404
 

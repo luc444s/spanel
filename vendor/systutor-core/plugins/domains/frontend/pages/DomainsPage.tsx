@@ -17,7 +17,6 @@ import { Button } from "@systutor/shell/ui/button";
 import { Dialog } from "@systutor/shell/ui/dialog";
 import { Input } from "@systutor/shell/ui/input";
 import { toast } from "@systutor/shell/ui/toast";
-import { CertificatesDialog } from "../components/CertificatesDialog";
 
 function certificateLabel(info: CertificateInfo | undefined) {
   if (!info) return "Sin datos";
@@ -79,8 +78,6 @@ export default function DomainsPage() {
   const permissions = useAuthStore((state) => state.permissions);
   const canManage = permissions.includes("domains.domains.manage");
   const canReadMail = permissions.includes("mail.accounts.read");
-  const canReadCertificates = permissions.includes("domains.certificates.read");
-  const canManageCertificates = permissions.includes("domains.certificates.manage");
 
   const domainsQuery = useQuery({ queryKey: domainsKeys.list, queryFn: listDomains });
   const mailQuery = useQuery({
@@ -100,8 +97,6 @@ export default function DomainsPage() {
   const [www, setWww] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [removing, setRemoving] = useState<DomainItem | null>(null);
-  const [certificatesOpen, setCertificatesOpen] = useState(false);
-  const [certificatesDomain, setCertificatesDomain] = useState<string | null>(null);
 
   const items = domainsQuery.data?.items ?? [];
   const sites = domainsQuery.data?.sites ?? [];
@@ -153,28 +148,13 @@ export default function DomainsPage() {
           <h1 className="text-lg font-semibold text-foreground">Dominios</h1>
           <p className="text-sm text-muted-foreground">
             El dominio primario lo gestiona Hosting. Los extras se publican por el proxy.
-            Doble clic en una fila para ver sus certificados TLS.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {canManage && (
-            <Button size="sm" onClick={openAdd} disabled={sites.length === 0}>
-              Agregar dominio
-            </Button>
-          )}
-          {canReadCertificates && (
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => {
-                setCertificatesDomain(null);
-                setCertificatesOpen(true);
-              }}
-            >
-              Certificados TLS
-            </Button>
-          )}
-        </div>
+        {canManage && (
+          <Button size="sm" onClick={openAdd} disabled={sites.length === 0}>
+            Agregar dominio
+          </Button>
+        )}
       </div>
 
       {domainsQuery.isError && (
@@ -209,15 +189,7 @@ export default function DomainsPage() {
               {items.map((item) => {
                 const extraConflict = item.conflict;
                 return (
-                  <tr
-                    key={item.domain}
-                    className="cursor-pointer border-t border-border hover:bg-accent/30"
-                    title="Doble clic para ver los certificados TLS"
-                    onDoubleClick={() => {
-                      setCertificatesDomain(item.domain);
-                      setCertificatesOpen(true);
-                    }}
-                  >
+                  <tr key={item.domain} className="border-t border-border">
                     <td className="px-3 py-2 font-medium text-foreground">
                       {item.domain}
                       {item.outside_tenant && (
@@ -270,30 +242,28 @@ export default function DomainsPage() {
                         )}
                       </td>
                     )}
-                    <td className="px-3 py-2" onDoubleClick={(event) => event.stopPropagation()}>
-                      <div className="flex flex-wrap items-center justify-end gap-2">
-                        {item.owner === "domains" && canManage ? (
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => setRemoving(item)}
-                          >
-                            Quitar
-                          </Button>
-                        ) : extraConflict && canManage ? (
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => setRemoving(item)}
-                          >
-                            Quitar extra
-                          </Button>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">
-                            Gestionado por Hosting
-                          </span>
-                        )}
-                      </div>
+                    <td className="px-3 py-2 text-right">
+                      {item.owner === "domains" && canManage ? (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => setRemoving(item)}
+                        >
+                          Quitar
+                        </Button>
+                      ) : extraConflict && canManage ? (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => setRemoving(item)}
+                        >
+                          Quitar extra
+                        </Button>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">
+                          Gestionado por Hosting
+                        </span>
+                      )}
                     </td>
                   </tr>
                 );
@@ -376,20 +346,6 @@ export default function DomainsPage() {
           </Button>
         </div>
       </Dialog>
-
-      <CertificatesDialog
-        open={certificatesOpen && canReadCertificates}
-        canManage={canManageCertificates}
-        visibleDomains={items.map((item) => item.domain)}
-        onlyHostname={certificatesDomain ? `mail.${certificatesDomain}` : null}
-        highlightHostname={
-          certificatesDomain ? `mail.${certificatesDomain}` : null
-        }
-        onClose={() => {
-          setCertificatesOpen(false);
-          setCertificatesDomain(null);
-        }}
-      />
     </section>
   );
 }

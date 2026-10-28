@@ -23,14 +23,14 @@ Hoy no hay ninguna superficie en el panel para eso:
   validación de solo lectura que se reutiliza aquí.
 - El plugin `domains` solo expone un `GET /{domain}/certificate` para el
   certificado web del proxy; no existe inventario de certificados de correo.
-- La página de Dominios no permite ver ni solicitar el certificado de correo de
-  un dominio.
+- La página de Correos no permite ver ni solicitar el certificado TLS de correo
+  de su dominio.
 - No hay un componente privilegiado limitado que pueda leer certificados y
   ejecutar recargas autorizadas sin darle a la aplicación web acceso
   indiscriminado a Docker ni a claves privadas.
 
 El resultado esperado es que un administrador de infraestructura pueda abrir el
-modal **Certificados TLS** desde la página de Dominios, ver el estado real de
+modal **Certificados TLS** desde la página de Correos, ver el estado real de
 `mail.<dominio>` y pedir su emisión o regeneración. Los tenants solo consultan
 el estado de sus propios dominios.
 
@@ -82,7 +82,7 @@ Códigos de salida: `0` OK, `2` validación, `4` transporte/Docker, `5` CA,
   siendo el proveedor.
 - Solo el administrador de infraestructura puede solicitar emisión o cambios;
   los tenants solo leen sus propios dominios.
-- UI: en Dominios, el botón “Certificados” de cada fila abre el modal “Certificados TLS”, con
+- UI: en Correos, el botón “Certificados TLS” abre el modal del mismo nombre, con
   subtítulo “Spanel · Infraestructura de correo” y filas del tipo
   `mail.systutor.com — Certbot · SNI — Válido — Regenerar`.
 
@@ -125,16 +125,15 @@ Estado del repositorio: los cambios de la Fase 0 están en el árbol de trabajo,
      (`default`, `sni`, `none`, `failed`);
    - estado de salud: `active`, `expiring`, `expired`, `missing`, `error`.
 
-2. **API del gestor en el plugin `domains`.** Endpoints de lectura para el
+2. **API del gestor en el plugin `mail`.** Endpoints de lectura para el
    panel y un endpoint de solicitud de emisión limitado a administradores.
 
-3. **Modales “Certificados TLS” en Dominios.** El nivel 1 se abre con doble
-   clic en una fila de dominio (o con el botón “Certificados TLS” de la
-   cabecera) y lista hostname, fuente, despliegue, estado y vencimiento, sin
-   acciones por fila. El nivel 2 se abre con doble clic en un certificado y
-   contiene sus alertas y las acciones (`Verificar`, `Forzar`, `Regenerar`,
-   `Sincronizar`, `Revertir`). El subtítulo es “Spanel · Infraestructura de
-   correo”.
+3. **Modales “Certificados TLS” en Correos.** El nivel 1 se abre con el botón
+   “Certificados TLS” de la página de Correos y lista hostname, fuente,
+   despliegue, estado y vencimiento, sin acciones por fila. El nivel 2 se abre
+   con doble clic en un certificado y contiene sus alertas y las acciones
+   (`Verificar`, `Forzar`, `Regenerar`, `Sincronizar`, `Revertir`). El subtítulo
+   es “Spanel · Infraestructura de correo”.
 
 4. **Solicitud de emisión por archivos locales + systemd.** El proceso web no
    ejecuta Certbot ni toca Docker. Escribe una solicitud pequeña y validada en
@@ -151,8 +150,8 @@ Estado del repositorio: los cambios de la Fase 0 están en el árbol de trabajo,
    Un hostname que no se pueda asociar requiere intervención de un
    administrador de infraestructura.
 
-7. **Permisos y auditoría.** `domains.certificates.read` para consultar los
-   dominios propios; `domains.certificates.manage` solo para el administrador de
+7. **Permisos y auditoría.** `mail.certificates.read` para consultar los
+   dominios propios; `mail.certificates.manage` solo para el administrador de
    infraestructura. Cada solicitud, resultado y fallo publica un evento
    auditable.
 
@@ -208,14 +207,15 @@ verificar. `SPANEL_CA_ROOT` debe apuntar al bundle correcto en producción
 
 Entra:
 
-- Nuevo módulo `vendor/systutor-core/plugins/domains/backend/certificates/`
+- Nuevo módulo `vendor/systutor-core/plugins/mail/backend/certificates/`
   con inventario, modelo, validación, jobs y servicio.
-- Endpoints nuevos bajo `/api/v1/plugins/domains/certificates`.
+- Endpoints nuevos bajo `/api/v1/plugins/mail/certificates`.
 - Cambios mínimos en `domains/backend/router.py`, `schemas.py`, `service.py`,
   `register.py`, `plugin.json` y tests.
-- Modal nuevo `CertificatesDialog` en el frontend de Dominios, reutilizando el
-  `Dialog` existente; apertura desde el botón por fila de `DomainsPage` y desde
-  la cabecera. La gestión de certificados vive en Dominios, no en Hosting.
+- Modal nuevo `CertificatesDialog` en el frontend de Correos, reutilizando el
+  `Dialog` existente; se abre con el botón “Certificados TLS” de
+  `MailAccountsPage`. La gestión de certificados vive en Correos; Dominios queda
+  solo con los certificados web de Traefik.
 - Componente nuevo `scripts/spanel_cert_agent/` y unidades systemd:
   - `spanel-cert-agent.path`
   - `spanel-cert-agent.service`
@@ -323,11 +323,11 @@ Archivo `requests/<uuid>.json`:
 
 | Método | Ruta | Permiso | Función |
 |---|---|---|---|
-| `GET` | `/certificates` | `domains.certificates.read` | Inventario visible para el tenant |
-| `GET` | `/certificates/{hostname}` | `domains.certificates.read` | Detalle de un certificado |
-| `GET` | `/certificates/{hostname}/jobs/{job_id}` | `domains.certificates.read` | Estado de una solicitud |
-| `POST` | `/certificates/{hostname}/request` | `domains.certificates.manage` | Crear solicitud de emisión |
-| `POST` | `/certificates/refresh` | `domains.certificates.manage` | Pedir refresco de estado al agente |
+| `GET` | `/certificates` | `mail.certificates.read` | Inventario visible para el tenant |
+| `GET` | `/certificates/{hostname}` | `mail.certificates.read` | Detalle de un certificado |
+| `GET` | `/certificates/{hostname}/jobs/{job_id}` | `mail.certificates.read` | Estado de una solicitud |
+| `POST` | `/certificates/{hostname}/request` | `mail.certificates.manage` | Crear solicitud de emisión |
+| `POST` | `/certificates/refresh` | `mail.certificates.manage` | Pedir refresco de estado al agente |
 
 El endpoint existente `GET /{domain}/certificate` del certificado web se
 mantiene sin cambios. El nuevo namespace `/certificates` evita colisiones.
@@ -339,7 +339,7 @@ Respuesta de solicitud:
   "job_id": "uuid",
   "hostname": "mail.systutor.com",
   "state": "queued",
-  "poll_url": "/api/v1/plugins/domains/certificates/mail.systutor.com/jobs/uuid"
+  "poll_url": "/api/v1/plugins/mail/certificates/mail.systutor.com/jobs/uuid"
 }
 ```
 
@@ -412,24 +412,26 @@ Frontend consulta el job y refresca el estado
 
 | Permiso | Quién | Alcance |
 |---|---|---|
-| `domains.certificates.read` | admin de infraestructura y tenants | Propios dominios; admin ve todo |
-| `domains.certificates.manage` | solo admin de infraestructura | Solicitar emisión, forzar y refrescar |
+| `mail.certificates.read` | admin de infraestructura y tenants | Propios dominios; admin ve todo |
+| `mail.certificates.manage` | solo admin de infraestructura | Solicitar emisión, forzar y refrescar |
 
-`domains.certificates.manage` **no** se agrega a
+`mail.certificates.manage` **no** se agrega a
 `tenant_admin_permissions`. El tenant puede consultar, no ejecutar Certbot.
 
 ### UI
 
-Modal `CertificatesDialog` (nivel 1), abierto desde Dominios:
+Modal `CertificatesDialog` (nivel 1), abierto desde Correos:
 
 - Título: **Certificados TLS**.
 - Subtítulo: **Spanel · Infraestructura de correo**.
-- Se abre con **doble clic** en una fila de la tabla de Dominios o con el botón
-  **Certificados TLS** de la cabecera (acción accesible para teclado y móvil).
-- La tabla de Dominios no lleva botón de certificados por fila.
-- El modal solo muestra certificados de los dominios listados en la página;
-  nunca certificados de otro tenant ni el `cf-mail` global. Abierto desde una
-  fila, muestra únicamente el certificado de `mail.<dominio>`.
+- Se abre con el botón **Certificados TLS** de la cabecera de Correos (acción
+  accesible para teclado y móvil).
+- Solo muestra los certificados del dominio del tenant que se está viendo;
+  nunca certificados de otro tenant. El `cf-mail` global no se lista aquí.
+  La API se consulta con `tenant_only=true`, incluso para el admin de
+  plataforma.
+- La tabla de Dominios no muestra certificados de correo y conserva únicamente
+  la columna de certificado web.
 - Lista compacta, sin acciones por fila:
   - `mail.systutor.com` — `Certbot · SNI` — `Por vencer` — vence en N días.
   - `cf-mail` — `Global · Predeterminado` — `Válido`.
@@ -444,7 +446,7 @@ Modal anidado `CertificateDetailDialog` (nivel 2):
 - Contiene las alertas del hostname (`Alerta crítica` o `Aviso`) y las acciones:
   `Verificar`, `Forzar`, `Regenerar`, `Sincronizar`, `Revertir`.
 - Los botones se deshabilitan si:
-  - el usuario no tiene `domains.certificates.manage`;
+  - el usuario no tiene `mail.certificates.manage`;
   - hay un job activo;
   - el certificado es `cf-mail` y no está soportada su regeneración;
   - hay una alerta crítica: solo se bloquea lo destructivo (`Forzar`,
@@ -498,7 +500,7 @@ invariants:
 cd /data/data/com.termux/files/home/Proyectos/mailadmin
 PYTHONPATH=vendor/systutor-core:vendor/systutor-core/src \
   .venv/bin/python -m pytest \
-  vendor/systutor-core/plugins/domains/backend/tests \
+  vendor/systutor-core/plugins/mail/backend/tests \
   vendor/systutor-core/plugins/hosting/backend/tests -q
 cd vendor/systutor-core && ruff check plugins/domains/backend plugins/hosting/backend
 ```
@@ -551,8 +553,8 @@ servicios (comparar mtimes y `docker inspect -f '{{.Id}}'`).
 
 ### V5 — UI
 
-- Doble clic en una fila de Dominios abre el modal “Certificados TLS”.
-- La tabla de Dominios no tiene botón de certificados por fila.
+- El botón **Certificados TLS** de Correos abre el modal.
+- La tabla de Dominios no muestra certificados de correo.
 - Doble clic en una fila de certificado abre el modal anidado.
 - El modal anidado muestra las alertas del hostname y los botones
   `Verificar`, `Forzar`, `Regenerar`, `Sincronizar` y `Revertir`.
@@ -568,7 +570,7 @@ Antes de habilitar solicitudes en producción:
 ```bash
 # Inventario real sin escribir nada
 curl -s -H "Authorization: Bearer $TOKEN" \
-  https://panel.example/api/v1/plugins/domains/certificates | jq .
+  https://panel.example/api/v1/plugins/mail/certificates | jq .
 
 # Verificación de los hostnames existentes
 openssl s_client -connect 127.0.0.1:993 -servername mail.systutor.com \
@@ -597,16 +599,15 @@ el certificado del hostname; sin SNI devuelve `cf-mail`; no se escribe nada.
 change_surface:
   allowed:
     - aspecs/0035-certificate-manager-domain-ui.md
-    - vendor/systutor-core/plugins/domains/backend/certificates/**
-    - vendor/systutor-core/plugins/domains/backend/router.py
-    - vendor/systutor-core/plugins/domains/backend/schemas.py
-    - vendor/systutor-core/plugins/domains/backend/service.py
-    - vendor/systutor-core/plugins/domains/backend/register.py
-    - vendor/systutor-core/plugins/domains/plugin.json
-    - vendor/systutor-core/plugins/domains/permissions/domains.json
-    - vendor/systutor-core/plugins/domains/events/domains.json
-    - vendor/systutor-core/plugins/domains/backend/tests/**
-    - vendor/systutor-core/plugins/domains/frontend/**
+    - vendor/systutor-core/plugins/mail/backend/certificates/**
+    - vendor/systutor-core/plugins/mail/backend/router.py
+    - vendor/systutor-core/plugins/mail/backend/schemas.py
+    - vendor/systutor-core/plugins/mail/backend/register.py
+    - vendor/systutor-core/plugins/mail/plugin.json
+    - vendor/systutor-core/plugins/mail/permissions/mail.json
+    - vendor/systutor-core/plugins/mail/events/mail.json
+    - vendor/systutor-core/plugins/mail/backend/tests/**
+    - vendor/systutor-core/plugins/mail/frontend/**
     - scripts/mail_cert.py                                          # solo extensión de la auditoría de Fase 0
     - scripts/tests/test_mail_cert.py
     - scripts/spanel_cert_agent/**
@@ -616,7 +617,11 @@ change_surface:
     - docs/certificate-manager.md
   prohibited:
     - aspecs/0028-mail-cert-internal-tls.md
-    - vendor/systutor-core/plugins/mail/**
+    - vendor/systutor-core/plugins/mail/backend/service.py
+    - vendor/systutor-core/plugins/mail/backend/provider.py
+    - vendor/systutor-core/plugins/mail/backend/settings.py
+    - vendor/systutor-core/plugins/mail/backend/audit.py
+    - vendor/systutor-core/plugins/mail/migrations/**
     - vendor/systutor-core/plugins/tenant/**
     - vendor/systutor-core/src/systutor/kernel/**
     - /etc/ssl/cf-mail.fullchain.crt
@@ -635,7 +640,7 @@ change_surface:
 blast_radius:
   direct:
     - inventario de certificados de correo
-    - modal de Dominios
+    - modal de Correos
     - solicitudes de emisión
     - instalación SNI en DMS
   indirect:

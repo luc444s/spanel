@@ -35,6 +35,10 @@ Operating rules for AI agents working on the SYSTUTOR open source kernel.
    `BASE_PERMISSIONS` in `systutor/api/seed.py`.
 4. New kernel model migrations are written here with Alembic.
 5. Every public API change updates `README.md`.
+6. `users.is_superadmin` is legacy and **must not** be used for authorization,
+   visibility or cross-tenant behavior. Platform-wide access is decided
+   exclusively by the RBAC permission `core.platform.admin`
+   (`TenantContext.is_platform`).
 
 ## Quality gates
 

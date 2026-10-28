@@ -18,8 +18,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from plugins.domains.backend.certificates.config import CertificatesConfig
-from plugins.domains.backend.certificates.validation import (
+from plugins.mail.backend.certificates.config import CertificatesConfig
+from plugins.mail.backend.certificates.validation import (
     contains_secret_material,
     normalize_hostname,
     normalize_job_id,
