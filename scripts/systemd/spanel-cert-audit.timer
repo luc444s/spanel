@@ -1,0 +1,13 @@
+[Unit]
+Description=Spanel certificate audit every configured interval
+Documentation=file:/opt/spanel/docs/certificate-manager.md
+
+[Timer]
+# Verificación continua; el intervalo real de alertas vive en
+# /etc/spanel/cert-agent.toml (verification.audit_interval_seconds).
+OnBootSec=3min
+OnUnitActiveSec=10min
+Unit=spanel-cert-audit.service
+
+[Install]
+WantedBy=timers.target

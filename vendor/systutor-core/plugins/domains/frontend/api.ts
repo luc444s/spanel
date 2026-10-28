@@ -79,3 +79,83 @@ export function getCertificate(domain: string) {
     `${BASE}/${encodeURIComponent(domain)}/certificate`
   );
 }
+
+// ---- Salud y alertas del gestor TLS de correo (A.SPEC 0036) -------------
+
+export type CertificateHealthItem = {
+  hostname: string;
+  serial: string | null;
+  served_serial: string | null;
+  no_sni_serial: string | null;
+  not_after: string | null;
+  days_left: number | null;
+  sni: Record<string, boolean>;
+  no_sni: boolean | null;
+  no_sni_ports: Record<string, boolean>;
+  ok: boolean | null;
+  last_verified_at: string | null;
+  last_ok_at: string | null;
+  consecutive_failures: number;
+  last_error: string | null;
+};
+
+export type CertificateDefaultHealth = {
+  name: string;
+  serial: string | null;
+  no_sni_serial: string | null;
+  ok: boolean | null;
+};
+
+export type CertificateHealth = {
+  generated_at: string | null;
+  agent_state: string;
+  agent_last_run_at: string | null;
+  interval_seconds: number;
+  stale: boolean;
+  default: CertificateDefaultHealth | null;
+  certificates: CertificateHealthItem[];
+  critical_count: number;
+  warning_count: number;
+};
+
+export type CertificateAlert = {
+  code: string;
+  severity: "warning" | "critical";
+  hostname: string | null;
+  message: string;
+  created_at: string | null;
+};
+
+export type CertificateAlerts = {
+  generated_at: string | null;
+  alerts: CertificateAlert[];
+  delivery_errors: string[];
+};
+
+export type CertificateAdminAction = "verify" | "sync" | "install" | "rollback";
+
+const CERTIFICATES_BASE = "/api/v1/plugins/domains/certificates";
+
+export const certificateHealthKeys = {
+  health: ["domains", "certificates", "health"] as const,
+  alerts: ["domains", "certificates", "alerts"] as const,
+};
+
+export function getMailCertificateHealth() {
+  return apiRequest<CertificateHealth>(`${CERTIFICATES_BASE}/health`);
+}
+
+export function getMailCertificateAlerts() {
+  return apiRequest<CertificateAlerts>(`${CERTIFICATES_BASE}/alerts`);
+}
+
+export function runMailCertificateAction(
+  hostname: string,
+  action: CertificateAdminAction
+) {
+  return apiRequest<{ job_id: string; hostname: string; state: "queued"; poll_url: string }>(
+    `${CERTIFICATES_BASE}/${encodeURIComponent(hostname)}/${action}`,
+    { method: "POST", body: JSON.stringify({ reason: "admin" }) }
+  );
+}
+

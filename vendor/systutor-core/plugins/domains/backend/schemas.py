@@ -118,3 +118,61 @@ class CertificateRefreshResponse(BaseModel):
     requested: bool
     request_id: str | None = None
     state: Literal["queued"] = "queued"
+
+
+class CertificateHealthItem(BaseModel):
+    """Salud de un hostname; solo metadatos y booleanos por puerto."""
+
+    hostname: str
+    serial: str | None = None
+    served_serial: str | None = None
+    no_sni_serial: str | None = None
+    not_after: str | None = None
+    days_left: int | None = None
+    sni: dict[str, bool] = Field(default_factory=dict)
+    no_sni: bool | None = None
+    no_sni_ports: dict[str, bool] = Field(default_factory=dict)
+    ok: bool | None = None
+    last_verified_at: str | None = None
+    last_ok_at: str | None = None
+    consecutive_failures: int = 0
+    last_error: str | None = None
+
+
+class CertificateDefaultHealth(BaseModel):
+    name: str
+    serial: str | None = None
+    no_sni_serial: str | None = None
+    ok: bool | None = None
+
+
+class CertificateHealthResponse(BaseModel):
+    generated_at: str | None = None
+    agent_state: str = "unknown"
+    agent_last_run_at: str | None = None
+    interval_seconds: int = 900
+    stale: bool = True
+    default: CertificateDefaultHealth | None = None
+    certificates: list[CertificateHealthItem] = Field(default_factory=list)
+    critical_count: int = 0
+    warning_count: int = 0
+
+
+class CertificateAlertItem(BaseModel):
+    code: str
+    severity: Literal["warning", "critical"] = "warning"
+    hostname: str | None = None
+    message: str
+    created_at: str | None = None
+
+
+class CertificateAlertsResponse(BaseModel):
+    generated_at: str | None = None
+    alerts: list[CertificateAlertItem] = Field(default_factory=list)
+    delivery_errors: list[str] = Field(default_factory=list)
+
+
+class CertificateAdminActionPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str | None = Field(default=None, max_length=200)

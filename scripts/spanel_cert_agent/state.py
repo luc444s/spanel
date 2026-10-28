@@ -61,6 +61,32 @@ def file_lock(path: Path) -> Iterator[None]:
             os.close(descriptor)
 
 
+@contextmanager
+def try_file_lock(path: Path) -> Iterator[bool]:
+    """Lock no bloqueante: la segunda ejecución concurrente sale sin cambios."""
+
+    if fcntl is None:  # pragma: no cover
+        yield True
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor = os.open(path, os.O_CREAT | os.O_RDWR, 0o600)
+    acquired = False
+    try:
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            acquired = True
+        except BlockingIOError:
+            acquired = False
+        yield acquired
+    finally:
+        if acquired:
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_UN)
+            except OSError:
+                pass
+        os.close(descriptor)
+
+
 def atomic_write_json(path: Path, payload: dict[str, Any], *, mode: int, lock: bool = True) -> None:
     serialized = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True)
     if contains_secret_material(serialized):

@@ -1,0 +1,20 @@
+[Unit]
+Description=Spanel certificate agent: continuous TLS verification and alerts
+Documentation=file:/opt/spanel/docs/certificate-manager.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+WorkingDirectory=/opt/spanel
+Environment=PYTHONPATH=/opt/spanel/scripts
+ExecStart=/usr/bin/python3 -m spanel_cert_agent audit --config /etc/spanel/cert-agent.toml
+# Los probes TLS y la escritura de estado no deben colgar el timer.
+TimeoutStartSec=600
+RemainAfterExit=no
+PrivateTmp=true
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true

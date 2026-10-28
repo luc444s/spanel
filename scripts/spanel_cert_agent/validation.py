@@ -74,7 +74,7 @@ def validate_request_payload(payload: object, *, default_name: str) -> dict:
     hostname = normalize_hostname(payload.get("hostname"))
     if hostname == default_name:
         raise CertificateValidationError("El certificado global no se regenera")
-    if action not in ("ensure", "force"):
+    if action not in ("ensure", "force", "verify", "sync", "install", "rollback"):
         raise CertificateValidationError("Acción inválida")
     reason = payload.get("reason")
     if reason is not None:

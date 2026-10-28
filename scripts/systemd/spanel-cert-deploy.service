@@ -1,0 +1,21 @@
+[Unit]
+Description=Spanel certificate deploy: install the lineage renewed by Certbot
+Documentation=file:/opt/spanel/docs/certificate-manager.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+WorkingDirectory=/opt/spanel
+Environment=PYTHONPATH=/opt/spanel/scripts
+# Fallback del deploy hook: sincroniza solo los linajes cuya huella cambió.
+# El hook puede invocar directamente `sync --hostname <hostname>`.
+ExecStart=/usr/bin/python3 -m spanel_cert_agent sync --config /etc/spanel/cert-agent.toml
+TimeoutStartSec=900
+RemainAfterExit=no
+PrivateTmp=true
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true

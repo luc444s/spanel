@@ -1,8 +1,9 @@
 # Gestor de certificados TLS de correo
 
-Implementa la A.SPEC 0035: inventario de certificados de correo, API en el
-plugin `domains`, modal **Certificados TLS** en Hosting y emisión bajo demanda
-mediante un agente privilegiado.
+Implementa las A.SPEC 0035 y 0036: inventario de certificados de correo, API en
+el plugin `domains`, modal **Certificados TLS** en Hosting, emisión bajo demanda
+mediante un agente privilegiado, verificación continua, alertas, instalación
+transaccional y rollback.
 
 Certbot sigue siendo el dueño de la emisión y la renovación. Spanel **no**
 implementa ACME, no guarda claves privadas y no recrea Docker Mailserver.
@@ -43,9 +44,27 @@ default_cert_path = "/etc/ssl/cf-mail.fullchain.crt"
 default_key_path = "/etc/ssl/cf-mail.key"
 install_root = "/etc/ssl/spanel/mail"
 state_path = "/var/lib/spanel/cert-manager/state.json"
+alerts_path = "/var/lib/spanel/cert-manager/alerts.json"
 requests_dir = "/var/lib/spanel/cert-manager/requests"
 jobs_dir = "/var/lib/spanel/cert-manager/jobs"
+generations_root = "/var/lib/spanel/cert-manager/generations"
+backup_root = "/var/lib/spanel/cert-manager/backups"
+locks_dir = "/var/lib/spanel/cert-manager/locks"
 renew_days = 30
+
+[verification]
+ports = [993, 465, 587]
+ca_file = "/etc/ssl/certs/ca-certificates.crt"
+timeout_seconds = 10
+audit_interval_seconds = 600
+
+[alerts]
+warning_days = 21
+critical_days = 7
+# Canal externo, independiente del correo vigilado. Elegir uno:
+webhook_command = ["/usr/local/bin/spanel-alert-webhook"]
+# webhook_url = "https://alertas.example.com/spanel"
+timeout_seconds = 10
 
 [certbot]
 executable = "/usr/bin/certbot"
@@ -75,7 +94,13 @@ Variables de entorno equivalentes (ganan sobre el TOML):
 `SPANEL_CERTBOT_LINEAGE_ROOT`, `SPANEL_CERTBOT_CA_FILE`,
 `SPANEL_POSTFIX_SNI_MAP`, `SPANEL_POSTFIX_POSTMAP_CMD`,
 `SPANEL_POSTFIX_RELOAD_CMD`, `SPANEL_DOVECOT_LOCAL_NAME`,
-`SPANEL_DOVECOT_RELOAD_CMD`.
+`SPANEL_DOVECOT_RELOAD_CMD`, `SPANEL_CERT_ALERTS_PATH`,
+`SPANEL_CERT_GENERATIONS_ROOT`, `SPANEL_CERT_BACKUP_ROOT`,
+`SPANEL_CERT_LOCKS_DIR`, `SPANEL_CERT_PROBE_PORTS`,
+`SPANEL_CERT_VERIFY_CA_FILE`, `SPANEL_CERT_PROBE_TIMEOUT`,
+`SPANEL_CERT_AUDIT_INTERVAL`, `SPANEL_CERT_ALERT_WARN_DAYS`,
+`SPANEL_CERT_ALERT_CRITICAL_DAYS`, `SPANEL_CERT_ALERT_WEBHOOK_CMD`,
+`SPANEL_CERT_ALERT_WEBHOOK_URL`, `SPANEL_CERT_ALERT_TIMEOUT`.
 
 Sin `sni_map_path`, `postmap_command`, `local_name_path` o los `reload_command`
 el agente **falla cerrado antes de ejecutar Certbot**. No inventa rutas ni
@@ -106,10 +131,24 @@ install -m 0600 -o root -g root cert-agent.toml /etc/spanel/cert-agent.toml
 install -m 0644 scripts/systemd/spanel-cert-agent.service /etc/systemd/system/
 install -m 0644 scripts/systemd/spanel-cert-agent.path /etc/systemd/system/
 install -m 0644 scripts/systemd/spanel-cert-agent.timer /etc/systemd/system/
+install -m 0644 scripts/systemd/spanel-cert-audit.service /etc/systemd/system/
+install -m 0644 scripts/systemd/spanel-cert-audit.timer /etc/systemd/system/
+install -m 0644 scripts/systemd/spanel-cert-deploy.service /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now spanel-cert-agent.path
 systemctl enable --now spanel-cert-agent.timer
+systemctl enable --now spanel-cert-audit.timer
+
+# Deploy hook de Certbot (A.SPEC 0036)
+install -m 0755 scripts/spanel_cert_agent/certbot-deploy-hook.sh \
+  /etc/letsencrypt/renewal-hooks/deploy/spanel-cert-sync
 ```
+
+`certbot.timer` sigue siendo el único programador de renovación. El deploy
+hook **no** ejecuta `certbot renew` ni `certbot certonly`: solo deriva el
+hostname de `RENEWED_LINEAGE` y llama `spanel-cert-agent sync --hostname`.
+`spanel-cert-deploy.service` es el fallback oneshot que sincroniza todos los
+linajes cuya huella cambió.
 
 Comprobación manual:
 
@@ -117,6 +156,10 @@ Comprobación manual:
 PYTHONPATH=/opt/spanel/scripts python3 -m spanel_cert_agent refresh \
   --config /etc/spanel/cert-agent.toml
 PYTHONPATH=/opt/spanel/scripts python3 -m spanel_cert_agent status \
+  --config /etc/spanel/cert-agent.toml --json
+PYTHONPATH=/opt/spanel/scripts python3 -m spanel_cert_agent verify \
+  --config /etc/spanel/cert-agent.toml --json
+PYTHONPATH=/opt/spanel/scripts python3 -m spanel_cert_agent audit \
   --config /etc/spanel/cert-agent.toml --json
 ```
 
@@ -154,6 +197,100 @@ Docker Mailserver no se recrea.
 `deployment="default"`. Ningún certificado SNI lo reemplaza para conexiones sin
 SNI.
 
+## Verificación continua (0036)
+
+`spanel-cert-audit.timer` ejecuta `spanel-cert-agent audit` cada
+`verification.audit_interval_seconds` (10 min por defecto). La auditoría:
+
+- valida clave/certificado, cadena, SAN, fechas y hash de cada linaje instalado;
+- conecta a 993/465/587 con SNI (`server_hostname=<hostname>`,
+  `check_hostname=True`, CA configurada) y comprueba SAN y serial/fingerprint
+  contra el inventario;
+- conecta **sin SNI** a los mismos puertos y exige que el serial sea el de
+  `cf-mail`; si responde un certificado SNI, es fallo crítico;
+- escribe `health` en `state.json` y `alerts.json`, sin tocar certificados ni
+  recargar Postfix/Dovecot.
+
+`verify` ejecuta los mismos probes sin escribir estado. La verificación se
+considera fallida si falla cualquier puerto, la cadena, el SAN, la clave o la
+vigencia.
+
+Estado de salud (solo metadatos):
+
+```json
+{
+  "generated_at": "2026-10-27T12:00:00Z",
+  "agent": {"state": "ok", "last_run_at": "...", "interval_seconds": 600},
+  "default": {"name": "cf-mail", "serial": "...", "no_sni_serial": "...", "ok": true},
+  "certificates": [
+    {
+      "hostname": "mail.systutor.com",
+      "serial": "...", "served_serial": "...", "no_sni_serial": "...",
+      "days_left": 62, "sni": {"993": true, "465": true, "587": true},
+      "no_sni": true, "ok": true,
+      "last_verified_at": "...", "last_ok_at": "...",
+      "consecutive_failures": 0, "last_error": null
+    }
+  ]
+}
+```
+
+`consecutive_failures` se incrementa por hostname y vuelve a 0 al recuperar
+`ok`. Un `generated_at` mayor que `2 × audit_interval_seconds` se considera
+viejo y alerta. El estado nunca contiene claves, tokens ni PEM.
+
+## Alertas
+
+| Condición | Severidad |
+|---|---|
+| `days_left <= 21` | aviso |
+| `days_left <= 7` o `<= 0` | crítico |
+| SAN/hostname o clave incompatibles | crítico |
+| Serial servido ≠ almacenado | crítico |
+| Postfix (465/587) o Dovecot (993) falla | crítico |
+| Agente sin ejecutar > 2 intervalos | crítico |
+| `cf-mail` sin SNI no coincide | crítico |
+| Instalación fallida | crítico |
+
+Las alertas se registran en `alerts.json` y en el journal de systemd, y se
+entregan por `alerts.webhook_command` (JSON por stdin) o `alerts.webhook_url`.
+El canal **no** usa el SMTP vigilado: si el correo está caído, la alerta sale
+igual. Se deduplican por código/hostname y se reenvían como máximo cada 6 horas
+o cuando cambia la severidad.
+
+## Instalación transaccional y rollback
+
+`install` (y el `sync` del deploy hook) sigue este orden:
+
+```text
+1. lock no bloqueante por hostname
+2. validar clave, cadena, SAN, fechas y EKU del material nuevo
+3. copiar a generación staging
+4. backup de generación activa, mapa SNI, snippet Dovecot y health previo
+5. activar generación (symlink atómico + copia atómica a rutas estables)
+6. regenerar mapa SNI y snippet local_name
+7. postmap si corresponde
+8. postfix reload + verificar 465/587
+9. dovecot reload + verificar 993
+10. verificar todos los SNI y el certificado sin SNI
+11. commit: podar generaciones viejas (se conservan 3)
+```
+
+Si falla cualquier paso 5-10 se restauran generación, mapa y snippet; se
+recargan **ambos** demonios y se verifican 465/587/993 y sin SNI. Un fallo de
+poda o de métricas posteriores al commit **no** revierte el certificado activo.
+Una instalación fallida entra en backoff exponencial (60 s hasta 1 h) y alerta;
+no hay reintentos infinitos. Dos ejecuciones simultáneas se serializan por lock
+y la segunda sale sin cambios.
+
+`rollback` revierte explícitamente a la generación anterior, regenera el mapa y
+el snippet, recarga Postfix y Dovecot y verifica. `cf-mail` no se instala ni se
+revierte desde el panel.
+
+El agente no toca cuentas, contraseñas, buzones ni maildir, no recrea el
+contenedor y nunca ejecuta `certbot renew`/`certbot certonly` en las rutas
+`sync`/`install`/`rollback`/`audit`/`verify`.
+
 ## API
 
 Namespace `/api/v1/plugins/domains/certificates`.
@@ -161,10 +298,16 @@ Namespace `/api/v1/plugins/domains/certificates`.
 | Método | Ruta | Permiso |
 |---|---|---|
 | GET | `/certificates` | `domains.certificates.read` |
+| GET | `/certificates/health` | `domains.certificates.read` |
+| GET | `/certificates/alerts` | `domains.certificates.read` |
 | GET | `/certificates/{hostname}` | `domains.certificates.read` |
 | GET | `/certificates/{hostname}/jobs/{job_id}` | `domains.certificates.read` |
 | POST | `/certificates/{hostname}/request` | `domains.certificates.manage` |
 | POST | `/certificates/refresh` | `domains.certificates.manage` |
+| POST | `/certificates/{hostname}/verify` | `domains.certificates.manage` + plataforma |
+| POST | `/certificates/{hostname}/sync` | `domains.certificates.manage` + plataforma |
+| POST | `/certificates/{hostname}/install` | `domains.certificates.manage` + plataforma |
+| POST | `/certificates/{hostname}/rollback` | `domains.certificates.manage` + plataforma |
 
 `POST .../request` acepta `{"action":"ensure"|"force","reason":"..."}`, escribe
 `requests/<uuid>.json` de forma atómica con modo `0600` y responde `202`:
@@ -188,6 +331,19 @@ hostnames sin dominio asociado y `cf-mail` solo los ve el administrador de
 infraestructura (`core.platform.admin`). Un hostname de otro tenant responde
 `404`, no `403`, para no filtrar su existencia.
 
+`GET /certificates/health` devuelve `agent_state`, `agent_last_run_at`,
+`interval_seconds`, `stale`, `default` (solo admin), `certificates` con
+`last_verified_at`, `last_ok_at`, `consecutive_failures`, `served_serial`,
+`sni`/`no_sni` y contadores `critical_count`/`warning_count`.
+`GET /certificates/alerts` devuelve solo alertas de hostnames visibles; las
+alertas globales (por ejemplo agente viejo) y `cf-mail` son solo para admin.
+
+Las acciones `verify|sync|install|rollback` son solo del administrador de
+plataforma: un tenant con `domains.certificates.manage` recibe `403`; un
+hostname ajeno responde `404`. Todas encolan un job y responden `202`, y el
+resultado se consulta con `/jobs/{job_id}`. Cada acción se registra en auditoría
+(`domains.certificate.verified|synced|installed|rolled_back`).
+
 El endpoint existente `GET /{domain}/certificate` (certificado web del proxy) no
 cambia.
 
@@ -196,10 +352,11 @@ cambia.
 | Permiso | Quién | Alcance |
 |---|---|---|
 | `domains.certificates.read` | admin de infraestructura y tenants | propios dominios; admin ve todo |
-| `domains.certificates.manage` | solo admin de infraestructura | solicitar, forzar y refrescar |
+| `domains.certificates.manage` | solo admin de infraestructura | solicitar, forzar, refrescar, verificar, instalar, sincronizar y revertir |
 
 `domains.certificates.manage` **no** está en `tenant_admin_permissions`. Un
-tenant puede consultar pero no ejecutar Certbot.
+tenant puede consultar pero no ejecutar Certbot ni acciones de infraestructura.
+Las acciones 0036 exigen además `core.platform.admin`.
 
 ## UI
 
@@ -215,6 +372,12 @@ Encrypt. Los botones se deshabilitan sin `domains.certificates.manage`, con un
 job activo, para `cf-mail` o cuando el estado está viejo. Un fallo del agente se
 muestra una vez y no se reintenta en bucle.
 
+Desde 0036 el modal muestra además **Estado del agente**, **Última
+verificación**, salud por certificado (`ok`, serial servido, puertos SNI) y las
+alertas críticas. El admin dispone de **Verificar**, **Sincronizar** y
+**Revertir**. Si hay una alerta crítica (san/serial/puerto/`cf-mail`/agente
+viejo), las acciones destructivas quedan deshabilitadas hasta resolverla.
+
 ## Operación
 
 - Un certificado por hostname; los SAN múltiples se aceptan en el modelo.
@@ -225,6 +388,33 @@ muestra una vez y no se reintenta en bucle.
 - Si el agente está caído, la UI muestra “Estado no disponible” y no habilita
   acciones destructivas.
 - `state.json` y `jobs/` se conservan para auditoría.
+
+## Rollback (alcance 0036)
+
+1. Revertir el commit elimina timers, hook, endpoints y acciones nuevas; los
+   certificados existentes y `cf-mail` no se tocan.
+2. Desinstalar unidades y hook y conservar estado/jobs/backups para auditoría:
+
+   ```bash
+   systemctl disable --now spanel-cert-audit.timer spanel-cert-deploy.service
+   rm /etc/systemd/system/spanel-cert-audit.{service,timer}
+   rm /etc/systemd/system/spanel-cert-deploy.service
+   rm /etc/letsencrypt/renewal-hooks/deploy/spanel-cert-sync
+   systemctl daemon-reload
+   ```
+
+3. Si una instalación quedó a medias, restaurar la última generación:
+
+   ```bash
+   PYTHONPATH=/opt/spanel/scripts python3 -m spanel_cert_agent rollback \
+     --hostname mail.systutor.com --config /etc/spanel/cert-agent.toml
+   ```
+
+   El agente restaura generación, mapa SNI y snippet Dovecot, recarga ambos
+   demonios y verifica 465/587/993 y sin SNI.
+4. `cf-mail` no se modifica: no hay rollback del predeterminado.
+5. Conservar `state.json`, `alerts.json`, `jobs/`, `generations/` y `backups/`
+   para auditoría.
 
 ## Rollback (alcance 0035)
 
@@ -239,14 +429,11 @@ muestra una vez y no se reintenta en bucle.
    ```
 
 3. Si se instaló un certificado SNI nuevo, restaurar el mapa de Postfix y el
-   bloque de Dovecot desde `<archivo>.spanel-bak` (el agente guarda una copia
-   antes de cada escritura), recargar Postfix y Dovecot. No recrear el
+   bloque de Dovecot desde los backups de generación (`backups/<hostname>/`) o
+   desde `<archivo>.spanel-bak`, recargar Postfix y Dovecot. No recrear el
    contenedor.
 4. `cf-mail` no se modifica en esta fase: no hay rollback del certificado
    predeterminado.
-
-No forma parte de 0035: verificación continua programada, rollback automático,
-deploy hook y alertas (A.SPEC 0036).
 
 ## Pruebas
 
@@ -256,8 +443,9 @@ PYTHONPATH=vendor/systutor-core:vendor/systutor-core/src \
   vendor/systutor-core/plugins/domains/backend/tests \
   vendor/systutor-core/plugins/hosting/backend/tests -q
 
-.venv/bin/python -m pytest scripts/spanel_cert_agent/tests -q
+PYTHONPATH=scripts .venv/bin/python -m pytest \
+  scripts/spanel_cert_agent/tests -q
 ```
 
-Los tests del agente usan `tmp_path`, un runner falso de comandos y no tocan
-red, Docker, root, `/etc` ni Certbot real.
+Los tests del agente usan `tmp_path`, un runner falso de comandos, un connector
+TLS falso y no tocan red, Docker, root, `/etc` ni Certbot real.

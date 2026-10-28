@@ -15,6 +15,9 @@ from sqlalchemy.orm import Session
 from plugins.domains.backend.certificates.jobs import ActiveJobError
 from plugins.domains.backend.certificates.service import CertificatesService
 from plugins.domains.backend.schemas import (
+    CertificateAdminActionPayload,
+    CertificateAlertsResponse,
+    CertificateHealthResponse,
     CertificateItem,
     CertificateJobResponse,
     CertificateRefreshResponse,
@@ -176,6 +179,138 @@ def refresh_certificates(
         },
     )
     return response
+
+
+@router.get("/certificates/health", response_model=CertificateHealthResponse)
+def get_certificate_health(
+    tenant_context: TenantContext = Depends(get_current_tenant_context),
+    _current_user: User = Depends(require_permission("domains.certificates.read")),
+    service: CertificatesService = Depends(_get_certificate_service),
+) -> CertificateHealthResponse:
+    return service.health(tenant_context)
+
+
+@router.get("/certificates/alerts", response_model=CertificateAlertsResponse)
+def get_certificate_alerts(
+    tenant_context: TenantContext = Depends(get_current_tenant_context),
+    _current_user: User = Depends(require_permission("domains.certificates.read")),
+    service: CertificatesService = Depends(_get_certificate_service),
+) -> CertificateAlertsResponse:
+    return service.alerts(tenant_context)
+
+
+def _admin_certificate_action(
+    request: Request,
+    service: CertificatesService,
+    tenant_context: TenantContext,
+    hostname: str,
+    action: str,
+    reason: str | None = None,
+):
+    try:
+        response = service.admin_action(
+            tenant_context, hostname, action=action, reason=reason
+        )
+    except ActiveJobError as exc:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "error": {
+                    "code": "domains.certificate_job_active",
+                    "message": str(exc),
+                },
+                "job_id": exc.job_id,
+                "hostname": exc.hostname,
+            },
+        )
+    _publish_certificate(
+        request,
+        (
+            "domains.certificate.refreshed"
+            if action == "verify"
+            else "domains.certificate.requested"
+        ),
+        tenant_id=tenant_context.current_tenant_id,
+        payload={
+            "hostname": response.hostname,
+            "job_id": response.job_id,
+            "action": action,
+            "requested_by": tenant_context.current_user_id,
+        },
+    )
+    return response
+
+
+@router.post(
+    "/certificates/{hostname}/verify",
+    response_model=CertificateRequestResponse,
+    status_code=202,
+)
+def verify_certificate(
+    hostname: str,
+    request: Request,
+    body: CertificateAdminActionPayload | None = None,
+    tenant_context: TenantContext = Depends(get_current_tenant_context),
+    _current_user: User = Depends(require_permission("domains.certificates.manage")),
+    service: CertificatesService = Depends(_get_certificate_service),
+):
+    return _admin_certificate_action(
+        request, service, tenant_context, hostname, "verify", body.reason if body else None
+    )
+
+
+@router.post(
+    "/certificates/{hostname}/sync",
+    response_model=CertificateRequestResponse,
+    status_code=202,
+)
+def sync_certificate(
+    hostname: str,
+    request: Request,
+    body: CertificateAdminActionPayload | None = None,
+    tenant_context: TenantContext = Depends(get_current_tenant_context),
+    _current_user: User = Depends(require_permission("domains.certificates.manage")),
+    service: CertificatesService = Depends(_get_certificate_service),
+):
+    return _admin_certificate_action(
+        request, service, tenant_context, hostname, "sync", body.reason if body else None
+    )
+
+
+@router.post(
+    "/certificates/{hostname}/install",
+    response_model=CertificateRequestResponse,
+    status_code=202,
+)
+def install_certificate(
+    hostname: str,
+    request: Request,
+    body: CertificateAdminActionPayload | None = None,
+    tenant_context: TenantContext = Depends(get_current_tenant_context),
+    _current_user: User = Depends(require_permission("domains.certificates.manage")),
+    service: CertificatesService = Depends(_get_certificate_service),
+):
+    return _admin_certificate_action(
+        request, service, tenant_context, hostname, "install", body.reason if body else None
+    )
+
+
+@router.post(
+    "/certificates/{hostname}/rollback",
+    response_model=CertificateRequestResponse,
+    status_code=202,
+)
+def rollback_certificate(
+    hostname: str,
+    request: Request,
+    body: CertificateAdminActionPayload | None = None,
+    tenant_context: TenantContext = Depends(get_current_tenant_context),
+    _current_user: User = Depends(require_permission("domains.certificates.manage")),
+    service: CertificatesService = Depends(_get_certificate_service),
+):
+    return _admin_certificate_action(
+        request, service, tenant_context, hostname, "rollback", body.reason if body else None
+    )
 
 
 @router.get("/certificates/{hostname}", response_model=CertificateItem)

@@ -16,6 +16,15 @@ import {
   requestMailCertificate,
   type MailCertificate,
 } from "../api";
+import {
+  certificateHealthKeys,
+  getMailCertificateAlerts,
+  getMailCertificateHealth,
+  runMailCertificateAction,
+  type CertificateAdminAction,
+  type CertificateAlert,
+  type CertificateHealthItem,
+} from "../../../domains/frontend/api";
 
 type CertificatesDialogProps = {
   open: boolean;
@@ -68,32 +77,59 @@ function expiryLabel(cert: MailCertificate) {
   return `Vence en ${days} ${days === 1 ? "día" : "días"}`;
 }
 
+function timestampLabel(value: string | null | undefined) {
+  if (!value) return "Sin verificar";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "Sin verificar";
+  return parsed.toLocaleString();
+}
+
+function agentStateLabel(state: string | undefined) {
+  if (state === "ok") return "Agente OK";
+  if (state === "degraded") return "Agente con fallos";
+  return "Agente sin estado";
+}
+
 function CertificateRow({
   cert,
   pending,
   canManage,
   actionsDisabled,
+  destructiveDisabled,
   highlighted,
+  health,
+  critical,
   onRegenerate,
   onForce,
+  onAction,
 }: {
   cert: MailCertificate;
   pending: PendingJob | undefined;
   canManage: boolean;
   actionsDisabled: boolean;
+  destructiveDisabled: boolean;
   highlighted: boolean;
+  health: CertificateHealthItem | undefined;
+  critical: boolean;
   onRegenerate: (cert: MailCertificate) => void;
   onForce: (cert: MailCertificate) => void;
+  onAction: (cert: MailCertificate, action: CertificateAdminAction) => void;
 }) {
   const global = cert.scope === "global" || cert.deployment === "default";
   const busy = Boolean(pending) || actionsDisabled;
+  // Una alerta crítica bloquea solo lo destructivo (forzar, sincronizar,
+  // revertir). Regenerar sigue disponible: es justo lo que arregla un
+  // certificado vencido.
+  const destructive = busy || destructiveDisabled;
   const label = pending ? "Pendiente" : STATUS_LABELS[cert.status];
+  const healthOk = health?.ok;
 
   return (
     <div
       className={cn(
         "grid gap-2 rounded-md border border-border px-3 py-3 sm:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_auto_auto] sm:items-center",
-        highlighted && "border-primary/60 bg-accent/40"
+        highlighted && "border-primary/60 bg-accent/40",
+        critical && "border-destructive/60"
       )}
     >
       <div className="min-w-0">
@@ -101,25 +137,55 @@ function CertificateRow({
           {cert.hostname}
         </p>
         <p className="mt-0.5 text-xs text-muted-foreground">{sourceLabel(cert)}</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          Última verificación: {timestampLabel(health?.last_verified_at ?? cert.last_checked_at)}
+        </p>
+        {health?.last_error ? (
+          <p className="mt-0.5 break-words text-xs text-destructive">{health.last_error}</p>
+        ) : null}
       </div>
       <div className="text-xs text-muted-foreground">
         <p>{deploymentLabel(cert)}</p>
         <p className="mt-0.5">{expiryLabel(cert)}</p>
+        <p className="mt-0.5">
+          Salud: {healthOk === true ? "OK" : healthOk === false ? "Fallo" : "Sin datos"}
+        </p>
+        {health ? (
+          <p className="mt-0.5">
+            SNI {Object.entries(health.sni).map(([port, ok]) => `${port}:${ok ? "ok" : "falla"}`).join(" ")}
+          </p>
+        ) : null}
+        {health?.served_serial && cert.serial && health.served_serial !== cert.serial ? (
+          <p className="mt-0.5 text-destructive">Serial servido distinto</p>
+        ) : null}
       </div>
       <div className="flex items-center gap-2">
         <span className={cn("text-sm font-medium", pending ? "text-sky-600" : statusTone(cert.status))}>
           {label}
         </span>
         {pending ? <Badge>Job activo</Badge> : null}
+        {critical ? <Badge>Alerta crítica</Badge> : null}
       </div>
-      <div className="flex justify-end gap-2">
+      <div className="flex flex-wrap justify-end gap-2">
+        {canManage ? (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            disabled={busy}
+            onClick={() => onAction(cert, "verify")}
+            title="Forzar verificación de solo lectura"
+          >
+            Verificar
+          </Button>
+        ) : null}
         {canManage && !global ? (
           <>
             <Button
               type="button"
               variant="secondary"
               size="sm"
-              disabled={busy || cert.status === "missing"}
+              disabled={destructive || cert.status === "missing"}
               onClick={() => onForce(cert)}
               title="Forzar reemisión con Certbot"
             >
@@ -132,6 +198,26 @@ function CertificateRow({
               onClick={() => onRegenerate(cert)}
             >
               Regenerar
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={destructive}
+              onClick={() => onAction(cert, "sync")}
+              title="Instala el linaje renovado por Certbot si cambió"
+            >
+              Sincronizar
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={destructive}
+              onClick={() => onAction(cert, "rollback")}
+              title="Revierte a la generación anterior"
+            >
+              Revertir
             </Button>
           </>
         ) : null}
@@ -164,6 +250,22 @@ export function CertificatesDialog({
     refetchInterval: open && Object.keys(pending).length > 0 ? 5_000 : false,
   });
 
+  const healthQuery = useQuery({
+    queryKey: certificateHealthKeys.health,
+    queryFn: getMailCertificateHealth,
+    enabled: open,
+    retry: false,
+    refetchInterval: open ? 30_000 : false,
+  });
+
+  const alertsQuery = useQuery({
+    queryKey: certificateHealthKeys.alerts,
+    queryFn: getMailCertificateAlerts,
+    enabled: open,
+    retry: false,
+    refetchInterval: open ? 30_000 : false,
+  });
+
   const requestMutation = useMutation({
     mutationFn: ({
       hostname,
@@ -193,8 +295,31 @@ export function CertificatesDialog({
     onSuccess: () => {
       toast.success("Refresco de estado solicitado al agente");
       void queryClient.invalidateQueries({ queryKey: certificateKeys.list });
+      void queryClient.invalidateQueries({ queryKey: certificateHealthKeys.health });
     },
     onError: (error: Error) => setActionError(error.message || "No se pudo solicitar el refresco"),
+  });
+
+  const adminMutation = useMutation({
+    mutationFn: ({
+      hostname,
+      action,
+    }: {
+      hostname: string;
+      action: CertificateAdminAction;
+    }) => runMailCertificateAction(hostname, action),
+    onSuccess: (data, variables) => {
+      setActionError(null);
+      setPending((current) => ({
+        ...current,
+        [data.hostname]: { jobId: data.job_id, state: "queued" },
+      }));
+      toast.success(`Acción ${variables.action} encolada para ${data.hostname}`);
+      void queryClient.invalidateQueries({ queryKey: certificateHealthKeys.health });
+    },
+    onError: (error: Error) => {
+      setActionError(error.message || "No se pudo ejecutar la acción administrativa");
+    },
   });
 
   // Un job se consulta hasta que termina. Un fallo se muestra una vez y no se
@@ -257,7 +382,22 @@ export function CertificatesDialog({
       : data?.stale
         ? "Estado no disponible: el agente no publicó estado reciente"
         : null;
-  const busy = requestMutation.isPending || refreshMutation.isPending;
+  const busy =
+    requestMutation.isPending || refreshMutation.isPending || adminMutation.isPending;
+  const health = healthQuery.data;
+  const healthByHost = new Map(
+    (health?.certificates ?? []).map((item) => [item.hostname, item])
+  );
+  const alerts: CertificateAlert[] = alertsQuery.data?.alerts ?? [];
+  const criticalAlerts = alerts.filter((alert) => alert.severity === "critical");
+  const globalCritical = criticalAlerts.some((alert) => !alert.hostname);
+  const criticalHosts = new Set(
+    criticalAlerts
+      .map((alert) => alert.hostname)
+      .filter((hostname): hostname is string => Boolean(hostname))
+  );
+  const destructiveDisabled =
+    stateUnavailable || busy || globalCritical;
 
   function regenerate(cert: MailCertificate) {
     setActionError(null);
@@ -267,6 +407,11 @@ export function CertificatesDialog({
   function confirmForce() {
     if (!forceTarget) return;
     requestMutation.mutate({ hostname: forceTarget.hostname, action: "force" });
+  }
+
+  function runAction(cert: MailCertificate, action: CertificateAdminAction) {
+    setActionError(null);
+    adminMutation.mutate({ hostname: cert.hostname, action });
   }
 
   return (
@@ -306,6 +451,18 @@ export function CertificatesDialog({
         }
       >
         <div className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-xs text-muted-foreground">
+            <span>
+              Estado del agente: <strong>{agentStateLabel(health?.agent_state)}</strong>
+            </span>
+            <span>
+              Última verificación: {timestampLabel(health?.agent_last_run_at ?? health?.generated_at)}
+            </span>
+            <span>
+              {health ? `${health.critical_count} críticas · ${health.warning_count} avisos` : "Sin salud publicada"}
+            </span>
+          </div>
+
           {unavailableMessage ? (
             <Alert title="Estado no disponible">
               {unavailableMessage}. Las acciones de emisión quedan deshabilitadas hasta
@@ -313,6 +470,33 @@ export function CertificatesDialog({
             </Alert>
           ) : null}
           {actionError ? <Alert title="No se pudo completar la acción">{actionError}</Alert> : null}
+
+          {criticalAlerts.length > 0 ? (
+            <Alert title="Alertas críticas">
+              <ul className="list-disc space-y-1 pl-4">
+                {criticalAlerts.map((alert) => (
+                  <li key={`${alert.code}:${alert.hostname ?? "global"}`}>
+                    {alert.hostname ? `${alert.hostname}: ` : ""}
+                    {alert.message}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-1">Las acciones destructivas están deshabilitadas hasta resolverlas.</p>
+            </Alert>
+          ) : null}
+
+          {criticalAlerts.length === 0 && alerts.length > 0 ? (
+            <Alert title="Avisos de vencimiento">
+              <ul className="list-disc space-y-1 pl-4">
+                {alerts.map((alert) => (
+                  <li key={`${alert.code}:${alert.hostname ?? "global"}`}>
+                    {alert.hostname ? `${alert.hostname}: ` : ""}
+                    {alert.message}
+                  </li>
+                ))}
+              </ul>
+            </Alert>
+          ) : null}
 
           {listQuery.isLoading ? (
             <p className="text-sm text-muted-foreground">Leyendo certificados...</p>
@@ -332,11 +516,17 @@ export function CertificatesDialog({
                 pending={pending[cert.hostname]}
                 canManage={canManage}
                 actionsDisabled={stateUnavailable || busy}
+                destructiveDisabled={
+                  destructiveDisabled || criticalHosts.has(cert.hostname)
+                }
                 highlighted={
                   Boolean(highlightHostname) && cert.hostname === highlightHostname
                 }
+                health={healthByHost.get(cert.hostname)}
+                critical={criticalHosts.has(cert.hostname)}
                 onRegenerate={regenerate}
                 onForce={setForceTarget}
+                onAction={runAction}
               />
             ))}
           </div>
@@ -379,7 +569,7 @@ export function CertificatesDialog({
             <Button
               type="button"
               onClick={confirmForce}
-              disabled={requestMutation.isPending || stateUnavailable}
+              disabled={requestMutation.isPending || destructiveDisabled}
             >
               {requestMutation.isPending ? "Solicitando..." : "Forzar emisión"}
             </Button>

@@ -10,6 +10,11 @@ from fastapi import FastAPI
 from sqlalchemy.orm import Session
 
 from plugins.domains.backend.certificates.config import CertificatesConfig
+from plugins.domains.backend.certificates.health import (
+    alert_view,
+    health_view,
+    load_alerts,
+)
 from plugins.domains.backend.certificates.inventory import Inventory, load_inventory
 from plugins.domains.backend.certificates.jobs import ActiveJobError, JobStore
 from plugins.domains.backend.certificates.models import Certificate
@@ -18,6 +23,8 @@ from plugins.domains.backend.certificates.validation import (
     normalize_hostname,
 )
 from plugins.domains.backend.schemas import (
+    CertificateAlertsResponse,
+    CertificateHealthResponse,
     CertificateItem,
     CertificateJobResponse,
     CertificateRefreshResponse,
@@ -122,6 +129,30 @@ class CertificatesService:
         certificate = self._visible_certificate(tenant_context, hostname)
         return CertificateItem(**certificate.to_dict())
 
+    def health(self, tenant_context: TenantContext) -> CertificateHealthResponse:
+        inventory = self._inventory()
+        visible = self._visible(inventory, tenant_context)
+        return CertificateHealthResponse(
+            **health_view(
+                inventory,
+                visible_hostnames={cert.hostname for cert in visible},
+                is_platform=tenant_context.is_platform,
+                config=self._config,
+            )
+        )
+
+    def alerts(self, tenant_context: TenantContext) -> CertificateAlertsResponse:
+        inventory = self._inventory()
+        visible = self._visible(inventory, tenant_context)
+        payload = load_alerts(self._config)
+        view = alert_view(
+            payload,
+            visible_hostnames={cert.hostname for cert in visible},
+            default_name=self._config.default_name,
+            is_platform=tenant_context.is_platform,
+        )
+        return CertificateAlertsResponse(**view)
+
     def get_job(
         self, tenant_context: TenantContext, hostname: str, job_id: str
     ) -> CertificateJobResponse:
@@ -208,6 +239,77 @@ class CertificatesService:
             details={"request_id": request_id},
         )
         return CertificateRefreshResponse(requested=True, request_id=request_id, state="queued")
+
+    # ---- acciones administrativas (A.SPEC 0036) --------------------------
+
+    ADMIN_ACTIONS = frozenset({"verify", "sync", "install", "rollback"})
+
+    def _require_platform(self, tenant_context: TenantContext) -> None:
+        if not tenant_context.is_platform:
+            raise AppError(
+                "Solo el administrador de infraestructura puede ejecutar esta acción",
+                status_code=403,
+                code="domains.certificate_admin_only",
+            )
+
+    def admin_action(
+        self,
+        tenant_context: TenantContext,
+        hostname: str,
+        *,
+        action: str,
+        reason: str | None = None,
+    ) -> CertificateRequestResponse:
+        """Fuerza verificación/instalación/rollback; requiere plataforma."""
+
+        if action not in self.ADMIN_ACTIONS:
+            raise AppError(
+                "Acción inválida", status_code=422, code="domains.certificate_invalid_action"
+            )
+        certificate = self._visible_certificate(tenant_context, hostname)
+        self._require_platform(tenant_context)
+        if (
+            action in ("sync", "install", "rollback")
+            and certificate.scope == "global"
+        ):
+            raise AppError(
+                "El certificado global no se instala ni revierte desde el panel",
+                status_code=409,
+                code="domains.certificate_global",
+            )
+        try:
+            job_id = self._jobs.create_request(
+                certificate.hostname,
+                action=action,
+                requested_by=tenant_context.current_user_id,
+                reason=reason or "admin",
+            )
+        except CertificateValidationError as exc:
+            raise AppError(
+                str(exc), status_code=422, code="domains.certificate_invalid_hostname"
+            ) from exc
+
+        audit_action = {
+            "verify": "domains.certificate.verified",
+            "sync": "domains.certificate.synced",
+            "install": "domains.certificate.installed",
+            "rollback": "domains.certificate.rolled_back",
+        }[action]
+        self._audit(
+            tenant_context,
+            action=audit_action,
+            hostname=certificate.hostname,
+            details={"job_id": job_id, "action": action, "reason": reason or "admin"},
+        )
+        return CertificateRequestResponse(
+            job_id=job_id,
+            hostname=certificate.hostname,
+            state="queued",
+            poll_url=(
+                "/api/v1/plugins/domains/certificates/"
+                f"{certificate.hostname}/jobs/{job_id}"
+            ),
+        )
 
     # ---- auditoría -------------------------------------------------------
 

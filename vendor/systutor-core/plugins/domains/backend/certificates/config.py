@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 DEFAULT_STATE_PATH = "/var/lib/spanel/cert-manager/state.json"
+DEFAULT_ALERTS_PATH = "/var/lib/spanel/cert-manager/alerts.json"
 DEFAULT_REQUESTS_DIR = "/var/lib/spanel/cert-manager/requests"
 DEFAULT_JOBS_DIR = "/var/lib/spanel/cert-manager/jobs"
 DEFAULT_CERT_NAME = "cf-mail"
@@ -32,11 +33,14 @@ class CertificatesConfig:
     """Configuración inmutable del inventario y de las solicitudes."""
 
     state_path: Path = Path(DEFAULT_STATE_PATH)
+    alerts_path: Path = Path(DEFAULT_ALERTS_PATH)
     requests_dir: Path = Path(DEFAULT_REQUESTS_DIR)
     jobs_dir: Path = Path(DEFAULT_JOBS_DIR)
     default_name: str = DEFAULT_CERT_NAME
     renew_days: int = 30
     state_max_age_seconds: int = 900
+    alert_warning_days: int = 21
+    alert_critical_days: int = 7
 
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> CertificatesConfig:
@@ -48,9 +52,12 @@ class CertificatesConfig:
 
         return cls(
             state_path=path("SPANEL_CERT_STATE_PATH", DEFAULT_STATE_PATH),
+            alerts_path=path("SPANEL_CERT_ALERTS_PATH", DEFAULT_ALERTS_PATH),
             requests_dir=path("SPANEL_CERT_REQUESTS_DIR", DEFAULT_REQUESTS_DIR),
             jobs_dir=path("SPANEL_CERT_JOBS_DIR", DEFAULT_JOBS_DIR),
             default_name=(source.get("SPANEL_CERT_DEFAULT_NAME", "").strip() or DEFAULT_CERT_NAME),
             renew_days=_env_int(source, "SPANEL_CERT_RENEW_DAYS", 30),
             state_max_age_seconds=_env_int(source, "SPANEL_CERT_STATE_MAX_AGE", 900),
+            alert_warning_days=_env_int(source, "SPANEL_CERT_ALERT_WARN_DAYS", 21),
+            alert_critical_days=_env_int(source, "SPANEL_CERT_ALERT_CRITICAL_DAYS", 7),
         )

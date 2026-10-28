@@ -39,6 +39,7 @@ class Inventory:
     stale: bool = True
     generated_at: str | None = None
     agent_last_seen: str | None = None
+    health: dict[str, Any] | None = None
     error: str | None = None
 
     def find(self, hostname: str) -> Certificate | None:
@@ -129,6 +130,7 @@ def load_inventory(
     agent = payload.get("agent") if isinstance(payload.get("agent"), dict) else {}
     generated_at = payload.get("generated_at")
     last_seen = agent.get("last_seen") if isinstance(agent, dict) else None
+    health = payload.get("health") if isinstance(payload.get("health"), dict) else None
     return Inventory(
         certificates=certificates,
         stale=_stale(
@@ -139,6 +141,7 @@ def load_inventory(
         ),
         generated_at=generated_at if isinstance(generated_at, str) else None,
         agent_last_seen=last_seen if isinstance(last_seen, str) else None,
+        health=health,
         error=None,
     )
 

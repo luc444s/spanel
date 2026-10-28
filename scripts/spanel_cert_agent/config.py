@@ -17,10 +17,15 @@ from .validation import CertificateValidationError, normalize_hostname
 
 DEFAULT_CONFIG_PATH = "/etc/spanel/cert-agent.toml"
 DEFAULT_STATE_PATH = "/var/lib/spanel/cert-manager/state.json"
+DEFAULT_ALERTS_PATH = "/var/lib/spanel/cert-manager/alerts.json"
 DEFAULT_REQUESTS_DIR = "/var/lib/spanel/cert-manager/requests"
 DEFAULT_JOBS_DIR = "/var/lib/spanel/cert-manager/jobs"
+DEFAULT_GENERATIONS_ROOT = "/var/lib/spanel/cert-manager/generations"
+DEFAULT_BACKUP_ROOT = "/var/lib/spanel/cert-manager/backups"
+DEFAULT_LOCKS_DIR = "/var/lib/spanel/cert-manager/locks"
 DEFAULT_INSTALL_ROOT = "/etc/ssl/spanel/mail"
 DEFAULT_DEFAULT_NAME = "cf-mail"
+DEFAULT_PROBE_PORTS = (993, 465, 587)
 
 
 class AgentConfigError(Exception):
@@ -75,19 +80,66 @@ class DovecotConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class VerificationConfig:
+    """Probes TLS del agente; nunca escribe certificados ni recarga servicios."""
+
+    ports: tuple[int, ...] = DEFAULT_PROBE_PORTS
+    ca_file: Path | None = None
+    timeout_seconds: float = 10.0
+    audit_interval_seconds: int = 600
+
+    def require_ca(self) -> Path:
+        if self.ca_file is None or not self.ca_file.is_file():
+            raise AgentConfigError(
+                "Falta el bundle de CA para verificar TLS (verification.ca_file)"
+            )
+        return self.ca_file
+
+
+@dataclass(frozen=True, slots=True)
+class AlertConfig:
+    """Umbrales y canal externo de alertas.
+
+    El canal es independiente del correo vigilado: un comando webhook o una URL
+    HTTP configurada por el operador.
+    """
+
+    warning_days: int = 21
+    critical_days: int = 7
+    webhook_command: tuple[str, ...] = ()
+    webhook_url: str | None = None
+    timeout_seconds: float = 10.0
+
+    def configured(self) -> bool:
+        return bool(self.webhook_command or self.webhook_url)
+
+    def require_channel(self) -> None:
+        if not self.configured():
+            raise AgentConfigError(
+                "Falta canal de alertas externo (alerts.webhook_command o alerts.webhook_url)"
+            )
+
+
+@dataclass(frozen=True, slots=True)
 class AgentConfig:
     allowlist: frozenset[str] = frozenset()
     default_name: str = DEFAULT_DEFAULT_NAME
     default_cert_path: Path | None = Path("/etc/ssl/cf-mail.fullchain.crt")
     default_key_path: Path | None = Path("/etc/ssl/cf-mail.key")
     state_path: Path = Path(DEFAULT_STATE_PATH)
+    alerts_path: Path = Path(DEFAULT_ALERTS_PATH)
     requests_dir: Path = Path(DEFAULT_REQUESTS_DIR)
     jobs_dir: Path = Path(DEFAULT_JOBS_DIR)
+    generations_root: Path = Path(DEFAULT_GENERATIONS_ROOT)
+    backup_root: Path = Path(DEFAULT_BACKUP_ROOT)
+    locks_dir: Path = Path(DEFAULT_LOCKS_DIR)
     install_root: Path = Path(DEFAULT_INSTALL_ROOT)
     renew_days: int = 30
     certbot: CertbotConfig = field(default_factory=CertbotConfig)
     postfix: PostfixConfig = field(default_factory=PostfixConfig)
     dovecot: DovecotConfig = field(default_factory=DovecotConfig)
+    verification: VerificationConfig = field(default_factory=VerificationConfig)
+    alerts: AlertConfig = field(default_factory=AlertConfig)
     source: str = DEFAULT_CONFIG_PATH
 
     def require_hostname(self, hostname: str) -> None:
@@ -145,6 +197,8 @@ def load_config(
     certbot_raw = raw.get("certbot") if isinstance(raw.get("certbot"), dict) else {}
     postfix_raw = raw.get("postfix") if isinstance(raw.get("postfix"), dict) else {}
     dovecot_raw = raw.get("dovecot") if isinstance(raw.get("dovecot"), dict) else {}
+    verify_raw = raw.get("verification") if isinstance(raw.get("verification"), dict) else {}
+    alerts_raw = raw.get("alerts") if isinstance(raw.get("alerts"), dict) else {}
 
     def pick(section: dict, key: str, env_name: str, fallback=None):
         return _env(environment, env_name) or section.get(key, fallback)
@@ -193,6 +247,53 @@ def load_config(
             raise AgentConfigError(f"{key} debe ser un entero") from exc
         return parsed if parsed > 0 else default
 
+    def float_value(section: dict, key: str, env_name: str, default: float) -> float:
+        raw_value = pick(section, key, env_name, default)
+        try:
+            parsed = float(raw_value)
+        except (TypeError, ValueError) as exc:
+            raise AgentConfigError(f"{key} debe ser un número") from exc
+        return parsed if parsed > 0 else default
+
+    ports_value = pick(verify_raw, "ports", "SPANEL_CERT_PROBE_PORTS", list(DEFAULT_PROBE_PORTS))
+    if isinstance(ports_value, str):
+        ports_value = [item.strip() for item in ports_value.split(",") if item.strip()]
+    if not isinstance(ports_value, list) or not ports_value:
+        raise AgentConfigError("verification.ports debe ser una lista no vacía")
+    try:
+        ports = tuple(int(item) for item in ports_value)
+    except (TypeError, ValueError) as exc:
+        raise AgentConfigError("verification.ports debe contener puertos") from exc
+    if any(port < 1 or port > 65535 for port in ports):
+        raise AgentConfigError("verification.ports fuera de rango")
+
+    ca_candidate = pick(verify_raw, "ca_file", "SPANEL_CERT_VERIFY_CA_FILE", None) or pick(
+        certbot_raw, "ca_file", "SPANEL_CERTBOT_CA_FILE", None
+    )
+    verification = VerificationConfig(
+        ports=ports,
+        ca_file=_as_path(ca_candidate),
+        timeout_seconds=float_value(
+            verify_raw, "timeout_seconds", "SPANEL_CERT_PROBE_TIMEOUT", 10.0
+        ),
+        audit_interval_seconds=int_value(
+            verify_raw, "audit_interval_seconds", "SPANEL_CERT_AUDIT_INTERVAL", 600
+        ),
+    )
+    alerts = AlertConfig(
+        warning_days=int_value(alerts_raw, "warning_days", "SPANEL_CERT_ALERT_WARN_DAYS", 21),
+        critical_days=int_value(
+            alerts_raw, "critical_days", "SPANEL_CERT_ALERT_CRITICAL_DAYS", 7
+        ),
+        webhook_command=_as_command(
+            pick(alerts_raw, "webhook_command", "SPANEL_CERT_ALERT_WEBHOOK_CMD", None)
+        ),
+        webhook_url=pick(alerts_raw, "webhook_url", "SPANEL_CERT_ALERT_WEBHOOK_URL", None),
+        timeout_seconds=float_value(
+            alerts_raw, "timeout_seconds", "SPANEL_CERT_ALERT_TIMEOUT", 10.0
+        ),
+    )
+
     return AgentConfig(
         allowlist=frozenset(str(item).strip().lower() for item in allowlist if str(item).strip()),
         default_name=str(
@@ -206,12 +307,26 @@ def load_config(
         ),
         state_path=_as_path(pick(raw, "state_path", "SPANEL_CERT_STATE_PATH", DEFAULT_STATE_PATH))
         or Path(DEFAULT_STATE_PATH),
+        alerts_path=_as_path(
+            pick(raw, "alerts_path", "SPANEL_CERT_ALERTS_PATH", DEFAULT_ALERTS_PATH)
+        )
+        or Path(DEFAULT_ALERTS_PATH),
         requests_dir=_as_path(
             pick(raw, "requests_dir", "SPANEL_CERT_REQUESTS_DIR", DEFAULT_REQUESTS_DIR)
         )
         or Path(DEFAULT_REQUESTS_DIR),
         jobs_dir=_as_path(pick(raw, "jobs_dir", "SPANEL_CERT_JOBS_DIR", DEFAULT_JOBS_DIR))
         or Path(DEFAULT_JOBS_DIR),
+        generations_root=_as_path(
+            pick(raw, "generations_root", "SPANEL_CERT_GENERATIONS_ROOT", DEFAULT_GENERATIONS_ROOT)
+        )
+        or Path(DEFAULT_GENERATIONS_ROOT),
+        backup_root=_as_path(
+            pick(raw, "backup_root", "SPANEL_CERT_BACKUP_ROOT", DEFAULT_BACKUP_ROOT)
+        )
+        or Path(DEFAULT_BACKUP_ROOT),
+        locks_dir=_as_path(pick(raw, "locks_dir", "SPANEL_CERT_LOCKS_DIR", DEFAULT_LOCKS_DIR))
+        or Path(DEFAULT_LOCKS_DIR),
         install_root=_as_path(
             pick(raw, "install_root", "SPANEL_CERT_INSTALL_ROOT", DEFAULT_INSTALL_ROOT)
         )
@@ -220,5 +335,7 @@ def load_config(
         certbot=certbot,
         postfix=postfix,
         dovecot=dovecot,
+        verification=verification,
+        alerts=alerts,
         source=str(config_path),
     )

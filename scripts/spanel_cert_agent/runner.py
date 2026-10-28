@@ -15,6 +15,7 @@ from pathlib import Path
 from .certbot import CertbotError, build_argv, lineage_dir
 from .config import AgentConfig, AgentConfigError
 from .installer import InstallError, install_pair, install_paths
+from .operations import install_current, rollback_current, run_audit, sync_hostname
 from .sni import SniError, apply_sni
 from .state import (
     StateError,
@@ -52,9 +53,20 @@ class RunResult:
 
 
 class CertAgent:
-    def __init__(self, config: AgentConfig, *, runner: CommandRunner = _run_command) -> None:
+    def __init__(
+        self,
+        config: AgentConfig,
+        *,
+        runner: CommandRunner = _run_command,
+        connector=None,
+        verifier=None,
+        alert_sender=None,
+    ) -> None:
         self.config = config
         self._runner = runner
+        self._connector = connector
+        self._verifier = verifier
+        self._alert_sender = alert_sender
 
     # ---- estado ----------------------------------------------------------
 
@@ -139,6 +151,15 @@ class CertAgent:
             self.config.require_hostname(hostname)
             # Antes de emitir: si falta SNI o recarga, se falla cerrado.
             self.config.require_reload_config()
+            if request["action"] in ("verify", "sync", "install", "rollback"):
+                return self._run_health_action(
+                    request["action"],
+                    hostname,
+                    job_id,
+                    requested_at,
+                    path,
+                    requested_by=request.get("requested_by"),
+                )
             argv = build_argv(self.config, hostname, request["action"])
             process = self._runner(argv, None)
             if process.returncode != 0:
@@ -193,6 +214,75 @@ class CertAgent:
             )
             self._discard(path)
             return False
+
+    def _run_health_action(
+        self,
+        action: str,
+        hostname: str,
+        job_id: str,
+        requested_at,
+        path: Path,
+        *,
+        requested_by: str | None,
+    ) -> bool:
+        """Verificación/instalación/rollback; nunca ejecuta Certbot (I4)."""
+
+        if action == "verify":
+            run_audit(
+                self.config,
+                connector=self._connector,
+                runner=self._runner,
+                sender=self._alert_sender,
+            )
+            ok = True
+            message = "Verificación completada"
+            error = None
+        else:
+            runner = self._runner
+            if action == "sync":
+                outcome = sync_hostname(
+                    self.config,
+                    hostname,
+                    runner=runner,
+                    verifier=self._verifier,
+                    connector=self._connector,
+                    sender=self._alert_sender,
+                )
+            elif action == "install":
+                outcome = install_current(
+                    self.config,
+                    hostname,
+                    runner=runner,
+                    verifier=self._verifier,
+                    connector=self._connector,
+                    sender=self._alert_sender,
+                )
+            else:
+                outcome = rollback_current(
+                    self.config,
+                    hostname,
+                    runner=runner,
+                    verifier=self._verifier,
+                    connector=self._connector,
+                    sender=self._alert_sender,
+                )
+            ok = outcome.ok
+            message = "Certificado instalado" if ok else None
+            error = outcome.error
+        self._job(
+            job_id,
+            new_job_payload(
+                hostname=hostname,
+                action=action,
+                state="succeeded" if ok else "failed",
+                requested_by=requested_by,
+                requested_at=requested_at if isinstance(requested_at, str) else None,
+                message=message,
+                error=None if ok else (error or "Operación fallida"),
+            ),
+        )
+        self._discard(path)
+        return ok
 
     def _refresh_job(self, job_id: str, requested_at, path: Path) -> bool:
         self._job(
