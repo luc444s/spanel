@@ -260,6 +260,30 @@ def test_alerts_are_deduplicated_until_resend_window(tmp_path):
     assert len(delivered) == 1
 
 
+def test_sin_canal_no_intenta_entregar_ni_falla(tmp_path):
+    config = base_config(tmp_path)
+    health = {
+        "certificates": [
+            {
+                "hostname": "mail.systutor.com",
+                "days_left": 2,
+                "sni": {"993": True, "465": True, "587": True},
+                "ok": True,
+                "no_sni_ok": True,
+            }
+        ]
+    }
+
+    document = publish_alerts(
+        config,
+        health,
+        previous_state={"generated_at": datetime.now(timezone.utc).isoformat()},
+    )
+
+    assert document["alerts"]
+    assert document["delivery_errors"] == []
+
+
 def test_days_left_helper():
     now = datetime(2026, 10, 27, tzinfo=timezone.utc)
     assert days_left("2026-11-27T00:00:00Z", now=now) == 31

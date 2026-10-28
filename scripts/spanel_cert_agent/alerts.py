@@ -265,20 +265,22 @@ def publish_alerts(
 
     delivery: list[dict] = []
     failures: list[str] = []
+    channel_ready = sender is not None or config.alerts.configured()
     deliver = sender or (lambda alert: _default_sender(alert, config, runner=runner))
-    for alert in _due(alerts, sent, reference):
-        try:
-            deliver(alert)
-        except AlertChannelError as exc:
-            failures.append(str(exc))
-            logger.warning(
-                "cert_alert_delivery_failed",
-                extra={"code": alert.get("code"), "hostname": alert.get("hostname")},
-            )
-            continue
-        key = f"{alert.get('code')}:{alert.get('hostname') or 'global'}"
-        sent[key] = {"sent_at": now_iso(), "severity": alert.get("severity")}
-        delivery.append(alert)
+    if channel_ready:
+        for alert in _due(alerts, sent, reference):
+            try:
+                deliver(alert)
+            except AlertChannelError as exc:
+                failures.append(str(exc))
+                logger.warning(
+                    "cert_alert_delivery_failed",
+                    extra={"code": alert.get("code"), "hostname": alert.get("hostname")},
+                )
+                continue
+            key = f"{alert.get('code')}:{alert.get('hostname') or 'global'}"
+            sent[key] = {"sent_at": now_iso(), "severity": alert.get("severity")}
+            delivery.append(alert)
 
     document = {
         "generated_at": now_iso(),
