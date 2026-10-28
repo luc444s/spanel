@@ -192,6 +192,23 @@ def _hostname_in_sans(hostname: str, sans: list[str]) -> bool:
     return False
 
 
+def chain_verify_command(cert: Path, ca_file: Path) -> list[str]:
+    """Comando `openssl verify` que usa los intermedios del fullchain.
+
+    `openssl verify` solo valida el primer certificado del archivo; sin
+    `-untrusted` ignora la cadena incluida y un fullchain de Let's Encrypt
+    falla con "unable to get local issuer certificate".
+    """
+    return [
+        "verify",
+        "-CAfile",
+        str(ca_file),
+        "-untrusted",
+        str(cert),
+        str(cert),
+    ]
+
+
 def validate_pair(
     cert: Path,
     key: Path,
@@ -222,7 +239,7 @@ def validate_pair(
     if ca_file is not None:
         if not ca_file.is_file():
             raise CertificateValidationError(f"Falta el bundle de CA: {ca_file}")
-        args = ["verify", "-CAfile", str(ca_file), str(cert)]
+        args = chain_verify_command(cert, ca_file)
         process = runner(["openssl", *args], None)
         if process.returncode != 0:
             detail = (process.stdout or process.stderr or b"").decode("utf-8", "replace")
