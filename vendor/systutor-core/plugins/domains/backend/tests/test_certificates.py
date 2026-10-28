@@ -37,13 +37,21 @@ def iso(moment: datetime) -> str:
     return moment.astimezone(UTC).isoformat(timespec="seconds")
 
 
-def write_state(path: Path, certificates: list[dict], *, generated_at: str | None = None) -> None:
+def write_state(
+    path: Path,
+    certificates: list[dict],
+    *,
+    generated_at: str | None = None,
+    interval: int | None = None,
+) -> None:
     payload = {
         "version": 1,
         "generated_at": generated_at or iso(datetime.now(UTC)),
         "agent": {"last_seen": generated_at or iso(datetime.now(UTC))},
         "certificates": certificates,
     }
+    if interval is not None:
+        payload["agent"]["interval_seconds"] = interval
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload), encoding="utf-8")
 
@@ -173,6 +181,20 @@ def test_old_state_is_stale(tmp_path):
     write_state(config.state_path, [cert_payload("mail.systutor.com")], generated_at=old)
 
     assert load_inventory(config).stale is True
+
+
+def test_agent_interval_extends_the_staleness_window(tmp_path):
+    config = config_for(tmp_path)
+    recent = iso(datetime.now(UTC) - timedelta(minutes=18))
+    write_state(
+        config.state_path,
+        [cert_payload("mail.systutor.com")],
+        generated_at=recent,
+        interval=600,
+    )
+
+    # 2 × 600 s = 1200 s > los 900 s configurados.
+    assert load_inventory(config).stale is False
 
 
 def test_health_is_recomputed_from_dates(tmp_path):

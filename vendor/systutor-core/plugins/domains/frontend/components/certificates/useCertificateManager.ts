@@ -174,6 +174,26 @@ export function useCertificateManager(open: boolean) {
   const healthByHost = new Map(
     (health?.certificates ?? []).map((item) => [item.hostname, item])
   );
+  // El certificado predeterminado no está en la lista de salud: se proyecta
+  // desde `health.default` para que la fila de cf-mail no diga "Sin datos".
+  if (health?.default) {
+    healthByHost.set(health.default.name, {
+      hostname: health.default.name,
+      serial: health.default.serial,
+      served_serial: health.default.no_sni_serial,
+      no_sni_serial: health.default.no_sni_serial,
+      not_after: null,
+      days_left: null,
+      sni: {},
+      no_sni: health.default.ok,
+      no_sni_ports: {},
+      ok: health.default.ok,
+      last_verified_at: health.generated_at,
+      last_ok_at: null,
+      consecutive_failures: 0,
+      last_error: null,
+    });
+  }
   const alerts: CertificateAlert[] = alertsQuery.data?.alerts ?? [];
   const globalCritical = alerts.some(
     (alert) => alert.severity === "critical" && !alert.hostname

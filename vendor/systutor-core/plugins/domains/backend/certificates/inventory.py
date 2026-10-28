@@ -65,7 +65,15 @@ def _stale(
         reference = max(known) if known else None
     if reference is None:
         return True
-    return (now - reference).total_seconds() > max_age_seconds
+    # El criterio de la A.SPEC 0036 es "más de 2 intervalos sin ejecutarse".
+    # Si el agente publica su intervalo, ese valor manda; si no, se usa el
+    # máximo configurado.
+    agent = payload.get("agent")
+    interval = agent.get("interval_seconds") if isinstance(agent, dict) else None
+    limit = max_age_seconds
+    if isinstance(interval, int) and interval > 0:
+        limit = max(limit, 2 * interval)
+    return (now - reference).total_seconds() > limit
 
 
 def load_inventory(
