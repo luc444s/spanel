@@ -1,0 +1,12 @@
+[Unit]
+Description=Spanel certificate agent: watch mail certificate requests
+Documentation=file:/opt/spanel/docs/certificate-manager.md
+
+[Path]
+# La web escribe aquí solicitudes atómicas. El servicio las procesa como root.
+PathChanged=/var/lib/spanel/cert-manager/requests
+DirectoryNotEmpty=/var/lib/spanel/cert-manager/requests
+Unit=spanel-cert-agent.service
+
+[Install]
+WantedBy=paths.target

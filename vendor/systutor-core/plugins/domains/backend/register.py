@@ -6,13 +6,13 @@ import logging
 
 from sqlalchemy.orm import Session
 
-from systutor.contracts.domain_ownership import register_extra_claims
-from systutor.sdk.context import PluginContext
-
+from plugins.domains.backend.certificates.config import CertificatesConfig
 from plugins.domains.backend.proxy import ProxyOperations, build_runner
 from plugins.domains.backend.publisher import register_domains_publisher
 from plugins.domains.backend.router import router
 from plugins.domains.backend.settings import get_domains_settings, register_domains_settings
+from systutor.contracts.domain_ownership import register_extra_claims
+from systutor.sdk.context import PluginContext
 
 logger = logging.getLogger(__name__)
 
@@ -40,5 +40,8 @@ def register(context: PluginContext) -> None:
     app = context.router_registry
     if app is not None:
         app.state.domains_context = context
+        # El gestor de certificados lee rutas por entorno; se resuelven una vez
+        # al registrar el plugin y los tests pueden reemplazarlas en app.state.
+        app.state.certificates_config = CertificatesConfig.from_env()
         register_extra_claims(app, "domains", check_extra_claim)
         register_domains_publisher(context)

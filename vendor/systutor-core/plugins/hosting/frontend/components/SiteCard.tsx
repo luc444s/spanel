@@ -35,18 +35,24 @@ function statusDot(status: string) {
 type SiteCardProps = {
   site: HostingSite;
   onOpen: (site: HostingSite) => void;
+  onOpenCertificates?: (site: HostingSite) => void;
 };
 
 /**
  * One site is one card. The card carries no action buttons: clicking it opens
  * the dialog that owns every action, so the list stays readable on a phone.
+ * Double-click is a shortcut to the TLS certificates dialog; the same action
+ * is available from the detail dialog for keyboard and touch users.
  */
-export function SiteCard({ site, onOpen }: SiteCardProps) {
+export function SiteCard({ site, onOpen, onOpenCertificates }: SiteCardProps) {
   return (
     <Card
       role="button"
       tabIndex={0}
+      aria-label={`${site.container_name}. Doble clic para ver certificados TLS`}
+      title="Doble clic para ver los certificados TLS"
       onClick={() => onOpen(site)}
+      onDoubleClick={() => onOpenCertificates?.(site)}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();

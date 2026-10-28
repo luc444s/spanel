@@ -587,6 +587,8 @@ change_surface:
     - vendor/systutor-core/plugins/domains/backend/service.py
     - vendor/systutor-core/plugins/domains/backend/register.py
     - vendor/systutor-core/plugins/domains/plugin.json
+    - vendor/systutor-core/plugins/domains/permissions/domains.json
+    - vendor/systutor-core/plugins/domains/events/domains.json
     - vendor/systutor-core/plugins/domains/backend/tests/**
     - vendor/systutor-core/plugins/domains/frontend/**
     - vendor/systutor-core/plugins/hosting/frontend/pages/HostingPage.tsx

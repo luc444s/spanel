@@ -55,3 +55,66 @@ class CertificateResponse(BaseModel):
     sans: list[str] = Field(default_factory=list)
     verified: bool = False
     error: str | None = None
+
+
+class CertificateItem(BaseModel):
+    """Un certificado de correo, solo metadatos y rutas."""
+
+    hostname: str
+    name: str
+    scope: Literal["global", "tenant"]
+    domain: str | None = None
+    source: Literal["certbot", "static", "step-ca"]
+    deployment: Literal["default", "sni", "none", "failed"]
+    status: Literal["active", "expiring", "expired", "missing", "error"]
+    sans: list[str] = Field(default_factory=list)
+    issuer: str | None = None
+    subject: str | None = None
+    serial: str | None = None
+    fingerprint: str | None = None
+    not_before: str | None = None
+    not_after: str | None = None
+    cert_path: str | None = None
+    key_path: str | None = None
+    last_checked_at: str | None = None
+    last_issued_at: str | None = None
+    last_error: str | None = None
+
+
+class CertificatesResponse(BaseModel):
+    items: list[CertificateItem] = Field(default_factory=list)
+    stale: bool = True
+    generated_at: str | None = None
+    agent_last_seen: str | None = None
+    error: str | None = None
+
+
+class CertificateRequestPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action: Literal["ensure", "force"] = "ensure"
+    reason: str | None = Field(default=None, max_length=200)
+
+
+class CertificateRequestResponse(BaseModel):
+    job_id: str
+    hostname: str
+    state: Literal["queued"] = "queued"
+    poll_url: str
+
+
+class CertificateJobResponse(BaseModel):
+    job_id: str
+    hostname: str
+    state: Literal["queued", "running", "succeeded", "failed"]
+    action: str | None = None
+    requested_at: str | None = None
+    updated_at: str | None = None
+    message: str | None = None
+    error: str | None = None
+
+
+class CertificateRefreshResponse(BaseModel):
+    requested: bool
+    request_id: str | None = None
+    state: Literal["queued"] = "queued"

@@ -1,0 +1,20 @@
+[Unit]
+Description=Spanel privileged mail certificate agent (Certbot, SNI, reload)
+Documentation=file:/opt/spanel/docs/certificate-manager.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+WorkingDirectory=/opt/spanel
+Environment=PYTHONPATH=/opt/spanel/scripts
+ExecStart=/usr/bin/python3 -m spanel_cert_agent run-once --config /etc/spanel/cert-agent.toml
+# Certbot y las recargas pueden tardar; no dejar el servicio a medias.
+TimeoutStartSec=900
+RemainAfterExit=no
+PrivateTmp=true
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true

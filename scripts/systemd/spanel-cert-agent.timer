@@ -1,0 +1,13 @@
+[Unit]
+Description=Spanel certificate agent: periodic state refresh
+Documentation=file:/opt/spanel/docs/certificate-manager.md
+
+[Timer]
+# El timer refresca state.json aunque no haya solicitudes. Si hay una
+# solicitud pendiente, `run-once` también la procesa.
+OnBootSec=2min
+OnUnitActiveSec=10min
+Unit=spanel-cert-agent.service
+
+[Install]
+WantedBy=timers.target
