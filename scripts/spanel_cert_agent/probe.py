@@ -102,7 +102,7 @@ def _starttls(
 ) -> dict:
     with socket.create_connection((host, port), timeout=timeout) as raw:
         raw.settimeout(timeout)
-        banner = raw.recv(4096)
+        banner = _read_smtp_reply(raw)
         if not banner.startswith(b"220"):
             raise ProbeError("El servidor SMTP no respondió 220")
         raw.sendall(b"EHLO spanel-cert-agent\r\n")
