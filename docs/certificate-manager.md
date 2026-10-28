@@ -152,6 +152,32 @@ linajes cuya huella cambió.
 
 ### Despliegue con Docker
 
+El instalador idempotente prepara todo en el host:
+
+```bash
+python3 scripts/install_cert_agent.py --dry-run
+python3 scripts/install_cert_agent.py
+```
+
+- Detecta los linajes `mail.*` de Certbot (o usa `--allowlist`).
+- Copia los certificados existentes a `/etc/ssl/spanel/mail/<hostname>/`.
+- Escribe `/etc/spanel/cert-agent.toml` sin `[postfix]` ni `[dovecot]`, así la
+  emisión falla cerrada y no toca el mapa SNI.
+- Instala las unidades systemd, publica `state.json` y habilita los timers.
+- `--force-config` reescribe la configuración y `--refresh-certs` vuelve a
+  copiar los certificados.
+
+Para comprobar si el agente está instalado, habilitado y publicando estado
+reciente:
+
+```bash
+python3 scripts/install_cert_agent.py --check
+python3 scripts/install_cert_agent.py --check --json
+```
+
+Sale con `0` si configuración, unidades, timers y `state.json` están bien, y
+con `1` si falta algo. La comprobación no escribe nada.
+
 La app lee el estado y escribe solicitudes en `/var/lib/spanel/cert-manager`.
 El `docker-compose.yml` monta ese directorio en el contenedor `app`; sin el
 mount la API responde `state_missing` y la UI muestra «Estado no disponible».
