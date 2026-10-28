@@ -122,6 +122,15 @@ Tests nuevos en `test_provider.py`:
 mejora se apoya en el código de DMS (O(N) subprocesos) y en que el camino nuevo ejecuta un
 solo `cat`; la magnitud exacta se mide en el host comparando ambos comandos.
 
+**Medido en producción** (`vmi3461574`, contenedor `mailserver`, 73 buzones):
+
+```text
+docker exec mailserver setup email list                    -> 6592 ms
+docker exec mailserver cat .../postfix-accounts.cf         ->  146 ms
+```
+
+45× menos en el camino frío, y el costo deja de crecer con la cantidad de buzones.
+
 ## ROLLBACK
 
 ```bash
