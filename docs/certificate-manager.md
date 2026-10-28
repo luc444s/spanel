@@ -150,7 +150,21 @@ hostname de `RENEWED_LINEAGE` y llama `spanel-cert-agent sync --hostname`.
 `spanel-cert-deploy.service` es el fallback oneshot que sincroniza todos los
 linajes cuya huella cambió.
 
-Comprobación manual:
+### Despliegue con Docker
+
+La app lee el estado y escribe solicitudes en `/var/lib/spanel/cert-manager`.
+El `docker-compose.yml` monta ese directorio en el contenedor `app`; sin el
+mount la API responde `state_missing` y la UI muestra «Estado no disponible».
+El contenedor corre como root, así que no hace falta crear el usuario `spanel`
+en el host: alcanza con los directorios y permisos del agente.
+
+El agente corre en el host porque necesita Certbot, escribir en
+`/etc/ssl/spanel/mail` y recargar Postfix/Dovecot. Con Docker Mailserver, la
+recarga se hace con `docker exec` y las rutas del mapa SNI deben ser las que el
+contenedor ya monta (`/tmp/docker-mailserver/...`). Si el mapa SNI o el
+`local_name` no están configurados, el agente falla cerrado y no emite.
+
+### Comprobación manual
 
 ```bash
 PYTHONPATH=/opt/spanel/scripts python3 -m spanel_cert_agent refresh \
