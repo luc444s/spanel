@@ -474,5 +474,20 @@ composition:
   vencen, se sirven correctamente por SNI y no rompen el predeterminado.
 - Owner: luc444s
 - Approver:
-- Commit:
-- Deployment: laboratorio y producción, con ventana aprobada.
+- Commit: `779c65c`
+- Deployment: laboratorio y producción, con ventana aprobada. Pendiente: V7
+  (probes `openssl s_client` reales) y prueba con Certbot staging en el host.
+
+## Definition of Done
+
+- [x] Objective satisfied (audit continuo, sync, install transaccional, rollback y alertas)
+- [x] Scope respected
+- [x] Contract satisfied (probes SNI/sin SNI, health, umbrales, deploy hook, permisos)
+- [x] Independent falsable truth exists now (47 tests del agente + 17 de salud/acciones)
+- [x] Invariants preserved (I1-I10 cubiertos por tests)
+- [ ] Verification passed: V0-V6 unitarios en verde; falta V7 live
+- [x] Rollback / compensation is honest (documentado, con pruebas de fallo inyectado)
+- [ ] Composition checks passed when applicable (requiere el host real)
+- [x] No unrelated changes
+- [x] Structural constraints respected (ningún archivo > 600 líneas)
+- [x] Traceability established

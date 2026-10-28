@@ -662,8 +662,23 @@ composition:
 - Requirement: gestionar certificados TLS de correo desde el panel, con
   `cf-mail` como predeterminado y certificados SNI por hostname.
 - Base: auditoría de solo lectura de Fase 0 en `scripts/mail_cert.py`
-  (`audit`), verificada en `lucas-ThinkPad-E570`; pendiente de commit.
+  (`audit`), verificada en `lucas-ThinkPad-E570`; commit `e599be5`.
 - Owner: luc444s
 - Approver:
-- Commit:
-- Deployment: laboratorio y producción, con ventana aprobada.
+- Commit: `c49d8df`
+- Deployment: laboratorio y producción, con ventana aprobada. Pendiente: V4
+  (instalación real con staging) y V6 (live de solo lectura) en el host.
+
+## Definition of Done
+
+- [x] Objective satisfied (inventario, API, modal y agente implementados)
+- [x] Scope respected
+- [x] Contract satisfied (endpoints, permisos, archivos y argv fijo)
+- [x] Independent falsable truth exists now (tests herméticos + `audit`)
+- [x] Invariants preserved (I1-I10 cubiertos por tests)
+- [ ] Verification passed: V0-V3, V5 y typecheck en verde; falta V4/V6 live
+- [x] Rollback / compensation is honest (documentado en `docs/certificate-manager.md`)
+- [ ] Composition checks passed when applicable (requiere el host real)
+- [x] No unrelated changes
+- [x] Structural constraints respected (ningún archivo > 600 líneas)
+- [x] Traceability established
