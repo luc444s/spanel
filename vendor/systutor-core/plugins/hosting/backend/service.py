@@ -22,9 +22,13 @@ from sqlalchemy import Select, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from systutor.contracts.domain_namespace import (
+    DomainConflictError,
+    claim_domain,
+    domain_owner,
+)
 from systutor.contracts.domain_ownership import is_extra_claimed
 from systutor.contracts.site_domain_publisher import get_site_domain_publisher
-from systutor.contracts.site_namespace import domain_in_suffix, get_site_suffix
 from systutor.core.errors import AppError, NotFoundError
 from systutor.kernel.audit.service import record_audit
 from systutor.kernel.auth.models import User
@@ -287,26 +291,24 @@ class HostingService:
                 status_code=409,
                 code="hosting_site_conflict",
             )
+        claim_needed = False
         if app is not None:
-            suffix = get_site_suffix(app, self._db, tenant_id)
-            if not suffix:
+            owner = domain_owner(app, self._db, domain)
+            if owner is not None and owner != tenant_id:
                 raise AppError(
-                    "El tenant no configuró un sufijo de sitios",
+                    "El dominio lo administra otro tenant",
                     status_code=409,
-                    code="hosting_site_suffix_missing",
+                    code="hosting_site_domain_conflict",
                 )
-            if not domain_in_suffix(domain, suffix):
-                raise AppError(
-                    f"El dominio debe estar debajo de {suffix}",
-                    status_code=409,
-                    code="hosting_site_domain_outside_suffix",
-                )
+            # Libre: se reclama en la misma transacción que crea el sitio.
+            claim_needed = owner is None
         if kind == "static":
             return self._create_static(
-                tenant_context, names, tenant_id, domain, app=app
+                tenant_context, names, tenant_id, domain, app=app, claim=claim_needed
             )
         return self._create_wordpress(
-            tenant_context, names, tenant_id, domain, admin_email
+            tenant_context, names, tenant_id, domain, admin_email,
+            app=app, claim=claim_needed,
         )
 
     def _create_wordpress(
@@ -316,6 +318,9 @@ class HostingService:
         tenant_id: str,
         domain: str,
         admin_email: str | None,
+        *,
+        app: FastAPI | None = None,
+        claim: bool = False,
     ) -> CreateSiteResponse:
         provisioner = Provisioner(self._settings)
         email = self._wordpress_admin_email(tenant_context, domain, admin_email)
@@ -331,6 +336,8 @@ class HostingService:
             kind="wordpress",
             password=password,
             cleanup=lambda: provisioner.cleanup(names, tenant_id),
+            app=app,
+            claim=claim,
         )
 
     def _create_static(
@@ -341,6 +348,7 @@ class HostingService:
         domain: str,
         *,
         app: FastAPI | None,
+        claim: bool = False,
     ) -> CreateSiteResponse:
         provisioner = StaticProvisioner(self._settings)
         publisher = get_site_domain_publisher(app)
@@ -366,6 +374,8 @@ class HostingService:
             password=None,
             cleanup=lambda: provisioner.cleanup(names, tenant_id),
             publisher=publisher,
+            app=app,
+            claim=claim,
         )
 
     def _finish_create(
@@ -379,6 +389,8 @@ class HostingService:
         password: str | None,
         cleanup: Callable[[], list[str]],
         publisher=None,
+        app: FastAPI | None = None,
+        claim: bool = False,
     ) -> CreateSiteResponse:
         published = False
         if publisher is not None:
@@ -399,10 +411,25 @@ class HostingService:
             kind=kind,
         )
         try:
+            if claim and app is not None:
+                claim_domain(app, self._db, tenant_id, domain)
             self._db.add(site)
             self._db.flush()
             self._audit_site(site, tenant_context, "create", {"kind": kind})
             self._db.commit()
+        except DomainConflictError as exc:
+            self._db.rollback()
+            if published:
+                try:
+                    publisher.unpublish(domain)
+                except Exception:
+                    pass
+            failures = cleanup()
+            raise AppError(
+                f"El dominio lo administra otro tenant; limpieza: {failures}",
+                status_code=409,
+                code="hosting_site_domain_conflict",
+            ) from exc
         except Exception as exc:
             self._db.rollback()
             if published:

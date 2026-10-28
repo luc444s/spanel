@@ -2,6 +2,7 @@ import { apiRequest } from "@systutor/shell/api/client";
 
 export type MailAccountsResponse = {
   domain: string;
+  domains: string[];
   accounts: string[];
 };
 
@@ -13,6 +14,7 @@ export type MailMessageResponse = {
 export type CreateAccountPayload = {
   username: string;
   password: string;
+  domain?: string;
 };
 
 export type ChangePasswordPayload = {

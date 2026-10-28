@@ -35,12 +35,11 @@ class SpyService:
         self.list_calls: list[dict] = []
         self.check_calls: list[tuple[TenantContext, str]] = []
 
-    def list_domains(self, tenant_id: str, *, can_manage: bool, include_outside: bool):
+    def list_domains(self, tenant_id: str, *, can_manage: bool):
         self.list_calls.append(
             {
                 "tenant_id": tenant_id,
                 "can_manage": can_manage,
-                "include_outside": include_outside,
             }
         )
         return [], []
@@ -72,17 +71,17 @@ def build_client(service: SpyService, permissions: tuple[str, ...]) -> TestClien
     return TestClient(app)
 
 
-def test_list_sin_platform_admin_no_incluye_fuera() -> None:
+def test_list_usa_el_tenant_del_contexto() -> None:
     service = SpyService()
     client = build_client(service, ("domains.domains.read",))
 
     response = client.get("/api/v1/plugins/domains")
 
     assert response.status_code == 200
-    assert service.list_calls[0]["include_outside"] is False
+    assert service.list_calls[0]["tenant_id"] == "t1"
 
 
-def test_list_con_platform_admin_incluye_fuera() -> None:
+def test_list_platform_admin_ve_el_mismo_tenant() -> None:
     service = SpyService()
     client = build_client(
         service,
@@ -92,7 +91,8 @@ def test_list_con_platform_admin_incluye_fuera() -> None:
     response = client.get("/api/v1/plugins/domains")
 
     assert response.status_code == 200
-    assert service.list_calls[0]["include_outside"] is True
+    assert service.list_calls[0]["tenant_id"] == "t1"
+    assert service.list_calls[0]["can_manage"] is False
 
 
 def test_check_exige_domains_read() -> None:

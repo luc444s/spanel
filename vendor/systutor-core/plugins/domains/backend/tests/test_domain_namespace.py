@@ -1,4 +1,4 @@
-"""Namespace de sitios en lista y check de dominios (A.SPEC 0030 / V3)."""
+"""Propiedad explícita de dominios en lista y check (A.SPEC 0037 / V3)."""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ from plugins.domains.backend.schemas import DomainCheckResponse
 from plugins.domains.backend.service import DomainsService
 from plugins.hosting.backend.models import HostingSite
 from plugins.tenant.backend.models import TenantSiteSettings  # noqa: F401
+from systutor.contracts.domain_namespace import register_domain_providers
 from systutor.contracts.domain_ownership import (
     OwnedSite,
     register_extra_claims,
@@ -23,13 +24,14 @@ from systutor.contracts.domain_ownership import (
 )
 from systutor.contracts.site_namespace import register_site_suffix_provider
 from systutor.core.database import Base
-from systutor.core.errors import AppError, NotFoundError
+from systutor.core.errors import AppError
 from systutor.kernel.tenants.context import TenantContext
 from systutor.kernel.tenants.models import Tenant
 
 TENANT = "t1"
 SITE_A = OwnedSite("site-a", TENANT, "spanel-a-wp", "a.spanel")
 SITE_B = OwnedSite("site-b", TENANT, "spanel-b-wp", None)
+SITE_C = OwnedSite("site-c", "t2", "spanel-c-wp", "c.spanel")
 
 
 class FakeDb:
@@ -84,9 +86,14 @@ def _context(permissions=("domains.domains.read",)) -> TenantContext:
     return TenantContext(TENANT, None, "user-1", permissions, None)
 
 
-def build_service(suffix: str | None, *, extras: list[ManagedDomain] | None = None):
+def build_service(
+    suffix: str | None,
+    *,
+    extras: list[ManagedDomain] | None = None,
+    owned: dict[str, set[str]] | None = None,
+):
     app = FastAPI()
-    rows = [SITE_A, SITE_B]
+    rows = [SITE_A, SITE_B, SITE_C]
 
     def provider(db: Session, tenant_id: str | None):
         return rows if tenant_id is None else [row for row in rows if row.tenant_id == tenant_id]
@@ -94,6 +101,22 @@ def build_service(suffix: str | None, *, extras: list[ManagedDomain] | None = No
     register_site_provider(app, "hosting", provider)
     register_extra_claims(app, "domains", lambda db, domain: False)
     register_site_suffix_provider(app, "tenant", lambda db, tenant_id: suffix)
+
+    ownership = owned if owned is not None else {
+        "t1": {"a.spanel", "b.spanel"},
+        "t2": {"c.spanel"},
+    }
+
+    def list_owned(db, tenant_id):  # noqa: ANN001
+        return sorted(ownership.get(tenant_id, set()))
+
+    def owner_of(db, domain):  # noqa: ANN001
+        for tenant_id, names in ownership.items():
+            if domain in names:
+                return tenant_id
+        return None
+
+    register_domain_providers(app, "tenant", list_domains=list_owned, owner=owner_of)
 
     ops = FakeOps()
     if extras is not None:
@@ -118,73 +141,74 @@ def no_audit(monkeypatch):
     return calls
 
 
-def test_list_hides_primary_and_extra_outside_suffix() -> None:
+def test_list_keeps_published_domain_visible_even_without_explicit_row() -> None:
     service, _, _, _ = build_service("spanel.site")
-
-    items, _ = service.list_domains(TENANT, can_manage=True)
-    assert items == []
-
-
-def test_platform_admin_sees_outside_with_flag() -> None:
-    service, _, _, _ = build_service("spanel.site")
-
-    items, _ = service.list_domains(TENANT, can_manage=True, include_outside=True)
-    by_domain = {item.domain: item for item in items}
-
-    assert set(by_domain) == {"a.spanel", "b.spanel", "lucas.spanel"}
-    assert all(item.outside_tenant is True for item in by_domain.values())
-
-
-def test_domains_inside_suffix_have_false_flag() -> None:
-    service, _, _, _ = build_service("spanel")
 
     items, _ = service.list_domains(TENANT, can_manage=True)
     by_domain = {item.domain: item for item in items}
 
+    # Un extra publicado por un contenedor del tenant es parte de su
+    # namespace aunque no tenga fila en tenant_domains (YAML heredado).
     assert set(by_domain) == {"a.spanel", "b.spanel", "lucas.spanel"}
-    assert all(item.outside_tenant is False for item in by_domain.values())
 
 
-def test_hides_extra_outside_wider_suffix() -> None:
-    service, _, _, _ = build_service(
-        "spanel.site",
-        extras=[ManagedDomain("lucas.spanel", "spanel-a-wp", "internal", "spanel-a.yml")],
-    )
+def test_list_no_depende_del_platform_admin() -> None:
+    service, _, _, _ = build_service("spanel.site")
 
     items, _ = service.list_domains(TENANT, can_manage=True)
-    assert "lucas.spanel" not in {item.domain for item in items}
+    by_domain = {item.domain for item in items}
+
+    assert by_domain == {"a.spanel", "b.spanel", "lucas.spanel"}
 
 
-def test_shows_extra_within_suffix() -> None:
+def test_list_does_not_invent_unpublished_owned_domains() -> None:
+    owned = {"t1": {"a.spanel", "b.spanel", "debug.com"}, "t2": {"c.spanel"}}
+    service, _, _, _ = build_service("spanel", owned=owned)
+
+    items, _ = service.list_domains(TENANT, can_manage=True)
+
+    assert "debug.com" not in {item.domain for item in items}
+
+
+def test_owned_domain_published_as_extra_is_listed() -> None:
+    owned = {"t1": {"a.spanel", "b.spanel", "debug.com"}, "t2": {"c.spanel", "other.com"}}
+    service, ops, _, _ = build_service("spanel.site", owned=owned)
+    ops.extras = [
+        ManagedDomain("debug.com", "spanel-a-wp", "external", "spanel-a.yml")
+    ]
+
+    items, _ = service.list_domains(TENANT, can_manage=True)
+
+    assert "debug.com" in {row.domain for row in items}
+
+
+def test_check_available_free_domain_regardless_of_suffix() -> None:
+    service, _, _, _ = build_service("spanel.site")
+
+    for domain in ("debug.com", "test2.com", "paginadelucas.spanel.site"):
+        result = service.check_domain(_context(), domain)
+        assert result.available is True, domain
+        assert result.suffix == "spanel.site"
+
+
+def test_check_available_without_suffix() -> None:
+    service, _, _, _ = build_service(None)
+
+    result = service.check_domain(_context(), "debug.com")
+
+    assert result == DomainCheckResponse(available=True, reason=None, suffix=None)
+
+
+def test_check_other_tenant_owner_is_unavailable() -> None:
     service, _, _, _ = build_service(
         "spanel",
-        extras=[ManagedDomain("lucas.spanel", "spanel-a-wp", "internal", "spanel-a.yml")],
+        owned={"t1": {"a.spanel", "b.spanel"}, "t2": {"other.com"}},
     )
 
-    items, _ = service.list_domains(TENANT, can_manage=True)
-    assert "lucas.spanel" in {item.domain for item in items}
-
-
-def test_check_available_inside_suffix() -> None:
-    service, _, _, _ = build_service("spanel")
-
-    result = service.check_domain(_context(), "paginadelucas.spanel")
-
-    assert result == DomainCheckResponse(
-        available=True,
-        reason=None,
-        suffix="spanel",
-    )
-
-
-def test_check_outside_suffix_mentions_suffix() -> None:
-    service, _, _, _ = build_service("spanel")
-
-    result = service.check_domain(_context(), "otro.com")
+    result = service.check_domain(_context(), "other.com")
 
     assert result.available is False
-    assert result.suffix == "spanel"
-    assert "spanel" in (result.reason or "")
+    assert "otro tenant" in (result.reason or "")
 
 
 def test_check_primary_mentions_container() -> None:
@@ -205,16 +229,6 @@ def test_check_extra_mentions_container() -> None:
     assert "spanel-a-wp" in (result.reason or "")
 
 
-def test_check_without_suffix_is_unavailable() -> None:
-    service, _, _, _ = build_service(None)
-
-    result = service.check_domain(_context(), "paginadelucas.spanel")
-
-    assert result.available is False
-    assert result.suffix is None
-    assert "sufijo" in (result.reason or "").lower()
-
-
 def test_check_invalid_domain_is_422() -> None:
     service, _, _, _ = build_service("spanel")
 
@@ -228,8 +242,8 @@ def test_check_invalid_domain_is_422() -> None:
 def test_check_never_writes_or_reserves() -> None:
     service, ops, db, _ = build_service("spanel")
 
-    first = service.check_domain(_context(), "paginadelucas.spanel")
-    second = service.check_domain(_context(), "paginadelucas.spanel")
+    first = service.check_domain(_context(), "debug.com")
+    second = service.check_domain(_context(), "debug.com")
 
     assert first == second
     assert ops.added == []
@@ -239,24 +253,11 @@ def test_check_never_writes_or_reserves() -> None:
     assert db.commits == 0
 
 
-def test_certificate_outside_only_with_include_outside() -> None:
+def test_certificate_works_for_attached_domain() -> None:
     service, _, _, _ = build_service("spanel.site")
 
-    with pytest.raises(NotFoundError):
-        service.certificate(TENANT, "lucas.spanel")
-
-    info = service.certificate(TENANT, "lucas.spanel", include_outside=True)
+    info = service.certificate(TENANT, "lucas.spanel")
     assert info.state == "active"
-
-
-def test_list_without_suffix_keeps_every_visible_domain() -> None:
-    service, _, _, _ = build_service(None)
-
-    items, _ = service.list_domains(TENANT, can_manage=True)
-    by_domain = {item.domain: item for item in items}
-
-    assert set(by_domain) == {"a.spanel", "b.spanel", "lucas.spanel"}
-    assert all(item.outside_tenant is False for item in by_domain.values())
 
 
 def test_check_no_modifica_filas_reales_de_tenants_ni_hosting_sites() -> None:
@@ -290,8 +291,8 @@ def test_check_no_modifica_filas_reales_de_tenants_ni_hosting_sites() -> None:
             service._operations = lambda: ops  # type: ignore[method-assign]
             service._settings = lambda: SimpleNamespace(profile="internal")  # type: ignore[method-assign]
 
-            first = service.check_domain(_context(), "paginadelucas.spanel")
-            second = service.check_domain(_context(), "paginadelucas.spanel")
+            first = service.check_domain(_context(), "debug.com")
+            second = service.check_domain(_context(), "debug.com")
 
             assert first == second
             assert [

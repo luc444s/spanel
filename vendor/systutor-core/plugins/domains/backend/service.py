@@ -27,16 +27,35 @@ from plugins.domains.backend.schemas import (
     SiteOption,
 )
 from plugins.domains.backend.settings import get_domains_settings
+from systutor.contracts.domain_namespace import (
+    DomainConflictError,
+    DomainUsage,
+    claim_domain,
+    domain_owner,
+)
 from systutor.contracts.domain_ownership import (
     is_primary_domain,
     list_sites,
     resolve_site,
 )
-from systutor.contracts.site_namespace import domain_in_suffix, get_site_suffix
+from systutor.contracts.site_namespace import get_site_suffix
 from systutor.core.errors import AppError, NotFoundError
 from systutor.kernel.audit.service import record_audit
 from systutor.kernel.tenants.context import TenantContext
 from systutor.kernel.tenants.service import list_tenants
+
+
+def published_domain_usage(db: Session, domain: str) -> DomainUsage | None:
+    """Uso extra publicado por el proxy, o `None` si el proxy no responde."""
+    try:
+        settings = get_domains_settings().proxy_settings()
+        operations = ProxyOperations(settings, build_runner(settings))
+        for row in operations.managed_domains():
+            if row.domain.lower() == domain:
+                return DomainUsage(container=row.container, kind="extra")
+    except Exception:  # noqa: BLE001 - el proxy no debe romper una lectura
+        return None
+    return None
 
 
 class DomainsService:
@@ -92,19 +111,13 @@ class DomainsService:
         tenant_id: str,
         *,
         can_manage: bool,
-        include_outside: bool = False,
         tenant_name: str | None = None,
     ) -> tuple[list[DomainItem], list[SiteOption]]:
-        suffix = get_site_suffix(self._app, self._db, tenant_id)
         sites = self._visible_sites(tenant_id)
         try:
             extras = self._operations().managed_domains()
         except ProxyError as exc:
             raise self._proxy_error(exc) from exc
-
-        def outside_tenant(domain: str) -> bool:
-            # Sin sufijo configurado no hay namespace que aplicar.
-            return bool(suffix) and not domain_in_suffix(domain, suffix)
 
         def item(
             domain: str,
@@ -113,10 +126,11 @@ class DomainsService:
             owner: str,
             editable: bool,
             conflict: bool,
-        ) -> DomainItem | None:
-            outside = outside_tenant(domain)
-            if outside and not include_outside:
-                return None
+        ) -> DomainItem:
+            # Todo lo que aparece aquí está publicado por un contenedor del
+            # tenant: primario de su sitio o extra de su YAML. Eso lo hace
+            # parte de su namespace aunque todavía no tenga fila explícita en
+            # `tenant_domains` (la migración no puede leer el YAML del proxy).
             return DomainItem(
                 domain=domain,
                 site_id=site.site_id,
@@ -124,7 +138,6 @@ class DomainsService:
                 owner=owner,  # type: ignore[arg-type]
                 editable=editable,
                 conflict=conflict,
-                outside_tenant=outside,
                 tenant_id=tenant_id,
                 tenant_name=tenant_name,
             )
@@ -183,7 +196,6 @@ class DomainsService:
                 tenant_items, tenant_sites = self.list_domains(
                     tenant.id,
                     can_manage=False,
-                    include_outside=True,
                     tenant_name=tenant.name,
                 )
             except AppError:
@@ -196,8 +208,9 @@ class DomainsService:
         """Disponibilidad de un dominio para el tenant actual, sin reservar.
 
         Valida el formato primero: un dominio mal formado es `422`, nunca un
-        `available=false` ambiguo. Después aplica el sufijo y los dueños
-        existentes, en ese orden.
+        `available=false` ambiguo. Después revisa el uso publicado y la
+        propiedad explícita. El sufijo es solo informativo y no condiciona el
+        resultado.
         """
         settings = self._settings()
         try:
@@ -208,18 +221,6 @@ class DomainsService:
         suffix = get_site_suffix(
             self._app, self._db, tenant_context.current_tenant_id
         )
-        if not suffix:
-            return DomainCheckResponse(
-                available=False,
-                reason="El tenant no tiene sufijo de sitios configurado",
-                suffix=None,
-            )
-        if not domain_in_suffix(needle, suffix):
-            return DomainCheckResponse(
-                available=False,
-                reason=f"{needle} está fuera del sufijo {suffix} del tenant",
-                suffix=suffix,
-            )
 
         for site in list_sites(self._app, self._db, None):  # type: ignore[arg-type]
             if (site.primary_domain or "").strip().lower() == needle:
@@ -247,15 +248,19 @@ class DomainsService:
                     suffix=suffix,
                 )
 
+        owner = domain_owner(self._app, self._db, needle)
+        if owner is not None and owner != tenant_context.current_tenant_id:
+            return DomainCheckResponse(
+                available=False,
+                reason=f"{needle} lo administra otro tenant",
+                suffix=suffix,
+            )
+
         return DomainCheckResponse(available=True, reason=None, suffix=suffix)
 
-    def certificate(
-        self, tenant_id: str, domain: str, *, include_outside: bool = False
-    ) -> CertificateResponse:
+    def certificate(self, tenant_id: str, domain: str) -> CertificateResponse:
         needle = domain.strip().lower()
-        items, _ = self.list_domains(
-            tenant_id, can_manage=False, include_outside=include_outside
-        )
+        items, _ = self.list_domains(tenant_id, can_manage=False)
         if not any(item.domain == needle for item in items):
             raise NotFoundError("Dominio desconocido")
         try:
@@ -318,10 +323,35 @@ class DomainsService:
                     code="domains.already_claimed",
                 )
 
+        free: list[str] = []
+        for candidate in candidates:
+            owner_tenant = domain_owner(self._app, self._db, candidate)
+            if owner_tenant is not None and owner_tenant != tenant_id:
+                raise AppError(
+                    f"{candidate} lo administra otro tenant",
+                    status_code=409,
+                    code="domains.already_owned",
+                )
+            if owner_tenant is None:
+                free.append(candidate)
+
+        for candidate in free:
+            try:
+                claim_domain(self._app, self._db, tenant_id, candidate)
+            except DomainConflictError as exc:
+                raise AppError(
+                    f"{candidate} lo administra otro tenant",
+                    status_code=409,
+                    code="domains.already_owned",
+                ) from exc
+
         operations = self._ready()
         try:
             operations.add(site.container, primary, www=www, wait=0, set_wordpress_url=False)
         except ProxyError as exc:
+            rollback = getattr(self._db, "rollback", None)
+            if rollback is not None:
+                rollback()
             raise self._proxy_error(exc) from exc
 
         self._audit(

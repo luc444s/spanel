@@ -9,7 +9,9 @@ from sqlalchemy.orm import Session
 from plugins.domains.backend.proxy import ProxyOperations, build_runner
 from plugins.domains.backend.publisher import register_domains_publisher
 from plugins.domains.backend.router import router
+from plugins.domains.backend.service import published_domain_usage
 from plugins.domains.backend.settings import get_domains_settings, register_domains_settings
+from systutor.contracts.domain_namespace import register_domain_usage
 from systutor.contracts.domain_ownership import register_extra_claims
 from systutor.sdk.context import PluginContext
 
@@ -40,4 +42,5 @@ def register(context: PluginContext) -> None:
     if app is not None:
         app.state.domains_context = context
         register_extra_claims(app, "domains", check_extra_claim)
+        register_domain_usage(app, "domains", published_domain_usage)
         register_domains_publisher(context)

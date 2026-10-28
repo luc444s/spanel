@@ -1,14 +1,17 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from plugins.tenant.backend.schemas import (
+    AddTenantDomainRequest,
     AssignUserRequest,
     CreateTenantRequest,
     CreateUserInTenantRequest,
     ReassignUserRequest,
+    TenantDomainItem,
+    TenantDomainsResponse,
     TenantListResponse,
     TenantResponse,
     TenantUserResponse,
@@ -16,14 +19,19 @@ from plugins.tenant.backend.schemas import (
     UpdateTenantDomainRequest,
 )
 from plugins.tenant.backend.service import (
+    add_managed_domain,
     assign_user_to_tenant,
     create_tenant,
     create_user_for_tenant,
     get_site_suffix_for_tenant,
     get_tenant_by_id,
+    list_managed_domains,
     list_tenants,
     list_users_for_tenant,
+    remove_managed_domain,
     remove_user_from_tenant,
+)
+from plugins.tenant.backend.service import (
     update_tenant as update_tenant_settings,
 )
 from systutor.api.deps import get_db_session
@@ -50,7 +58,7 @@ def _tenant_response(db: Session, tenant: Tenant) -> TenantResponse:
 @router.get("", response_model=TenantListResponse)
 def list_all_tenants(
     db: Session = Depends(get_db_session),
-    _current_user: User = Depends(require_permission("tenant.tenants.read")),
+    _current_user: User = Depends(require_permission("tenant.tenants.read", platform_only=True)),
 ) -> TenantListResponse:
     tenants = list_tenants(db)
     return TenantListResponse(
@@ -62,7 +70,7 @@ def list_all_tenants(
 def create_new_tenant(
     body: CreateTenantRequest,
     db: Session = Depends(get_db_session),
-    _current_user: User = Depends(require_permission("tenant.tenants.manage")),
+    _current_user: User = Depends(require_permission("tenant.tenants.manage", platform_only=True)),
 ) -> TenantResponse:
     try:
         tenant = create_tenant(db, name=body.name, slug=body.slug, domain=body.domain)
@@ -89,7 +97,7 @@ def update_tenant(
     tenant_id: str,
     body: UpdateTenantDomainRequest,
     db: Session = Depends(get_db_session),
-    _current_user: User = Depends(require_permission("tenant.tenants.manage")),
+    _current_user: User = Depends(require_permission("tenant.tenants.manage", platform_only=True)),
 ) -> TenantResponse:
     tenant = get_tenant_by_id(db, tenant_id)
     if tenant is None:
@@ -128,11 +136,71 @@ def update_tenant(
     return _tenant_response(db, updated)
 
 
+@router.get("/{tenant_id}/domains", response_model=TenantDomainsResponse)
+def list_tenant_domains(
+    tenant_id: str,
+    db: Session = Depends(get_db_session),
+    _current_user: User = Depends(require_permission("tenant.tenants.read", platform_only=True)),
+) -> TenantDomainsResponse:
+    tenant = get_tenant_by_id(db, tenant_id)
+    if tenant is None:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    return TenantDomainsResponse(
+        domains=[TenantDomainItem(domain=domain) for domain in list_managed_domains(db, tenant_id)]
+    )
+
+
+@router.post("/{tenant_id}/domains", response_model=TenantDomainItem, status_code=201)
+def add_tenant_domain(
+    tenant_id: str,
+    body: AddTenantDomainRequest,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    _current_user: User = Depends(require_permission("tenant.tenants.manage", platform_only=True)),
+) -> TenantDomainItem:
+    tenant = get_tenant_by_id(db, tenant_id)
+    if tenant is None:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    try:
+        row, _created = add_managed_domain(
+            db, tenant=tenant, domain=body.domain, app=request.app
+        )
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise AppError(
+            "El dominio ya está asignado a otro tenant",
+            status_code=409,
+            code="tenant_domain_conflict",
+        ) from exc
+    return TenantDomainItem(domain=row.domain)
+
+
+@router.delete("/{tenant_id}/domains/{domain}", status_code=204)
+def delete_tenant_domain(
+    tenant_id: str,
+    domain: str,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    _current_user: User = Depends(require_permission("tenant.tenants.manage", platform_only=True)),
+) -> Response:
+    tenant = get_tenant_by_id(db, tenant_id)
+    if tenant is None:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    try:
+        remove_managed_domain(db, tenant=tenant, domain=domain, app=request.app)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return Response(status_code=204)
+
+
 @router.get("/{tenant_id}/users", response_model=TenantUsersResponse)
 def list_tenant_users(
     tenant_id: str,
     db: Session = Depends(get_db_session),
-    _current_user: User = Depends(require_permission("tenant.tenants.read")),
+    _current_user: User = Depends(require_permission("tenant.tenants.read", platform_only=True)),
 ) -> TenantUsersResponse:
     tenant = get_tenant_by_id(db, tenant_id)
     if tenant is None:
@@ -157,7 +225,7 @@ def create_user_in_tenant(
     tenant_id: str,
     body: CreateUserInTenantRequest,
     db: Session = Depends(get_db_session),
-    _current_user: User = Depends(require_permission("tenant.tenants.manage")),
+    _current_user: User = Depends(require_permission("tenant.tenants.manage", platform_only=True)),
 ) -> TenantUserResponse:
     tenant = get_tenant_by_id(db, tenant_id)
     if tenant is None:
@@ -184,7 +252,7 @@ def assign_existing_user(
     tenant_id: str,
     body: AssignUserRequest,
     db: Session = Depends(get_db_session),
-    _current_user: User = Depends(require_permission("tenant.tenants.manage")),
+    _current_user: User = Depends(require_permission("tenant.tenants.manage", platform_only=True)),
 ) -> TenantUserResponse:
     tenant = get_tenant_by_id(db, tenant_id)
     if tenant is None:
@@ -212,7 +280,7 @@ def reassign_user(
     user_id: str,
     body: ReassignUserRequest,
     db: Session = Depends(get_db_session),
-    _current_user: User = Depends(require_permission("tenant.tenants.manage")),
+    _current_user: User = Depends(require_permission("tenant.tenants.manage", platform_only=True)),
 ) -> TenantUserResponse:
     tenant = get_tenant_by_id(db, tenant_id)
     if tenant is None:

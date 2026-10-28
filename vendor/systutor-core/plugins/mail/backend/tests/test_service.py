@@ -12,10 +12,12 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from fastapi import FastAPI
 
 from plugins.mail.backend.provider import MailProvider
 from plugins.mail.backend.service import ACCOUNTS_CACHE_KEY, MailService
 from plugins.mail.backend.settings import MailSettings
+from systutor.contracts.domain_namespace import register_domain_providers
 from systutor.core.cache import CacheBackend
 from systutor.core.errors import AppError, NotFoundError
 
@@ -108,14 +110,31 @@ def make_service(
     enabled: bool = True,
     ttl: int = 60,
     domains: dict[str, str] | None = None,
+    managed: dict[str, list[str]] | None = None,
 ) -> MailService:
     if domains is None:
         domains = {TENANT_A: "acme.com", TENANT_B: "globex.com"}
+    app = FastAPI()
+    ownership = managed or {}
+
+    def owner_of(db: Any, domain: str) -> str | None:
+        for tenant, names in ownership.items():
+            if domain in names:
+                return tenant
+        return None
+
+    register_domain_providers(
+        app,
+        "tenant",
+        list_domains=lambda db, tenant: ownership.get(tenant, []),
+        owner=owner_of,
+    )
     return MailService(
         provider=provider or CountingMailProvider(),
         db=FakeSession(domains),  # type: ignore[arg-type]
         cache_backend=cache if cache is not None else FakeCache(),
         settings=MailSettings(mail_accounts_cache_enabled=enabled, mail_accounts_cache_ttl=ttl),
+        app=app,
     )
 
 
@@ -131,14 +150,17 @@ def test_response_contract_unchanged():
 
     for response in (tenant_response, superadmin_response):
         payload = response.model_dump()
-        assert set(payload) == {"domain", "accounts"}
+        assert set(payload) == {"domain", "domains", "accounts"}
         assert isinstance(payload["domain"], str)
+        assert isinstance(payload["domains"], list)
         assert isinstance(payload["accounts"], list)
         assert all(isinstance(item, str) for item in payload["accounts"])
 
     assert tenant_response.domain == "acme.com"
+    assert tenant_response.domains == ["acme.com"]
     assert tenant_response.accounts == ["a@acme.com"]
     assert superadmin_response.domain == "all"
+    assert superadmin_response.domains == ["acme.com"]
     assert superadmin_response.accounts == ["a@acme.com", "b@globex.com"]
 
 
@@ -447,3 +469,94 @@ def test_cache_disabled_by_setting():
     service.create_account(TENANT_A, "user-1", "nuevo", "password123")
     assert cache.deletes == 0
     assert cache.store == {}
+
+
+# --- A.SPEC 0037: correo en todos los dominios propiedad del tenant ---------
+
+
+def test_list_accounts_includes_every_owned_domain_primary_first():
+    provider = CountingMailProvider(
+        ["a@acme.com", "b@debug.com", "c@test2.com", "x@other.com"]
+    )
+    service = make_service(
+        provider,
+        managed={TENANT_A: ["test2.com", "debug.com"]},
+    )
+
+    response = service.list_accounts(TENANT_A)
+
+    assert response.domain == "acme.com"
+    assert response.domains == ["acme.com", "debug.com", "test2.com"]
+    assert response.accounts == ["a@acme.com", "b@debug.com", "c@test2.com"]
+
+
+def test_superadmin_lists_all_accounts_and_tenant_domains():
+    provider = CountingMailProvider(["a@acme.com", "x@other.com"])
+    service = make_service(provider, managed={TENANT_A: ["debug.com"]})
+
+    response = service.list_accounts(TENANT_A, can_read_all=True)
+
+    assert response.domain == "all"
+    assert response.domains == ["acme.com", "debug.com"]
+    assert response.accounts == ["a@acme.com", "x@other.com"]
+
+
+def test_create_account_uses_explicit_owned_domain():
+    provider = CountingMailProvider()
+    service = make_service(provider, managed={TENANT_A: ["debug.com"]})
+
+    result = service.create_account(
+        TENANT_A, "user-1", "ventas", "password123", domain="debug.com"
+    )
+
+    assert result.email == "ventas@debug.com"
+    assert provider.accounts == ["ventas@debug.com"]
+
+
+def test_create_account_defaults_to_tenant_domain():
+    provider = CountingMailProvider()
+    service = make_service(provider, managed={TENANT_A: ["debug.com"]})
+
+    result = service.create_account(TENANT_A, "user-1", "ventas", "password123")
+
+    assert result.email == "ventas@acme.com"
+
+
+def test_create_account_rejects_foreign_domain():
+    provider = CountingMailProvider()
+    service = make_service(provider, managed={TENANT_A: ["debug.com"]})
+
+    with pytest.raises(AppError) as excinfo:
+        service.create_account(
+            TENANT_A, "user-1", "ventas", "password123", domain="other.com"
+        )
+
+    assert excinfo.value.status_code == 403
+    assert excinfo.value.code == "domain_mismatch"
+    assert provider.create_calls == 0
+
+
+def test_change_password_accepts_any_owned_domain():
+    provider = CountingMailProvider(["a@debug.com"])
+    service = make_service(provider, managed={TENANT_A: ["debug.com"]})
+
+    result = service.change_password(
+        TENANT_A, "user-1", "a@debug.com", "newpassword123"
+    )
+
+    assert result.email == "a@debug.com"
+    assert provider.password_calls == 1
+
+
+def test_change_password_rejects_foreign_domain():
+    provider = CountingMailProvider(["a@other.com"])
+    service = make_service(provider, managed={TENANT_A: ["debug.com"]})
+
+    with pytest.raises(AppError) as excinfo:
+        service.change_password(
+            TENANT_A, "user-1", "a@other.com", "newpassword123"
+        )
+
+    assert excinfo.value.status_code == 403
+    assert excinfo.value.code == "domain_mismatch"
+    assert provider.password_calls == 0

@@ -92,8 +92,9 @@ def test_response_contract_unchanged():
 
     assert response.status_code == 200
     payload = response.json()
-    assert set(payload) == {"domain", "accounts"}
+    assert set(payload) == {"domain", "domains", "accounts"}
     assert payload["domain"] == "acme.com"
+    assert payload["domains"] == ["acme.com"]
     assert payload["accounts"] == ["a@acme.com", "b@acme.com"]
 
 

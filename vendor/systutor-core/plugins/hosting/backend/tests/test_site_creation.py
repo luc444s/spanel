@@ -13,6 +13,7 @@ from plugins.hosting.backend.models import HostingSite
 from plugins.hosting.backend.schemas import CreateSiteRequest
 from plugins.hosting.backend.service import HostingService
 from plugins.hosting.backend.settings import HostingSettings
+from systutor.contracts.domain_namespace import register_domain_providers
 from systutor.contracts.site_domain_publisher import (
     get_site_domain_publisher,
     register_site_domain_publisher,
@@ -131,23 +132,50 @@ def test_invalid_kind_is_rejected() -> None:
         CreateSiteRequest.model_validate({"kind": "otro", "name": "sitio", "domain": "sitio.spanel"})
 
 
-def test_missing_suffix_returns_409_without_provisioning(db: Session) -> None:
-    with pytest.raises(AppError) as exc:
-        service(db).create_site(
-            context(), "sitio", "sitio.spanel", kind="static", app=suffix_app(None)
-        )
-    assert exc.value.code == "hosting_site_suffix_missing"
-    assert FakeStaticProvisioner.calls == []
-    assert FakeWordPressProvisioner.calls == []
+def test_free_domain_without_suffix_is_allowed(db: Session) -> None:
+    app = FastAPI()
+    response = service(db).create_site(
+        context(), "sitio", "debug.com", kind="static", app=app
+    )
+    assert response.site.domain == "debug.com"
+    assert FakeStaticProvisioner.calls == [("spanel-sitio-web", "t1", "debug.com", True)]
 
 
-def test_domain_outside_suffix_returns_409_without_provisioning(db: Session) -> None:
+def test_domain_owned_by_another_tenant_conflicts_without_provisioning(
+    db: Session,
+) -> None:
+    app = suffix_app()
+    register_domain_providers(
+        app,
+        "tenant",
+        list_domains=lambda _db, _tenant: [],
+        owner=lambda _db, _domain: "t2",
+    )
+
     with pytest.raises(AppError) as exc:
         service(db).create_site(
-            context(), "sitio", "otro.com", kind="static", app=suffix_app("spanel")
+            context(), "sitio", "otro.com", kind="static", app=app
         )
-    assert exc.value.code == "hosting_site_domain_outside_suffix"
+    assert exc.value.code == "hosting_site_domain_conflict"
     assert FakeStaticProvisioner.calls == []
+
+
+def test_free_domain_is_claimed_with_the_site(db: Session) -> None:
+    app = FastAPI()
+    owned: dict[str, set[str]] = {"t1": set()}
+    register_domain_providers(
+        app,
+        "tenant",
+        list_domains=lambda _db, tenant: sorted(owned.get(tenant, set())),
+        owner=lambda _db, domain: next(
+            (tenant for tenant, names in owned.items() if domain in names), None
+        ),
+        claim=lambda _db, tenant, domain: owned[tenant].add(domain),
+    )
+
+    service(db).create_site(context(), "sitio", "debug.com", kind="static", app=app)
+
+    assert owned["t1"] == {"debug.com"}
 
 
 def test_domain_already_in_hosting_sites_conflicts(db: Session) -> None:

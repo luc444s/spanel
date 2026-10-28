@@ -14,7 +14,6 @@ class DomainItem(BaseModel):
     owner: Literal["hosting", "domains"]
     editable: bool = False
     conflict: bool = False
-    outside_tenant: bool = False
     tenant_id: str | None = None
     tenant_name: str | None = None
 

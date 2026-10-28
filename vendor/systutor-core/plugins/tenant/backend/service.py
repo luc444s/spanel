@@ -2,9 +2,18 @@ from __future__ import annotations
 
 import re
 
+from fastapi import FastAPI
 from sqlalchemy import Select, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from plugins.tenant.backend.models import TenantDomain, TenantSiteSettings
+from systutor.contracts.domain_namespace import (
+    DomainConflictError,
+    domain_usage,
+    normalize_domain_name,
+)
+from systutor.contracts.domain_ownership import is_extra_claimed, list_sites
 from systutor.contracts.site_namespace import (
     default_suffix_from_domain,
     normalize_site_suffix,
@@ -16,8 +25,6 @@ from systutor.kernel.auth.security import hash_password
 from systutor.kernel.permissions.models import Role
 from systutor.kernel.permissions.service import assign_role_to_user, sync_tenant_admin_role
 from systutor.kernel.tenants.models import Tenant
-
-from plugins.tenant.backend.models import TenantSiteSettings
 
 TENANT_ADMIN_ROLE = "tenant_admin"
 
@@ -234,6 +241,10 @@ def update_tenant_domain(db: Session, *, tenant: Tenant, domain: str | None) -> 
     ensure_domain_available(db, domain=normalized, exclude_tenant_id=tenant.id)
     tenant.domain = normalized
     db.add(tenant)
+    if normalized is not None:
+        stale = db.get(TenantDomain, normalized)
+        if stale is not None and stale.tenant_id == tenant.id:
+            db.delete(stale)
     db.flush()
     return tenant
 
@@ -271,6 +282,12 @@ def update_tenant(
     if normalized_domain is not _UNSET:
         tenant.domain = normalized_domain  # type: ignore[assignment]
         db.add(tenant)
+        # Promoción: si el nuevo primario ya era un secundario del tenant, su
+        # fila en `tenant_domains` deja de ser válida.
+        if isinstance(normalized_domain, str):
+            stale = db.get(TenantDomain, normalized_domain)
+            if stale is not None and stale.tenant_id == tenant.id:
+                db.delete(stale)
     if normalized_suffix is not _UNSET:
         settings = _get_or_create_site_settings(db, tenant.id)
         settings.site_suffix = normalized_suffix  # type: ignore[assignment]
@@ -301,3 +318,253 @@ def remove_user_from_tenant(db: Session, *, user: User, target_tenant_id: str) -
     db.add(user)
     db.flush()
     return user
+
+
+# ---- dominios administrados ------------------------------------------------
+
+
+def _normalize_managed_domain(value: str) -> str:
+    """Normaliza un dominio administrado y traduce el error puro a `AppError`."""
+    try:
+        return normalize_domain_name(value)
+    except ValueError as exc:
+        raise AppError(
+            str(exc),
+            status_code=422,
+            code="tenant_domain_invalid",
+        ) from exc
+
+
+def list_managed_domains(db: Session, tenant_id: str) -> list[str]:
+    """Dominios del tenant, incluido su dominio de correo primario.
+
+    `tenants.domain` cuenta como propiedad aunque la fila explícita falte (una
+    base anterior a la migración o un borrado manual): si no apareciera aquí,
+    la UI ocultaría un dominio que luego bloquea el alta en otro tenant.
+    """
+    stmt: Select[tuple[TenantDomain]] = select(TenantDomain).where(
+        TenantDomain.tenant_id == tenant_id
+    )
+    domains = {row.domain for row in db.scalars(stmt)}
+    tenant = db.get(Tenant, tenant_id)
+    primary = (tenant.domain or "").strip().lower().removesuffix(".") if tenant else ""
+    if primary:
+        domains.add(primary)
+    return sorted(domains)
+
+
+def get_managed_domain(db: Session, domain: str) -> TenantDomain | None:
+    return db.get(TenantDomain, domain)
+
+
+def get_managed_domain_owner(db: Session, domain: str) -> str | None:
+    """Provider del contrato: tenant dueño del dominio, o `None` si está libre.
+
+    La fila explícita manda; si no existe, `tenants.domain` sigue siendo el
+    dominio de correo del tenant y también cuenta como propiedad. Así `check`
+    no ofrece un dominio que después el alta rechazaría.
+    """
+    try:
+        needle = normalize_domain_name(domain)
+    except ValueError:
+        return None
+    row = db.get(TenantDomain, needle)
+    if row is not None:
+        return row.tenant_id
+    tenant = db.scalar(
+        select(Tenant).where(func.lower(Tenant.domain) == needle)
+    )
+    return tenant.id if tenant is not None else None
+
+
+def claim_managed_domain(
+    db: Session, *, tenant_id: str, domain: str
+) -> tuple[TenantDomain, bool]:
+    """Reclama el dominio para el tenant. Idempotente para el mismo dueño.
+
+    Un dominio primario (`tenants.domain`) no puede vivir en `tenant_domains`:
+    el primario se cambia en el tenant, no se añade como secundario.
+    """
+    needle = _normalize_managed_domain(domain)
+    primary_owner = db.scalar(
+        select(Tenant.id).where(func.lower(Tenant.domain) == needle)
+    )
+    if primary_owner is not None:
+        raise AppError(
+            f"El dominio {needle} es el dominio primario de un tenant y no "
+            "puede añadirse como dominio adicional",
+            status_code=409,
+            code="tenant_domain_conflict",
+        )
+    existing = db.get(TenantDomain, needle)
+    if existing is not None:
+        if existing.tenant_id != tenant_id:
+            raise AppError(
+                f"El dominio {needle} ya está asignado a otro tenant",
+                status_code=409,
+                code="tenant_domain_conflict",
+            )
+        return existing, False
+
+    row = TenantDomain(domain=needle, tenant_id=tenant_id)
+    db.add(row)
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        raise AppError(
+            f"El dominio {needle} ya está asignado a otro tenant",
+            status_code=409,
+            code="tenant_domain_conflict",
+        ) from exc
+    return row, True
+
+
+def _primary_of_other_tenant(
+    app: FastAPI | None, db: Session, domain: str, tenant_id: str
+):
+    if app is None:
+        return None
+    for site in list_sites(app, db, None):
+        if (site.primary_domain or "").strip().lower() == domain and site.tenant_id != tenant_id:
+            return site
+    return None
+
+
+def add_managed_domain(
+    db: Session,
+    *,
+    tenant: Tenant,
+    domain: str,
+    app: FastAPI | None = None,
+) -> tuple[TenantDomain, bool]:
+    """Añade un dominio administrado o devuelve el existente del mismo tenant."""
+    needle = _normalize_managed_domain(domain)
+
+    primary = (tenant.domain or "").strip().lower().removesuffix(".")
+    if primary and needle == primary:
+        raise AppError(
+            f"El dominio {needle} es el dominio primario del tenant y no puede "
+            "añadirse como dominio adicional; se cambia en «Dominio y sufijo»",
+            status_code=409,
+            code="tenant_domain_conflict",
+        )
+
+    existing = db.get(TenantDomain, needle)
+    if existing is not None:
+        if existing.tenant_id == tenant.id:
+            return existing, False
+        raise AppError(
+            f"El dominio {needle} ya está asignado a otro tenant",
+            status_code=409,
+            code="tenant_domain_conflict",
+        )
+
+    # `tenants.domain` sigue siendo el dominio de correo primario: no se
+    # reescribe, pero tampoco se permite que otro tenant lo reclame.
+    other = db.scalar(
+        select(Tenant).where(
+            func.lower(Tenant.domain) == needle, Tenant.id != tenant.id
+        )
+    )
+    if other is not None:
+        raise AppError(
+            f"El dominio {needle} es el dominio de correo del tenant "
+            f"{other.name} ({other.slug}). Cámbialo en ese tenant o unifica "
+            "la cuenta antes de reclamarlo.",
+            status_code=409,
+            code="tenant_domain_conflict",
+        )
+
+    site = _primary_of_other_tenant(app, db, needle, tenant.id)
+    if site is not None:
+        raise AppError(
+            f"El dominio {needle} es el primario del contenedor {site.container} "
+            "de otro tenant",
+            status_code=409,
+            code="tenant_domain_conflict",
+        )
+
+    return claim_managed_domain(db, tenant_id=tenant.id, domain=needle)
+
+
+def remove_managed_domain(
+    db: Session,
+    *,
+    tenant: Tenant,
+    domain: str,
+    app: FastAPI | None = None,
+) -> None:
+    """Elimina un dominio libre del conjunto del tenant.
+
+    Un dominio primario de un sitio propio o publicado como extra por uno de
+    sus contenedores está en uso y no se elimina.
+    """
+    needle = _normalize_managed_domain(domain)
+    row = db.get(TenantDomain, needle)
+    if row is not None and row.tenant_id != tenant.id:
+        raise AppError(
+            f"El dominio {needle} no pertenece al tenant",
+            status_code=404,
+            code="tenant_domain_not_found",
+        )
+
+    if app is not None:
+        own_containers = {
+            site.container for site in list_sites(app, db, tenant.id)
+        }
+        for site in list_sites(app, db, tenant.id):
+            if (site.primary_domain or "").strip().lower() == needle:
+                raise AppError(
+                    f"El dominio {needle} es el primario del contenedor "
+                    f"{site.container}",
+                    status_code=409,
+                    code="tenant_domain_in_use",
+                )
+        usage = domain_usage(app, db, needle)
+        if usage is not None:
+            if usage.tenant_id == tenant.id or usage.container in own_containers:
+                raise AppError(
+                    f"El dominio {needle} está publicado por el contenedor "
+                    f"{usage.container}",
+                    status_code=409,
+                    code="tenant_domain_in_use",
+                )
+        elif is_extra_claimed(app, db, needle):
+            raise AppError(
+                f"El dominio {needle} está publicado como dominio extra",
+                status_code=409,
+                code="tenant_domain_in_use",
+            )
+
+    # El dominio de correo del tenant no se "quita": se cambia en el tenant.
+    # Sin esta guarda la fila desaparece de la lista pero sigue bloqueando el
+    # alta en otro tenant, que fue justo el estado confuso que la originó.
+    primary = (tenant.domain or "").strip().lower().removesuffix(".")
+    if primary and needle == primary:
+        raise AppError(
+            f"El dominio {needle} es el dominio de correo del tenant. "
+            "Cámbialo en \"Dominio y sufijo\" antes de quitarlo.",
+            status_code=409,
+            code="tenant_domain_in_use",
+        )
+
+    if row is None:
+        raise AppError(
+            f"El dominio {needle} no pertenece al tenant",
+            status_code=404,
+            code="tenant_domain_not_found",
+        )
+
+    db.delete(row)
+    db.flush()
+
+
+def claim_domain_for_tenant(db: Session, tenant_id: str, domain: str) -> None:
+    """Provider de escritura del contrato: reclama o falla si es de otro."""
+    try:
+        claim_managed_domain(db, tenant_id=tenant_id, domain=domain)
+    except AppError as exc:
+        owner = get_managed_domain_owner(db, domain) or ""
+        raise DomainConflictError(domain, owner) from exc
+

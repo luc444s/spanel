@@ -9,6 +9,10 @@ from sqlalchemy.orm import Session
 from plugins.domains.backend import service as service_module
 from plugins.domains.backend.proxy import CertificateInfo, ManagedDomain
 from plugins.domains.backend.service import DomainsService
+from systutor.contracts.domain_namespace import (
+    DomainConflictError,
+    register_domain_providers,
+)
 from systutor.contracts.domain_ownership import (
     OwnedSite,
     register_extra_claims,
@@ -79,6 +83,31 @@ def setup():
 
     register_site_provider(app, "hosting", provider)
     register_extra_claims(app, "domains", lambda db, domain: False)
+
+    owned: dict[str, set[str]] = {
+        "t1": {"a.spanel", "b.spanel"},
+        "t2": {"c.spanel"},
+    }
+
+    def list_owned(db, tenant_id):  # noqa: ANN001
+        return sorted(owned.get(tenant_id, set()))
+
+    def owner_of(db, domain):  # noqa: ANN001
+        for tenant_id, names in owned.items():
+            if domain in names:
+                return tenant_id
+        return None
+
+    def claim(db, tenant_id, domain):  # noqa: ANN001
+        current = owner_of(db, domain)
+        if current is not None and current != tenant_id:
+            raise DomainConflictError(domain, current)
+        owned.setdefault(tenant_id, set()).add(domain)
+
+    register_domain_providers(
+        app, "tenant", list_domains=list_owned, owner=owner_of, claim=claim
+    )
+
 
     ops = FakeOps()
     audits: list[dict] = []

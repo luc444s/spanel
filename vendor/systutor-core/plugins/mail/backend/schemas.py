@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import re
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class CreateAccountRequest(BaseModel):
     username: str
     password: str
+    domain: str | None = None
 
     @field_validator("username")
     @classmethod
@@ -39,6 +40,7 @@ class ChangePasswordRequest(BaseModel):
 
 class MailAccountsResponse(BaseModel):
     domain: str
+    domains: list[str] = Field(default_factory=list)
     accounts: list[str]
 
 

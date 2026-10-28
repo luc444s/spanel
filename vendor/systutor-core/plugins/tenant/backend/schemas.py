@@ -54,3 +54,15 @@ class TenantUserResponse(BaseModel):
 
 class TenantUsersResponse(BaseModel):
     users: list[TenantUserResponse]
+
+
+class TenantDomainItem(BaseModel):
+    domain: str
+
+
+class TenantDomainsResponse(BaseModel):
+    domains: list[TenantDomainItem]
+
+
+class AddTenantDomainRequest(BaseModel):
+    domain: str

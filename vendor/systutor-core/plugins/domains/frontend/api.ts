@@ -9,7 +9,6 @@ export type DomainItem = {
   owner: DomainOwner;
   editable: boolean;
   conflict: boolean;
-  outside_tenant: boolean;
 };
 
 export type DomainCheckResponse = {

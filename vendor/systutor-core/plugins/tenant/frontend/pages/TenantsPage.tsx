@@ -3,12 +3,15 @@ import { FormEvent, useState } from "react";
 import { toast } from "sonner";
 
 import {
+  addTenantDomain,
   assignUserToTenant,
   createTenant,
   createUserInTenant,
   listTenants,
+  listTenantDomains,
   listTenantUsers,
   reassignUserFromTenant,
+  removeTenantDomain,
   tenantKeys,
   updateTenant,
   type TenantResponse,
@@ -35,6 +38,8 @@ export default function TenantsPage() {
   const [editDomain, setEditDomain] = useState("");
   const [editSiteSuffix, setEditSiteSuffix] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
+  const [newManagedDomain, setNewManagedDomain] = useState("");
+  const [domainError, setDomainError] = useState<string | null>(null);
 
   const [showUsers, setShowUsers] = useState<TenantResponse | null>(null);
   const [newUserEmail, setNewUserEmail] = useState("");
@@ -51,6 +56,12 @@ export default function TenantsPage() {
     queryKey: tenantKeys.users(showUsers?.id ?? ""),
     queryFn: () => listTenantUsers(showUsers!.id),
     enabled: Boolean(showUsers),
+  });
+
+  const domainsQuery = useQuery({
+    queryKey: tenantKeys.domains(selectedTenant?.id ?? ""),
+    queryFn: () => listTenantDomains(selectedTenant!.id),
+    enabled: Boolean(selectedTenant),
   });
 
   const createMutation = useMutation({
@@ -70,16 +81,41 @@ export default function TenantsPage() {
     onError: (e: Error) => setCreateError(e.message),
   });
 
-  const updateDomainMutation = useMutation({
+  const updatePrimaryMutation = useMutation({
     mutationFn: ({ tenantId, domain, site_suffix }: { tenantId: string; domain: string | null; site_suffix: string | null }) =>
       updateTenant(tenantId, { domain, site_suffix }),
-    onSuccess: async () => {
+    onSuccess: async (_, vars) => {
       await queryClient.invalidateQueries({ queryKey: tenantKeys.tenants });
-      setSelectedTenant(null);
+      await queryClient.invalidateQueries({ queryKey: tenantKeys.domains(vars.tenantId) });
       setEditError(null);
-      toast.success("Tenant actualizado");
+      toast.success("Dominio primario actualizado");
     },
     onError: (e: Error) => setEditError(e.message),
+  });
+
+  const addDomainMutation = useMutation({
+    mutationFn: ({ tenantId, domain }: { tenantId: string; domain: string }) =>
+      addTenantDomain(tenantId, domain),
+    onSuccess: async (_, vars) => {
+      await queryClient.invalidateQueries({ queryKey: tenantKeys.domains(vars.tenantId) });
+      await queryClient.invalidateQueries({ queryKey: tenantKeys.tenants });
+      setNewManagedDomain("");
+      setDomainError(null);
+      toast.success("Dominio añadido");
+    },
+    onError: (e: Error) => setDomainError(e.message),
+  });
+
+  const removeDomainMutation = useMutation({
+    mutationFn: ({ tenantId, domain }: { tenantId: string; domain: string }) =>
+      removeTenantDomain(tenantId, domain),
+    onSuccess: async (_, vars) => {
+      await queryClient.invalidateQueries({ queryKey: tenantKeys.domains(vars.tenantId) });
+      await queryClient.invalidateQueries({ queryKey: tenantKeys.tenants });
+      setDomainError(null);
+      toast.success("Dominio quitado");
+    },
+    onError: (e: Error) => setDomainError(e.message),
   });
 
   const createUserMutation = useMutation({
@@ -127,15 +163,28 @@ export default function TenantsPage() {
     });
   }
 
-  function handleEditDomain(e: FormEvent<HTMLFormElement>) {
+  function handleUpdatePrimary(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setEditError(null);
     if (!selectedTenant) return;
-    updateDomainMutation.mutate({
+    updatePrimaryMutation.mutate({
       tenantId: selectedTenant.id,
-      domain: editDomain || null,
-      site_suffix: editSiteSuffix || null,
+      domain: editDomain.trim() || null,
+      site_suffix: editSiteSuffix.trim() || null,
     });
+  }
+
+  function handleAddManagedDomain() {
+    setDomainError(null);
+    if (!selectedTenant) return;
+    if (!newManagedDomain.trim()) { setDomainError("Dominio requerido"); return; }
+    addDomainMutation.mutate({ tenantId: selectedTenant.id, domain: newManagedDomain.trim() });
+  }
+
+  function handleRemoveManagedDomain(domain: string) {
+    setDomainError(null);
+    if (!selectedTenant) return;
+    removeDomainMutation.mutate({ tenantId: selectedTenant.id, domain });
   }
 
   function handleCreateUser(e: FormEvent<HTMLFormElement>) {
@@ -238,9 +287,9 @@ export default function TenantsPage() {
                     <Button
                       size="sm"
                       variant="secondary"
-                      onClick={() => { setSelectedTenant(t); setEditDomain(t.domain ?? ""); setEditSiteSuffix(t.site_suffix ?? ""); setEditError(null); }}
+                      onClick={() => { setSelectedTenant(t); setEditDomain(t.domain ?? ""); setEditSiteSuffix(t.site_suffix ?? ""); setEditError(null); setNewManagedDomain(""); setDomainError(null); }}
                     >
-                      Dominio y sufijo
+                      Dominios
                     </Button>
                     <Button
                       size="sm"
@@ -260,23 +309,70 @@ export default function TenantsPage() {
         </table>
       </div>
 
-      <Dialog open={Boolean(selectedTenant)} title="Editar dominio y sufijo" description={selectedTenant?.name} onClose={() => setSelectedTenant(null)}>
-        <form className="space-y-3" onSubmit={handleEditDomain}>
-          <label className="block space-y-1 text-sm text-foreground">
-            <span>Dominio (DMS)</span>
-            <Input type="text" value={editDomain} onChange={(e) => { setEditDomain(e.target.value); setEditError(null); }} placeholder="empresa.com" autoFocus />
-          </label>
-          <label className="block space-y-1 text-sm text-foreground">
-            <span>Sufijo de sitios</span>
-            <Input type="text" value={editSiteSuffix} onChange={(e) => { setEditSiteSuffix(e.target.value); setEditError(null); }} placeholder="empresa.com" />
-            <span className="text-xs text-muted-foreground">Los sitios solo podrán usar dominios dentro de este sufijo. Vacío = sin sufijo.</span>
-          </label>
-          {editError && <Alert title="Error">{editError}</Alert>}
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="secondary" size="sm" onClick={() => setSelectedTenant(null)}>Cancelar</Button>
-            <Button type="submit" size="sm" disabled={updateDomainMutation.isPending}>{updateDomainMutation.isPending ? "..." : "Guardar"}</Button>
+      <Dialog open={Boolean(selectedTenant)} title="Dominio y sufijo" description={selectedTenant?.name} onClose={() => setSelectedTenant(null)}>
+        <div className="space-y-4">
+          <form className="space-y-3" onSubmit={handleUpdatePrimary}>
+            <label className="block space-y-1 text-sm text-foreground">
+              <span>Dominio primario (DMS)</span>
+              <Input type="text" value={editDomain} onChange={(e) => { setEditDomain(e.target.value); setEditError(null); }} placeholder="empresa.com" autoFocus />
+              <span className="text-xs text-muted-foreground">Dominio de correo por defecto del tenant.</span>
+            </label>
+            <label className="block space-y-1 text-sm text-foreground">
+              <span>Sufijo de sitios</span>
+              <Input type="text" value={editSiteSuffix} onChange={(e) => { setEditSiteSuffix(e.target.value); setEditError(null); }} placeholder="empresa.com" />
+              <span className="text-xs text-muted-foreground">Informativo: ya no limita los dominios de los sitios. Vacío = sin sufijo.</span>
+            </label>
+            {editError && <Alert title="Error">{editError}</Alert>}
+            <div className="flex justify-end gap-2">
+              <Button type="submit" size="sm" disabled={updatePrimaryMutation.isPending}>{updatePrimaryMutation.isPending ? "..." : "Guardar"}</Button>
+            </div>
+          </form>
+
+          <div className="space-y-2 border-t border-border pt-3">
+            <p className="text-xs font-semibold uppercase text-muted-foreground">Dominios adicionales</p>
+            {domainsQuery.isLoading && (
+              <p className="text-sm text-muted-foreground">Cargando dominios...</p>
+            )}
+            {domainsQuery.data?.domains?.filter((item) => item.domain !== selectedTenant?.domain).map((item) => (
+              <div key={item.domain} className="flex items-center justify-between rounded border border-border px-3 py-1.5">
+                <span className="font-mono text-xs text-foreground">{item.domain}</span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  disabled={removeDomainMutation.isPending}
+                  onClick={() => handleRemoveManagedDomain(item.domain)}
+                >
+                  Quitar
+                </Button>
+              </div>
+            ))}
+            {domainsQuery.data && domainsQuery.data.domains.filter((item) => item.domain !== selectedTenant?.domain).length === 0 && (
+              <p className="text-sm text-muted-foreground">Sin dominios adicionales.</p>
+            )}
+            <div className="flex gap-2">
+              <Input
+                type="text"
+                value={newManagedDomain}
+                onChange={(e) => { setNewManagedDomain(e.target.value); setDomainError(null); }}
+                placeholder="debug.com"
+              />
+              <Button
+                type="button"
+                size="sm"
+                disabled={addDomainMutation.isPending}
+                onClick={handleAddManagedDomain}
+              >
+                Añadir
+              </Button>
+            </div>
+            {domainError && <Alert title="Error">{domainError}</Alert>}
           </div>
-        </form>
+
+          <div className="flex justify-end">
+            <Button type="button" variant="secondary" size="sm" onClick={() => setSelectedTenant(null)}>Cerrar</Button>
+          </div>
+        </div>
       </Dialog>
 
       <Dialog open={Boolean(showUsers)} title={`Usuarios — ${showUsers?.name ?? ""}`} onClose={() => setShowUsers(null)}>

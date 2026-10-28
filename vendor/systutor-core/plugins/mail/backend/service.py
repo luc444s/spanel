@@ -3,11 +3,13 @@ from __future__ import annotations
 import json
 import logging
 
+from fastapi import FastAPI
 from sqlalchemy.orm import Session
 
 from plugins.mail.backend.provider import MailProvider
 from plugins.mail.backend.schemas import MailAccountsResponse, MailMessageResponse
 from plugins.mail.backend.settings import MailSettings, get_mail_settings
+from systutor.contracts.domain_namespace import list_tenant_domains, normalize_domain_name
 from systutor.core.cache import CacheBackend, cache
 from systutor.core.errors import AppError, NotFoundError
 from systutor.kernel.tenants.models import Tenant
@@ -27,11 +29,13 @@ class MailService:
         *,
         cache_backend: CacheBackend | None = None,
         settings: MailSettings | None = None,
+        app: FastAPI | None = None,
     ) -> None:
         self._provider = provider
         self._db = db
         self._cache_override = cache_backend
         self._settings_override = settings
+        self._app = app
 
     def _settings(self) -> MailSettings:
         if self._settings_override is not None:
@@ -81,17 +85,50 @@ class MailService:
         except Exception as exc:  # cache must never break the request
             logger.warning("mail accounts cache invalidation failed: %s", exc)
 
-    def _get_tenant_domain(self, tenant_id: str) -> str:
+    def _get_tenant(self, tenant_id: str) -> Tenant:
         tenant = self._db.get(Tenant, tenant_id)
         if tenant is None:
             raise NotFoundError("Tenant not found")
-        if not tenant.domain:
+        return tenant
+
+    def _tenant_domains(self, tenant_id: str) -> tuple[str | None, list[str]]:
+        """`tenants.domain` más los dominios administrados, primario primero."""
+        tenant = self._get_tenant(tenant_id)
+        primary = tenant.domain.strip().lower().removesuffix(".") if tenant.domain else None
+        managed: set[str] = set()
+        for raw in list_tenant_domains(self._app, self._db, tenant_id):
+            try:
+                managed.add(normalize_domain_name(raw))
+            except ValueError:
+                continue
+        domains: list[str] = []
+        if primary:
+            domains.append(primary)
+            managed.discard(primary)
+        domains.extend(sorted(managed))
+        return primary, domains
+
+    def _require_domain_in_tenant(
+        self, tenant_id: str, domain: str, *, allow_primary: bool = True
+    ) -> str:
+        primary, domains = self._tenant_domains(tenant_id)
+        if not domains:
             raise AppError(
                 "Tenant has no domain configured",
                 status_code=422,
                 code="tenant_no_domain",
             )
-        return tenant.domain
+        needle = domain.strip().lower().removesuffix(".")
+        allowed = domains if allow_primary else [
+            item for item in domains if item != primary
+        ]
+        if needle not in allowed:
+            raise AppError(
+                "Email domain does not match tenant domain",
+                status_code=403,
+                code="domain_mismatch",
+            )
+        return needle
 
     def _call_provider_list_accounts(self) -> list[str]:
         try:
@@ -119,18 +156,28 @@ class MailService:
         return accounts
 
     def list_accounts(self, tenant_id: str, can_read_all: bool = False) -> MailAccountsResponse:
+        primary, domains = self._tenant_domains(tenant_id)
         if can_read_all:
-            return MailAccountsResponse(domain="all", accounts=self._raw_accounts())
+            return MailAccountsResponse(
+                domain="all", domains=domains, accounts=self._raw_accounts()
+            )
 
-        domain = self._get_tenant_domain(tenant_id)
+        if not domains:
+            raise AppError(
+                "Tenant has no domain configured",
+                status_code=422,
+                code="tenant_no_domain",
+            )
         all_accounts = self._raw_accounts()
-
+        owned = set(domains)
         filtered = [
             account
             for account in all_accounts
-            if account.lower().endswith(f"@{domain.lower()}")
+            if account.rsplit("@", 1)[-1].lower() in owned
         ]
-        return MailAccountsResponse(domain=domain, accounts=filtered)
+        return MailAccountsResponse(
+            domain=primary or domains[0], domains=domains, accounts=filtered
+        )
 
     def create_account(
         self,
@@ -138,9 +185,20 @@ class MailService:
         user_id: str,
         username: str,
         password: str,
+        domain: str | None = None,
     ) -> MailMessageResponse:
-        domain = self._get_tenant_domain(tenant_id)
-        email = f"{username}@{domain}"
+        primary, _domains = self._tenant_domains(tenant_id)
+        if domain is not None and domain.strip():
+            selected = self._require_domain_in_tenant(tenant_id, domain)
+        else:
+            if primary is None:
+                raise AppError(
+                    "Tenant has no domain configured",
+                    status_code=422,
+                    code="tenant_no_domain",
+                )
+            selected = primary
+        email = f"{username}@{selected}"
 
         try:
             self._provider.create_account(email, password)
@@ -179,9 +237,15 @@ class MailService:
         # list_accounts, so it must be able to change them too. Without this the
         # UI offers an account that the API always rejects with domain_mismatch.
         if not can_manage_all:
-            domain = self._get_tenant_domain(tenant_id)
+            _, domains = self._tenant_domains(tenant_id)
             _, email_domain = email.rsplit("@", 1)
-            if email_domain.lower() != domain.lower():
+            if not domains:
+                raise AppError(
+                    "Tenant has no domain configured",
+                    status_code=422,
+                    code="tenant_no_domain",
+                )
+            if email_domain.strip().lower() not in set(domains):
                 raise AppError(
                     "Email domain does not match tenant domain",
                     status_code=403,

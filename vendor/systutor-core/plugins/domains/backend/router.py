@@ -73,7 +73,6 @@ def list_domains(
     items, sites = service.list_domains(
         tenant_context.current_tenant_id,
         can_manage=tenant_context.has_permission("domains.domains.manage"),
-        include_outside=tenant_context.is_platform,
     )
     return DomainsResponse(items=items, sites=sites)
 
@@ -140,5 +139,4 @@ def get_certificate(
     return service.certificate(
         tenant_context.current_tenant_id,
         domain,
-        include_outside=tenant_context.is_platform,
     )

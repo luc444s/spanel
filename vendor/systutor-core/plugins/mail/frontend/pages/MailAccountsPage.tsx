@@ -67,6 +67,7 @@ export default function MailAccountsPage() {
   const [createUser, setCreateUser] = useState("");
   const [createPass, setCreatePass] = useState("");
   const [createConfirm, setCreateConfirm] = useState("");
+  const [createDomainName, setCreateDomainName] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
   const [accountsPage, setAccountsPage] = useState(1);
   const [showCertificates, setShowCertificates] = useState(false);
@@ -80,6 +81,10 @@ export default function MailAccountsPage() {
     staleTime: ACCOUNTS_STALE_TIME_MS,
   });
   const accounts = accountsQuery.data?.accounts ?? [];
+  const tenantDomains = accountsQuery.data?.domains ?? [];
+  const responseDomain = accountsQuery.data?.domain ?? "";
+  const selectedCreateDomain =
+    createDomainName || tenantDomains[0] || (responseDomain !== "all" ? responseDomain : "");
   const totalAccountPages = Math.max(1, Math.ceil(accounts.length / ACCOUNT_PAGE_SIZE));
 
   useEffect(() => {
@@ -106,6 +111,7 @@ export default function MailAccountsPage() {
     setCreateUser("");
     setCreatePass("");
     setCreateConfirm("");
+    setCreateDomainName("");
     setCreateError(null);
   }
 
@@ -151,7 +157,7 @@ export default function MailAccountsPage() {
     const password = createPass;
     closeCreateDialog();
     toast.loading("Creando cuenta...", { id: CREATE_TOAST });
-    createMutation.mutate({ username, password });
+    createMutation.mutate({ username, password, domain: selectedCreateDomain || undefined });
   }
 
   if (accountsQuery.isLoading) {
@@ -190,11 +196,25 @@ export default function MailAccountsPage() {
 
       <Dialog open={showCreate} title="Crear correo" onClose={closeCreateDialog}>
         <form className="space-y-3" onSubmit={handleSubmitCreate}>
+          {tenantDomains.length > 1 && (
+            <label className="block space-y-1 text-sm text-foreground">
+              <span>Dominio</span>
+              <select
+                className="w-full rounded-md border border-input bg-background px-2 py-2 text-sm"
+                value={selectedCreateDomain}
+                onChange={(event) => setCreateDomainName(event.target.value)}
+              >
+                {tenantDomains.map((item) => (
+                  <option key={item} value={item}>{item}</option>
+                ))}
+              </select>
+            </label>
+          )}
           <label className="block space-y-1 text-sm text-foreground">
             <span>Usuario</span>
             <div className="flex items-center gap-0">
               <Input type="text" value={createUser} onChange={(e) => setCreateUser(e.target.value)} placeholder="ventas" autoFocus className="rounded-r-none" {...noAutofillProps} />
-              <span className="inline-flex items-center rounded-r-md border border-l-0 border-input bg-muted px-2 text-sm text-muted-foreground">@{domain}</span>
+              <span className="inline-flex items-center rounded-r-md border border-l-0 border-input bg-muted px-2 text-sm text-muted-foreground">@{selectedCreateDomain || domain}</span>
             </div>
           </label>
           <label className="block space-y-1 text-sm text-foreground">

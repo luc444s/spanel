@@ -24,7 +24,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/mail", tags=["mail"])
 
 
-def _get_mail_service(db: Session = Depends(get_db_session)) -> MailService:
+def _get_mail_service(
+    request: Request, db: Session = Depends(get_db_session)
+) -> MailService:
     settings = get_mail_settings()
     provider = DockerMailServerProvider(
         host=settings.mail_server_host,
@@ -36,7 +38,7 @@ def _get_mail_service(db: Session = Depends(get_db_session)) -> MailService:
         ssh_control_path=settings.mail_ssh_control_path or None,
         ssh_control_persist=settings.mail_ssh_control_persist,
     )
-    return MailService(provider=provider, db=db)
+    return MailService(provider=provider, db=db, app=request.app)
 
 
 @router.get("/accounts", response_model=MailAccountsResponse)
@@ -64,6 +66,7 @@ def create_account(
         user_id=current_user.id,
         username=body.username,
         password=body.password,
+        domain=body.domain,
     )
     return result
 
