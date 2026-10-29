@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 DomainListProvider = Callable[[Session, str], Sequence[str]]
 DomainOwnerProvider = Callable[[Session, str], "str | None"]
 DomainClaimProvider = Callable[[Session, str, str], None]
+DomainReleaseProvider = Callable[[Session, str, str], None]
 DomainUsageProvider = Callable[[Session, str], "DomainUsage | None"]
 
 
@@ -107,17 +108,21 @@ def register_domain_providers(
     list_domains: DomainListProvider,
     owner: DomainOwnerProvider,
     claim: DomainClaimProvider | None = None,
+    release: DomainReleaseProvider | None = None,
 ) -> None:
     """Registra quién sabe qué dominios posee un tenant y quién los reclama.
 
     `list_domains` devuelve los dominios propios del tenant; `owner` devuelve
     el tenant dueño de un dominio o `None` si está libre. `claim` es opcional
-    y debe ser idempotente para el mismo tenant.
+    y debe ser idempotente para el mismo tenant. `release` es opcional: libera
+    una propiedad reservada del tenant (fallo con `ValueError`/`AppError` si el
+    dominio está en uso o ajeno).
     """
     candidate = {
         "list_domains": list_domains,
         "owner": owner,
         "claim": claim,
+        "release": release,
     }
     providers: dict | None = getattr(app.state, "domain_namespace_providers", None)
     if providers is None:
@@ -202,6 +207,24 @@ def claim_domain(app: FastAPI | None, db: Session, tenant_id: str, domain: str) 
         if claim is None:
             continue
         claim(db, tenant_id, needle)
+        return True
+    return False
+
+
+def release_domain(app: FastAPI | None, db: Session, tenant_id: str, domain: str) -> bool:
+    """Libera una propiedad reservada del tenant.
+
+    Devuelve `True` si algún provider lo liberó; `False` cuando no hay provider
+    registrado o ninguno implementa la liberación. El dueño del dato reporta el
+    error (`AppError` con su código HTTP) si el dominio está en uso o es el
+    dominio de correo del tenant.
+    """
+    needle = normalize_domain_name(domain)
+    for provider in _providers(app, "domain_namespace_providers").values():
+        release = provider.get("release")
+        if release is None:
+            continue
+        release(db, tenant_id, needle)
         return True
     return False
 

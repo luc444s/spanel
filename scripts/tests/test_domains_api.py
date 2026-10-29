@@ -27,6 +27,7 @@ sys.path.insert(0, str(CORE))
 
 import systutor.kernel.models  # noqa: F401
 from app.main import create_app
+from plugins.domains.backend.settings import get_domains_settings
 from plugins.hosting.backend.models import HostingSite
 from plugins.tenant.backend.service import create_tenant, create_user_for_tenant
 from systutor.api.seed import seed_demo_data
@@ -53,7 +54,13 @@ def _login(client: TestClient, email: str, password: str) -> str:
 
 
 @pytest.fixture()
-def api(tmp_path: Path) -> Iterator[dict]:
+def api(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[dict]:
+    # Laboratorio local: no Docker, el proxy solo lee un directorio vacío.
+    dynamic = tmp_path / "dynamic"
+    dynamic.mkdir()
+    monkeypatch.setenv("SPANEL_DOMAINS_PROFILE", "internal")
+    monkeypatch.setenv("SPANEL_PROXY_CONFIG_DIR", str(dynamic))
+    get_domains_settings.cache_clear()
     settings = Settings(
         app_name="Domains API test",
         env="test",
@@ -80,7 +87,7 @@ def api(tmp_path: Path) -> Iterator[dict]:
     registry.discover()
     with Session(engine) as db:
         sync_plugin_registry_state(db, registry=registry)
-        for plugin_id in ("hosting", "domains"):
+        for plugin_id in ("hosting", "domains", "tenant"):
             enable_plugin(
                 db,
                 registry=registry,
@@ -125,9 +132,11 @@ def api(tmp_path: Path) -> Iterator[dict]:
                 "client": client,
                 "token_a": _login(client, A_EMAIL, A_PASSWORD),
                 "token_b": _login(client, B_EMAIL, B_PASSWORD),
+                "dynamic": dynamic,
             }
     finally:
         engine.dispose()
+        get_domains_settings.cache_clear()
 
 
 def test_listado_solo_del_tenant(api):
@@ -195,3 +204,97 @@ def test_certificado_de_dominio_desconocido_es_404(api):
 def test_sin_token_es_401(api):
     response = api["client"].get("/api/v1/plugins/domains")
     assert response.status_code == 401, response.text
+
+
+# ---- A.SPEC 0040: reservar sin sitio y vincular después ----------------------
+
+
+def test_reservar_sin_sitio_no_publica(api):
+    """I1: la reserva no escribe ningún spanel-*.yml."""
+    client = api["client"]
+    dynamic: Path = api["dynamic"]
+    before = sorted(path.name for path in dynamic.glob("spanel-*.yml"))
+
+    response = client.post(
+        "/api/v1/plugins/domains",
+        json={"domain": "reservado.example.com", "www": False},
+        headers=_headers(api["token_a"]),
+    )
+    assert response.status_code == 201, response.text
+    items = response.json()["items"]
+    assert len(items) == 1
+    item = items[0]
+    assert item["published"] is False
+    assert item["site_id"] is None
+    assert item["container"] is None
+    assert item["owner"] == "domains"
+    assert item["editable"] is True
+
+    after = sorted(path.name for path in dynamic.glob("spanel-*.yml"))
+    assert after == before, "reservar no debe crear ni modificar YAML"
+
+    listed = client.get("/api/v1/plugins/domains", headers=_headers(api["token_a"]))
+    assert listed.status_code == 200, listed.text
+    by_domain = {row["domain"]: row for row in listed.json()["items"]}
+    assert by_domain["reservado.example.com"]["published"] is False
+    assert "a.example.com" in by_domain  # el primario sigue ahí
+
+    cert = client.get(
+        "/api/v1/plugins/domains/reservado.example.com/certificate",
+        headers=_headers(api["token_a"]),
+    )
+    assert cert.status_code == 200, cert.text
+    assert cert.json()["state"] == "unpublished"
+
+    # Idempotente para el mismo tenant.
+    repeat = client.post(
+        "/api/v1/plugins/domains",
+        json={"domain": "reservado.example.com"},
+        headers=_headers(api["token_a"]),
+    )
+    assert repeat.status_code == 201, repeat.text
+
+    # I4: otroe tenant recibe 409; un dueño por dominio.
+    foreign = client.post(
+        "/api/v1/plugins/domains",
+        json={"domain": "reservado.example.com", "www": False},
+        headers=_headers(api["token_b"]),
+    )
+    assert foreign.status_code == 409, foreign.text
+    assert foreign.json()["error"]["code"] == "domains.already_owned"
+
+
+def test_borrar_reservado_libera(api):
+    """I7: DELETE de un reservado responde 204 y libera la fila."""
+    client = api["client"]
+    response = client.post(
+        "/api/v1/plugins/domains",
+        json={"domain": "temporal.example.com"},
+        headers=_headers(api["token_a"]),
+    )
+    assert response.status_code == 201, response.text
+
+    released = client.delete(
+        "/api/v1/plugins/domains/temporal.example.com", headers=_headers(api["token_a"])
+    )
+    assert released.status_code == 204, released.text
+
+    listed = client.get("/api/v1/plugins/domains", headers=_headers(api["token_a"]))
+    assert "temporal.example.com" not in {
+        row["domain"] for row in listed.json()["items"]
+    }
+    # Sigue liberado: borrar dos veces es 404.
+    again = client.delete(
+        "/api/v1/plugins/domains/temporal.example.com", headers=_headers(api["token_a"])
+    )
+    assert again.status_code == 404, again.text
+
+
+def test_sitio_ajeno_en_reserva_es_404(api):
+    client = api["client"]
+    response = client.post(
+        "/api/v1/plugins/domains",
+        json={"site_id": "nope", "domain": "x.example.com", "www": False},
+        headers=_headers(api["token_a"]),
+    )
+    assert response.status_code == 404, response.text

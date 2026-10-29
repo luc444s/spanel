@@ -18,6 +18,7 @@ Usage (as root):
     python3 scripts/install_cert_agent.py --dry-run
     python3 scripts/install_cert_agent.py
     python3 scripts/install_cert_agent.py --allowlist mail.example.com
+    python3 scripts/install_cert_agent.py --add-allowlist mail.nuevo.com
     python3 scripts/install_cert_agent.py \\
         --default-cert /etc/ssl/default.fullchain.crt \\
         --default-key /etc/ssl/default.key
@@ -281,6 +282,52 @@ def _write_config(path: Path, content: str, *, force: bool, dry_run: bool) -> st
     return "escrita"
 
 
+ALLOWLIST_LINE_RE = re.compile(
+    r"(?m)^allowlist\s*=\s*\[[^\]]*\][ \t]*$\n?"
+)
+
+
+def _read_allowlist(path: Path) -> list[str]:
+    """Lee la allowlist del TOML existente (lista vacía si falta la clave)."""
+
+    try:
+        raw = tomllib.loads(path.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError, UnicodeDecodeError) as exc:
+        raise InstallError(f"configuración ilegible ({path}): {exc}") from exc
+    return [str(item) for item in raw.get("allowlist") or []]
+
+
+def _write_allowlist(
+    path: Path, additions: list[str], *, dry_run: bool = False
+) -> tuple[list[str], str]:
+    """Agrega hostnames a la allowlist sin reescribir el resto del TOML.
+
+    Reemplaza solo la línea top-level `allowlist = [...]`; los comentarios,
+    rutas y secciones (`[postfix]`, `[dovecot]`) quedan byte a byte. Si la
+    clave falta se agrega al inicio. Sin cambios no reescribe; en dry-run no
+    toca el archivo. Si el archivo no existe, falla.
+    """
+
+    if not path.is_file():
+        raise InstallError(f"la configuración no existe: {path}")
+    existing = [_normalize_hostname(item) for item in _read_allowlist(path)]
+    added = [_normalize_hostname(item) for item in additions]
+    merged = sorted(set(existing) | set(added))
+    if not (set(added) - set(existing)):
+        return merged, "sin cambios"
+    text = path.read_text(encoding="utf-8")
+    line = "allowlist = [" + ", ".join(_toml_string(item) for item in merged) + "]"
+    match = ALLOWLIST_LINE_RE.search(text)
+    if match:
+        updated = text[: match.start()] + line + "\n" + text[match.end() :]
+    else:
+        updated = line + "\n" + text
+    if not dry_run:
+        _atomic_write(path, updated, 0o600)
+        _read_allowlist(path)  # el TOML reescrito debe seguir siendo válido
+    return merged, "actualizada"
+
+
 def _seed_certificates(
     allowlist: list[str],
     *,
@@ -532,11 +579,20 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--default-key", type=Path)
     parser.add_argument("--webroot", type=Path)
     parser.add_argument("--certbot", default=shutil.which("certbot"))
-    parser.add_argument(
+    allowlist_group = parser.add_mutually_exclusive_group()
+    allowlist_group.add_argument(
         "--allowlist",
         action="append",
         default=[],
         help="hostname a administrar (repetible); por defecto descubre los linajes completos",
+    )
+    allowlist_group.add_argument(
+        "--add-allowlist",
+        action="append",
+        default=[],
+        metavar="HOSTNAME",
+        help="agrega el hostname a la allowlist de la configuración existente "
+        "sin reescribir el resto del TOML (repetible)",
     )
     parser.add_argument("--force-config", action="store_true", help="reescribir cert-agent.toml")
     parser.add_argument(
@@ -580,15 +636,6 @@ def run(argv: list[str] | None = None) -> int:
         return 1
 
     try:
-        allowlist = [_normalize_hostname(item) for item in args.allowlist]
-        if not allowlist:
-            allowlist = [_normalize_hostname(item) for item in _discover_allowlist(args.lineages)]
-        if not allowlist:
-            raise InstallError(
-                "no hay hostnames: usá --allowlist o creá linajes en Certbot"
-            )
-        allowlist = sorted(set(allowlist))
-
         webroot = args.webroot or _detect_webroot(args.renewal_root)
         units = _render_units(
             repo_root=repo_root,
@@ -597,17 +644,42 @@ def run(argv: list[str] | None = None) -> int:
             state_dir=args.state_dir,
             docs=repo_root / "docs" / "certificate-manager.md",
         )
-        config_text = _render_config(
-            allowlist=allowlist,
-            install_root=args.install_root,
-            state_dir=args.state_dir,
-            default_cert=args.default_cert,
-            default_key=args.default_key,
-            certbot=args.certbot,
-            webroot=webroot,
-            ca_bundle=args.ca_bundle,
-            lineages=args.lineages,
-        )
+        if args.add_allowlist:
+            # Alta de dominio nuevo: solo se agrega a la allowlist del TOML
+            # existente; rutas, [postfix] y [dovecot] no se reescriben.
+            additions = [_normalize_hostname(item) for item in args.add_allowlist]
+            allowlist, config_state = _write_allowlist(
+                args.config, additions, dry_run=args.dry_run
+            )
+        else:
+            allowlist = [_normalize_hostname(item) for item in args.allowlist]
+            if not allowlist:
+                allowlist = [
+                    _normalize_hostname(item)
+                    for item in _discover_allowlist(args.lineages)
+                ]
+            if not allowlist:
+                raise InstallError(
+                    "no hay hostnames: usá --allowlist o creá linajes en Certbot"
+                )
+            allowlist = sorted(set(allowlist))
+            config_text = _render_config(
+                allowlist=allowlist,
+                install_root=args.install_root,
+                state_dir=args.state_dir,
+                default_cert=args.default_cert,
+                default_key=args.default_key,
+                certbot=args.certbot,
+                webroot=webroot,
+                ca_bundle=args.ca_bundle,
+                lineages=args.lineages,
+            )
+            config_state = _write_config(
+                args.config,
+                config_text,
+                force=args.force_config,
+                dry_run=args.dry_run,
+            )
 
         if args.dry_run:
             print("dry-run: no se escribe nada")
@@ -620,9 +692,6 @@ def run(argv: list[str] | None = None) -> int:
                 os.chmod(directory, 0o750)
             args.install_root.mkdir(parents=True, exist_ok=True)
 
-        config_state = _write_config(
-            args.config, config_text, force=args.force_config, dry_run=args.dry_run
-        )
         seeded, skipped = _seed_certificates(
             allowlist,
             lineages=args.lineages,

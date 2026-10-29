@@ -104,8 +104,16 @@ def setup():
             raise DomainConflictError(domain, current)
         owned.setdefault(tenant_id, set()).add(domain)
 
+    def release(db, tenant_id, domain):  # noqa: ANN001
+        current = owner_of(db, domain)
+        if current is None or current != tenant_id:
+            raise AppError(
+                "Dominio desconocido", status_code=404, code="domains.domain_not_found"
+            )
+        owned.get(tenant_id, set()).discard(domain)
+
     register_domain_providers(
-        app, "tenant", list_domains=list_owned, owner=owner_of, claim=claim
+        app, "tenant", list_domains=list_owned, owner=owner_of, claim=claim, release=release
     )
 
 
@@ -136,7 +144,7 @@ def ctx(tenant="t1", permissions=("domains.domains.read", "domains.domains.manag
 
 def test_list_merges_primary_and_extra(setup):
     service, _, _ = setup
-    items, sites = service.list_domains("t1", can_manage=True)
+    items, sites, err = service.list_domains("t1", can_manage=True)
     by_domain = {item.domain: item for item in items}
 
     assert by_domain["a.spanel"].owner == "hosting"
@@ -145,12 +153,13 @@ def test_list_merges_primary_and_extra(setup):
     assert by_domain["b.spanel"].editable is True
     assert "c.spanel" not in by_domain, "extra de otro tenant"
     assert [site.container for site in sites] == ["spanel-a-wp", "spanel-b-wp"]
+    assert err is None
 
 
 def test_list_marks_conflict_when_primary_is_also_extra(setup):
     service, ops, _ = setup
     ops.extras.append(ManagedDomain("a.spanel", "spanel-b-wp", "internal", "spanel-b.yml"))
-    items, _ = service.list_domains("t1", can_manage=True)
+    items, _, _ = service.list_domains("t1", can_manage=True)
     primary = next(item for item in items if item.domain == "a.spanel")
     assert primary.owner == "hosting"
     assert primary.conflict is True
@@ -163,7 +172,7 @@ def test_primary_published_by_its_own_container_is_not_conflict(setup):
     ops.extras.append(
         ManagedDomain("a.spanel", "spanel-a-wp", "internal", "spanel-a-web.yml")
     )
-    items, _ = service.list_domains("t1", can_manage=True)
+    items, _, _ = service.list_domains("t1", can_manage=True)
     primary = next(item for item in items if item.domain == "a.spanel")
     assert primary.owner == "hosting"
     assert primary.conflict is False
@@ -254,3 +263,153 @@ def test_certificate_only_for_visible_domains(setup):
     assert service.certificate("t1", "b.spanel").verified is True
     with pytest.raises(NotFoundError):
         service.certificate("t1", "c.spanel")
+
+
+# ---- A.SPEC 0040: reservar sin sitio, vincular y liberar ---------------------
+
+
+def test_add_reserved_nunca_toca_el_proxy(setup):
+    service, ops, audits = setup
+    items = service.add(ctx(), site_id=None, domain="d.com", www=True)
+
+    assert ops.added == [] and ops.removed == []
+    assert [item.domain for item in items] == ["d.com", "www.d.com"]
+    assert all(item.published is False and item.site_id is None for item in items)
+    audit = audits[-1]
+    assert audit["action"] == "domains.domain.added"
+    assert audit["details"]["mode"] == "reserved"
+    assert audit["details"]["site_id"] is None
+    assert audit["details"]["container"] is None
+
+
+def test_add_reserved_es_idempotente_para_el_mismo_tenant(setup):
+    service, ops, _ = setup
+    first = service.add(ctx(), site_id=None, domain="d.com", www=False)
+    second = service.add(ctx(), site_id=None, domain="d.com", www=False)
+
+    assert [item.published for item in first] == [False]
+    assert [item.published for item in second] == [False]
+
+
+def test_add_reserved_otro_tenant_es_409(setup):
+    service, ops, _ = setup
+    service.add(ctx(), site_id=None, domain="d.com", www=False)
+
+    with pytest.raises(AppError) as exc:
+        service.add(ctx("t2"), site_id=None, domain="d.com", www=False)
+    assert exc.value.code == "domains.already_owned"
+    assert exc.value.status_code == 409
+    assert ops.added == []
+
+
+def test_add_reserved_con_dominio_ya_reclamado(setup):
+    service, ops, _ = setup
+    # b.spanel es extra publicado por spanel-a-wp del propio tenant: sigue
+    # caminando idempotente porque el contenedor ya es del tenant.
+    items = service.add(ctx(), site_id=None, domain="d.com", www=False)
+    assert items[0].published is False
+
+    with pytest.raises(AppError) as exc:
+        service.add(ctx("t2"), site_id=None, domain="b.spanel", www=False)
+    assert exc.value.code == "domains.already_claimed"
+
+
+def test_link_publica_y_audita(setup):
+    service, ops, audits = setup
+    service.add(ctx(), site_id=None, domain="d.com", www=True)
+
+    items = service.link(ctx(), domain="d.com", site_id="site-b", www=True)
+
+    assert ops.added == [("spanel-b-wp", "d.com", True)]
+    assert all(item.published is True for item in items)
+    assert all(item.container == "spanel-b-wp" for item in items)
+    audit = audits[-1]
+    assert audit["action"] == "domains.domain.linked"
+    assert audit["details"]["site_id"] == "site-b"
+    assert audit["details"]["container"] == "spanel-b-wp"
+
+
+def test_link_exige_propiedad_del_tenant(setup):
+    service, ops, _ = setup
+    with pytest.raises(AppError) as exc:
+        service.link(ctx(), domain="c.spanel", site_id="site-a", www=False)
+    assert exc.value.status_code == 404
+    assert exc.value.code == "domains.domain_not_found"
+    assert ops.added == []
+
+
+def test_link_sitio_desconocido_es_404(setup):
+    service, _, _ = setup
+    service.add(ctx(), site_id=None, domain="d.com", www=False)
+
+    with pytest.raises(AppError) as exc:
+        service.link(ctx(), domain="d.com", site_id="nope", www=False)
+    assert exc.value.status_code == 404
+    assert exc.value.code == "domains.site_not_found"
+
+
+def test_link_con_proxy_caido_es_503_y_conserva_reserva(setup):
+    service, ops, _ = setup
+    service.add(ctx(), site_id=None, domain="d.com", www=False)
+
+    def broken():
+        raise AppError("proxy caído", status_code=503, code="domains.proxy_unavailable")
+
+    service._ready = broken  # type: ignore[method-assign]
+    with pytest.raises(AppError) as exc:
+        service.link(ctx(), domain="d.com", site_id="site-b", www=False)
+    assert exc.value.status_code == 503
+    assert ops.added == []
+    # La reserva sigue siendo del tenant.
+    items, _, _ = service.list_domains("t1", can_manage=True)
+    assert "d.com" in {item.domain for item in items}
+
+
+def test_certificate_reservado_sin_probe(setup):
+    service, ops, _ = setup
+    calls: list[str] = []
+    original = ops.certificate
+
+    def spy(domain):
+        calls.append(domain)
+        return original(domain)
+
+    ops.certificate = spy  # type: ignore[method-assign]
+    service.add(ctx(), site_id=None, domain="d.com", www=False)
+
+    info = service.certificate("t1", "d.com")
+    assert info.state == "unpublished"
+    assert info.verified is False
+    assert calls == []
+
+
+def test_remove_reservado_libera_por_contrato(setup):
+    service, ops, audits = setup
+    service.add(ctx(), site_id=None, domain="d.com", www=False)
+
+    service.remove(ctx(), "d.com")
+
+    assert ops.removed == []
+    assert audits[-1]["action"] == "domains.domain.removed"
+    assert audits[-1]["details"]["mode"] == "reserved"
+    with pytest.raises(NotFoundError):
+        service.remove(ctx(), "d.com")
+
+
+def test_list_incluye_reservados(setup):
+    service, ops, _ = setup
+    service.add(ctx(), site_id=None, domain="d.com", www=False)
+
+    items, _, err = service.list_domains("t1", can_manage=True)
+    by_domain = {item.domain: item for item in items}
+    assert by_domain["d.com"].published is False
+    assert by_domain["d.com"].site_id is None
+    assert err is None
+
+
+def test_list_respecta_aislamiento_de_reservas(setup):
+    service, _, _ = setup
+    service.add(ctx(), site_id=None, domain="d.com", www=False)
+
+    items, _, _ = service.list_domains("t2", can_manage=True)
+    assert "d.com" not in {item.domain for item in items}

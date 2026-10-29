@@ -8,6 +8,7 @@ from plugins.tenant.backend.service import (
     get_managed_domain_owner,
     get_site_suffix_for_tenant,
     list_managed_domains,
+    release_domain_for_tenant,
 )
 from systutor.contracts.domain_namespace import register_domain_providers
 from systutor.contracts.site_namespace import register_site_suffix_provider
@@ -34,6 +35,19 @@ def domain_claim_provider(db: Session, tenant_id: str, domain: str) -> None:
     claim_domain_for_tenant(db, tenant_id, domain)
 
 
+def domain_release_provider_factory(app: object | None):
+    """Provider del contrato: libera una reserva del tenant.
+
+    Se construye con la app para que `remove_managed_domain` pueda respetar
+    primarios de sitios y dominios publicados en uso.
+    """
+
+    def release_provider(db: Session, tenant_id: str, domain: str) -> None:
+        release_domain_for_tenant(db, tenant_id, domain, app=app)  # type: ignore[arg-type]
+
+    return release_provider
+
+
 def register(context: PluginContext) -> None:
     context.register_router(router)
     app = context.router_registry
@@ -45,4 +59,5 @@ def register(context: PluginContext) -> None:
             list_domains=managed_domains_provider,
             owner=domain_owner_provider,
             claim=domain_claim_provider,
+            release=domain_release_provider_factory(app),
         )

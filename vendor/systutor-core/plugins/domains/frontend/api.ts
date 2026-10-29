@@ -9,6 +9,7 @@ export type DomainItem = {
   owner: DomainOwner;
   editable: boolean;
   conflict: boolean;
+  published?: boolean;
 };
 
 export type DomainCheckResponse = {
@@ -26,6 +27,8 @@ export type SiteOption = {
 export type DomainsResponse = {
   items: DomainItem[];
   sites: SiteOption[];
+  proxy_available?: boolean;
+  proxy_error?: string | null;
 };
 
 export type CertificateInfo = {
@@ -40,8 +43,13 @@ export type CertificateInfo = {
 };
 
 export type CreateDomainPayload = {
-  site_id: string;
+  site_id?: string | null;
   domain: string;
+  www: boolean;
+};
+
+export type LinkDomainPayload = {
+  site_id: string;
   www: boolean;
 };
 
@@ -66,6 +74,16 @@ export function createDomain(payload: CreateDomainPayload) {
 export function checkDomain(domain: string) {
   return apiRequest<DomainCheckResponse>(
     `${BASE}/check?domain=${encodeURIComponent(domain)}`
+  );
+}
+
+export function linkDomain(domain: string, payload: LinkDomainPayload) {
+  return apiRequest<{ items: DomainItem[] }>(
+    `${BASE}/${encodeURIComponent(domain)}/link`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }
   );
 }
 

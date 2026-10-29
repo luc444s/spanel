@@ -26,8 +26,11 @@ del `tenant_site_settings.site_suffix`.
 ## Efectos en otros módulos
 
 - **Dominios**: `check` está disponible para cualquier dominio libre o propio;
-  `list` solo muestra dominios publicados por contenedores del tenant
-  (primarios de sus sitios o extras de su YAML).
+  `list` muestra primarios de sus sitios, extras de su YAML y también las filas
+  de `tenant_domains` aún no publicadas (A.SPEC 0040): se listan como
+  `published=false` con acción “Vincular”. `DELETE` de un reservado libera la
+  fila si no está en uso; si el proxy no responde la lista sigue funcionando y
+  avisa con `proxy_available=false`.
 - **Hosting**: crear un sitio acepta cualquier dominio libre o propio. Si está
   libre lo reclama en la misma transacción; si es de otro tenant responde
   `409 hosting_site_domain_conflict`.

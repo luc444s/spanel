@@ -136,6 +136,100 @@ def test_siembra_solo_cuando_falta_y_respeta_refresh(tmp_path: Path) -> None:
     assert (install_root / "mail.systutor.com" / "fullchain.pem").read_text() == "cert"
 
 
+def test_add_allowlist_mergea_sin_perder_el_resto_del_archivo(tmp_path: Path) -> None:
+    config = tmp_path / "cert-agent.toml"
+    config.write_text(
+        "# configuración del host\n"
+        'allowlist = ["mail.systutor.com"]\n'
+        'default_certificate = "cf-mail"\n'
+        "\n[postfix]\n"
+        'sni_map_path = "/etc/postfix/sni_map"\n',
+        encoding="utf-8",
+    )
+
+    merged, status = install_cert_agent._write_allowlist(
+        config, ["MAIL.Nuevo.COM.", "mail.systutor.com"]
+    )
+
+    assert status == "actualizada"
+    assert merged == ["mail.nuevo.com", "mail.systutor.com"]
+    text = config.read_text(encoding="utf-8")
+    assert 'allowlist = ["mail.nuevo.com", "mail.systutor.com"]' in text
+    assert "# configuración del host" in text
+    assert 'default_certificate = "cf-mail"' in text
+    assert "[postfix]" in text
+    assert install_cert_agent._read_allowlist(config) == [
+        "mail.nuevo.com",
+        "mail.systutor.com",
+    ]
+
+
+def test_add_allowlist_agrega_la_clave_si_falta(tmp_path: Path) -> None:
+    config = tmp_path / "cert-agent.toml"
+    config.write_text(
+        'default_certificate = "cf-mail"\n\n[dovecot]\nlocal_name_path = "/x"\n',
+        encoding="utf-8",
+    )
+
+    merged, _ = install_cert_agent._write_allowlist(config, ["mail.nuevo.com"])
+
+    assert merged == ["mail.nuevo.com"]
+    text = config.read_text(encoding="utf-8")
+    assert text.startswith('allowlist = ["mail.nuevo.com"]\n')
+    assert 'default_certificate = "cf-mail"' in text
+    assert "[dovecot]" in text
+
+
+def test_add_allowlist_dry_run_no_escribe(tmp_path: Path) -> None:
+    config = tmp_path / "cert-agent.toml"
+    original = 'allowlist = ["mail.systutor.com"]\n'
+    config.write_text(original, encoding="utf-8")
+
+    merged, status = install_cert_agent._write_allowlist(
+        config, ["mail.nuevo.com"], dry_run=True
+    )
+
+    assert status == "actualizada"
+    assert merged == ["mail.nuevo.com", "mail.systutor.com"]
+    assert config.read_text(encoding="utf-8") == original
+
+
+def test_add_allowlist_sin_cambios_no_reescribe(tmp_path: Path) -> None:
+    config = tmp_path / "cert-agent.toml"
+    original = 'allowlist = ["mail.systutor.com"]\n'
+    config.write_text(original, encoding="utf-8")
+
+    merged, status = install_cert_agent._write_allowlist(
+        config, ["mail.systutor.com"]
+    )
+
+    assert status == "sin cambios"
+    assert merged == ["mail.systutor.com"]
+    assert config.read_text(encoding="utf-8") == original
+
+
+def test_add_allowlist_exige_config_existente(tmp_path: Path) -> None:
+    with pytest.raises(install_cert_agent.InstallError):
+        install_cert_agent._write_allowlist(
+            tmp_path / "no-existe.toml", ["mail.nuevo.com"]
+        )
+
+
+def test_parser_acepta_add_allowlist_repetible() -> None:
+    parser = install_cert_agent._build_parser()
+    args = parser.parse_args(
+        ["--add-allowlist", "mail.a.com", "--add-allowlist", "mail.b.com"]
+    )
+    assert args.add_allowlist == ["mail.a.com", "mail.b.com"]
+    assert args.allowlist == []
+
+
+def test_parser_no_mezcla_allowlist_con_add_allowlist() -> None:
+    parser = install_cert_agent._build_parser()
+    with pytest.raises(SystemExit):
+        parser.parse_args(["--allowlist", "mail.a.com", "--add-allowlist", "mail.b.com"])
+
+
 def test_dry_run_no_escribe(tmp_path: Path) -> None:
     lineages = tmp_path / "live"
     _lineage(lineages, "mail.systutor.com")

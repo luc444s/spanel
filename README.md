@@ -323,12 +323,20 @@ límite.
 
 **Endpoints:**
 
-- `GET /api/v1/plugins/domains` — `domains.domains.read`
-- `POST /api/v1/plugins/domains` — `domains.domains.manage`; recibe
-  `{site_id, domain, www}`
+- `GET /api/v1/plugins/domains` — `domains.domains.read`; incluye primarios,
+  extras y reservados del tenant (`published=false`), y `proxy_available` /
+  `proxy_error` si Traefik no responde
+- `POST /api/v1/plugins/domains` — `domains.domains.manage`; con `site_id`
+  publica la ruta, con `{domain}` sin sitio solo **reserva** la propiedad en
+  `tenant_domains` (sin YAML, sin certificados, sin Docker)
+- `POST /api/v1/plugins/domains/{domain}/link` — `domains.domains.manage`;
+  `{site_id, www}` publica un reservado en un sitio del tenant con el mismo
+  escritor del alta con sitio
 - `GET /api/v1/plugins/domains/check?domain=...` — `domains.domains.read`
-- `GET /api/v1/plugins/domains/{domain}/certificate` — `domains.domains.read`
-- `DELETE /api/v1/plugins/domains/{domain}` — `domains.domains.manage`
+- `GET /api/v1/plugins/domains/{domain}/certificate` — `domains.domains.read`;
+  un reservado responde `state="unpublished"` sin tocar la red
+- `DELETE /api/v1/plugins/domains/{domain}` — `domains.domains.manage`; quita
+  la ruta de un extra publicado, o libera la reserva de un dominio sin publicar
 
 El transporte hacia Traefik es `auto` (`SSH`, Docker o directorio local) y se
 configura con `SPANEL_PROXY_*`. Si ningún transporte es viable, las operaciones

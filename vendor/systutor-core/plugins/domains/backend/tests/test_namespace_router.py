@@ -42,7 +42,7 @@ class SpyService:
                 "can_manage": can_manage,
             }
         )
-        return [], []
+        return [], [], None
 
     def check_domain(self, tenant_context: TenantContext, domain: str) -> DomainCheckResponse:
         self.check_calls.append((tenant_context, domain))

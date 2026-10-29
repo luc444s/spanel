@@ -8,6 +8,7 @@ import type { MailCertificate } from "../api";
 import { CertificateDetailDialog } from "./certificates/CertificateDetailDialog";
 import { CertificateRow } from "./certificates/CertificateRow";
 import { ForceIssueDialog } from "./certificates/ForceIssueDialog";
+import { NewCertificateDialog } from "./certificates/NewCertificateDialog";
 import { agentStateLabel, timestampLabel } from "./certificates/format";
 import { useCertificateManager } from "./certificates/useCertificateManager";
 
@@ -68,6 +69,7 @@ export function CertificatesDialog({
   function closeAll() {
     setSelected(null);
     manager.setForceTarget(null);
+    manager.setNewOpen(false);
     onClose();
   }
 
@@ -92,6 +94,20 @@ export function CertificatesDialog({
                 : "Sin lectura del agente"}
             </p>
             <div className="flex gap-2">
+              {canManage ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={manager.busy}
+                  onClick={() => {
+                    manager.setActionError(null);
+                    manager.setNewOpen(true);
+                  }}
+                >
+                  Agregar certificado
+                </Button>
+              ) : null}
               <Button
                 type="button"
                 variant="secondary"
@@ -197,6 +213,14 @@ export function CertificatesDialog({
         disabled={manager.destructiveDisabled}
         onCancel={() => manager.setForceTarget(null)}
         onConfirm={manager.confirmForce}
+      />
+
+      <NewCertificateDialog
+        open={manager.newOpen}
+        pending={manager.requestMutation.isPending}
+        error={manager.actionError}
+        onSubmit={manager.requestNew}
+        onClose={() => manager.setNewOpen(false)}
       />
     </>
   );

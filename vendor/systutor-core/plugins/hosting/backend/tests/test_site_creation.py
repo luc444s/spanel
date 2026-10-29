@@ -13,6 +13,7 @@ from plugins.hosting.backend.models import HostingSite
 from plugins.hosting.backend.schemas import CreateSiteRequest
 from plugins.hosting.backend.service import HostingService
 from plugins.hosting.backend.settings import HostingSettings
+from plugins.tenant.backend.models import TenantDomain
 from systutor.contracts.domain_namespace import register_domain_providers
 from systutor.contracts.site_domain_publisher import (
     get_site_domain_publisher,
@@ -176,6 +177,37 @@ def test_free_domain_is_claimed_with_the_site(db: Session) -> None:
     service(db).create_site(context(), "sitio", "debug.com", kind="static", app=app)
 
     assert owned["t1"] == {"debug.com"}
+
+
+def test_site_with_reserved_tenant_domain_keeps_ownership(db: Session) -> None:
+    """A.SPEC 0040/I6: crear sitio sobre un dominio reservado por el mismo tenant."""
+    db.add(TenantDomain(domain="debug.com", tenant_id="t1"))
+    db.commit()
+    app = suffix_app()
+
+    def owner_of(_db, domain):  # noqa: ANN001
+        row = _db.get(TenantDomain, domain)
+        return row.tenant_id if row is not None else None
+
+    def list_owned(_db, tenant_id):  # noqa: ANN001
+        rows = _db.query(TenantDomain).filter_by(tenant_id=tenant_id).all()
+        return sorted(row.domain for row in rows)
+
+    def claim(_db, tenant_id, domain):  # noqa: ANN001
+        if _db.get(TenantDomain, domain) is None:
+            _db.add(TenantDomain(domain=domain, tenant_id=tenant_id))
+
+    register_domain_providers(
+        app, "tenant", list_domains=list_owned, owner=owner_of, claim=claim
+    )
+
+    response = service(db).create_site(
+        context(), "sitio", "debug.com", kind="static", app=app
+    )
+    assert response.site.domain == "debug.com"
+    # La propiedad explícita queda en tenant_domains: sigue siendo del tenant.
+    row = db.get(TenantDomain, "debug.com")
+    assert row is not None and row.tenant_id == "t1"
 
 
 def test_domain_already_in_hosting_sites_conflicts(db: Session) -> None:

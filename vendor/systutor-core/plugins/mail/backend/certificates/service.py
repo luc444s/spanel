@@ -111,6 +111,59 @@ class CertificatesService:
             raise NotFoundError("Certificado desconocido")
         return certificate
 
+    def _normalize_or_422(self, hostname: str) -> str:
+        try:
+            return normalize_hostname(hostname)
+        except CertificateValidationError as exc:
+            raise AppError(
+                str(exc), status_code=422, code="mail.certificates_invalid_hostname"
+            ) from exc
+
+    def _is_new_hostname_allowed(
+        self, tenant_context: TenantContext, needle: str
+    ) -> bool:
+        """Alta de dominio nuevo (A.SPEC 0041).
+
+        Un hostname ausente del inventario solo se acepta como el host de
+        correo de un dominio: `mail.<dominio>`. Un tenant solo puede pedir
+        `mail.<d>` cuando `<d>` es un dominio primario propio; el administrador
+        de plataforma (`core.platform.admin`) puede pedir cualquier `mail.*`
+        válido. El resto responde 404 para no filtrar la existencia.
+        """
+
+        rest = needle[len("mail.") :] if needle.startswith("mail.") else ""
+        if not rest:
+            return False
+        if tenant_context.is_platform:
+            return True
+        return rest in self._tenant_domains(tenant_context.current_tenant_id)
+
+    def _resolve_request_hostname(
+        self, tenant_context: TenantContext, hostname: str
+    ) -> tuple[str, Certificate | None]:
+        """Resuelve un hostname para request/get_job.
+
+        Devuelve el hostname destino (`certificate.hostname` para certificados
+        existentes, el hostname normalizado para altas) o levanta: 422 si el
+        forma del hostname es inválida, 404 si el certificado existe pero el
+        tenant no lo ve, o 404 si el hostname es una alta no permitida.
+        """
+
+        needle = self._normalize_or_422(hostname)
+        certificate = self._inventory().find(needle)
+        if certificate is None:
+            if not self._is_new_hostname_allowed(tenant_context, needle):
+                raise NotFoundError("Certificado desconocido")
+            return needle, None
+        if not certificate.visible_to(
+            tenant_id=tenant_context.current_tenant_id,
+            is_platform=tenant_context.is_platform,
+            tenant_domains=self._tenant_domains(tenant_context.current_tenant_id),
+        ):
+            # 404 para no filtrar la existencia de hostnames de otros tenants.
+            raise NotFoundError("Certificado desconocido")
+        return certificate.hostname, certificate
+
     # ---- lectura ---------------------------------------------------------
 
     def list_certificates(
@@ -169,9 +222,9 @@ class CertificatesService:
     def get_job(
         self, tenant_context: TenantContext, hostname: str, job_id: str
     ) -> CertificateJobResponse:
-        certificate = self._visible_certificate(tenant_context, hostname)
+        target, _ = self._resolve_request_hostname(tenant_context, hostname)
         try:
-            job = self._jobs.job(certificate.hostname, job_id)
+            job = self._jobs.job(target, job_id)
         except CertificateValidationError as exc:
             raise AppError(
                 str(exc), status_code=422, code="mail.certificate_job_invalid"
@@ -199,8 +252,13 @@ class CertificatesService:
         action: str = "ensure",
         reason: str | None = None,
     ) -> CertificateRequestResponse:
-        certificate = self._visible_certificate(tenant_context, hostname)
-        if certificate.scope == "global" or certificate.name == self._config.default_name:
+        target, certificate = self._resolve_request_hostname(
+            tenant_context, hostname
+        )
+        if certificate is not None and (
+            certificate.scope == "global"
+            or certificate.name == self._config.default_name
+        ):
             raise AppError(
                 "El certificado global no se regenera desde el panel",
                 status_code=409,
@@ -213,7 +271,7 @@ class CertificatesService:
 
         try:
             job_id = self._jobs.create_request(
-                certificate.hostname,
+                target,
                 action=action,
                 requested_by=tenant_context.current_user_id,
                 reason=reason,
@@ -228,16 +286,15 @@ class CertificatesService:
         self._audit(
             tenant_context,
             action="mail.certificate.requested",
-            hostname=certificate.hostname,
+            hostname=target,
             details={"job_id": job_id, "action": action, "reason": reason or "manual"},
         )
         return CertificateRequestResponse(
             job_id=job_id,
-            hostname=certificate.hostname,
+            hostname=target,
             state="queued",
             poll_url=(
-                "/api/v1/plugins/mail/certificates/"
-                f"{certificate.hostname}/jobs/{job_id}"
+                f"/api/v1/plugins/mail/certificates/{target}/jobs/{job_id}"
             ),
         )
 

@@ -24,6 +24,7 @@ export function useCertificateManager(open: boolean) {
   const queryClient = useQueryClient();
   const [pending, setPending] = useState<Record<string, PendingJob>>({});
   const [forceTarget, setForceTarget] = useState<MailCertificate | null>(null);
+  const [newOpen, setNewOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const pendingRef = useRef(pending);
   pendingRef.current = pending;
@@ -222,6 +223,18 @@ export function useCertificateManager(open: boolean) {
     requestMutation.mutate({ hostname: forceTarget.hostname, action: "force" });
   }
 
+  /**
+   * Alta de un hostname `mail.<dominio>` (A.SPEC 0041): reutiliza la misma
+   * mutación y el polling de jobs; el diálogo se cierra solo al encolar.
+   */
+  function requestNew(hostname: string) {
+    setActionError(null);
+    requestMutation.mutate(
+      { hostname, action: "ensure" },
+      { onSuccess: () => setNewOpen(false) }
+    );
+  }
+
   function runAction(cert: MailCertificate, action: CertificateAdminAction) {
     setActionError(null);
     adminMutation.mutate({ hostname: cert.hostname, action });
@@ -244,10 +257,13 @@ export function useCertificateManager(open: boolean) {
     pending,
     forceTarget,
     setForceTarget,
+    newOpen,
+    setNewOpen,
     requestMutation,
     refreshMutation,
     regenerate,
     confirmForce,
+    requestNew,
     runAction,
   };
 }

@@ -568,3 +568,22 @@ def claim_domain_for_tenant(db: Session, tenant_id: str, domain: str) -> None:
         owner = get_managed_domain_owner(db, domain) or ""
         raise DomainConflictError(domain, owner) from exc
 
+
+def release_domain_for_tenant(
+    db: Session, tenant_id: str, domain: str, app: FastAPI | None = None
+) -> None:
+    """Provider de liberación del contrato: suelta una reserva del tenant.
+
+    Delega en `remove_managed_domain`, que ya guarda: primario de sitio y
+    dominio en uso responden `409 tenant_domain_in_use`; dominio ajeno o
+    desconocido responde 404.
+    """
+    tenant = db.get(Tenant, tenant_id)
+    if tenant is None:
+        raise AppError(
+            "Tenant desconocido",
+            status_code=404,
+            code="tenant_domain_not_found",
+        )
+    remove_managed_domain(db, tenant=tenant, domain=domain, app=app)
+

@@ -16,6 +16,7 @@
   ],
   "events": [
     "domains.domain.added",
+    "domains.domain.linked",
     "domains.domain.removed"
   ],
   "description": "Dominios web: primarios de Hosting en lectura y extras del proxy"

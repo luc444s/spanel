@@ -705,3 +705,20 @@ def test_change_password_rejects_foreign_domain():
     assert excinfo.value.status_code == 403
     assert excinfo.value.code == "domain_mismatch"
     assert provider.password_calls == 0
+
+
+def test_create_account_accepts_domain_reserved_in_tenant_domains():
+    """A.SPEC 0040/I5: un dominio reservado en `tenant_domains` sirve para correo."""
+    provider = CountingMailProvider()
+    service = make_service(provider, managed={TENANT_A: ["extra.acme.com"]})
+
+    result = service.create_account(
+        TENANT_A, "user-1", "ventas", "secret-password", domain="extra.acme.com"
+    )
+
+    assert result.email == "ventas@extra.acme.com"
+    assert provider.create_calls == 1
+
+    listing = service.list_accounts(TENANT_A)
+    assert "extra.acme.com" in listing.domains
+    assert provider.accounts == ["ventas@extra.acme.com"]

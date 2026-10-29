@@ -98,6 +98,8 @@ def api(tmp_path, monkeypatch):
     rows = [
         OwnedSite("s1", "t1", "site-1", "systutor.com"),
         OwnedSite("s2", "t2", "site-2", "other.com"),
+        OwnedSite("s3", "t1", "site-3", "fresh.com"),
+        OwnedSite("s4", "t2", "site-4", "other2.com"),
     ]
 
     def provider(db, tenant_id):
@@ -208,6 +210,90 @@ def test_cf_mail_request_is_conflict(api):
     response = client.post(f"{BASE}/{DEFAULT}/request", json={"action": "ensure"})
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "mail.certificate_global"
+
+
+def test_request_accepts_new_mail_hostname_of_tenant_domain(api):
+    build, config = api
+    client = build(("mail.certificates.read", "mail.certificates.manage"))
+
+    response = client.post(f"{BASE}/MAIL.Fresh.COM/request", json={"action": "ensure"})
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["hostname"] == "mail.fresh.com"
+    request_path = config.requests_dir / f"{body['job_id']}.json"
+    assert request_path.exists()
+    payload = json.loads(request_path.read_text(encoding="utf-8"))
+    assert payload["hostname"] == "mail.fresh.com"
+    assert payload["action"] == "ensure"
+
+    job = client.get(f"{BASE}/mail.fresh.com/jobs/{body['job_id']}")
+    assert job.status_code == 200
+    assert job.json()["state"] == "queued"
+
+
+def test_new_hostname_of_other_tenant_is_not_found(api):
+    build, config = api
+    client = build(("mail.certificates.read", "mail.certificates.manage"))
+
+    response = client.post(f"{BASE}/mail.other2.com/request", json={"action": "ensure"})
+
+    assert response.status_code == 404
+    assert list(config.requests_dir.glob("*.json")) == []
+
+
+def test_new_hostname_must_be_the_mail_host_of_a_domain(api):
+    build, config = api
+    client = build(("mail.certificates.read", "mail.certificates.manage"))
+
+    for hostname in ("smtp.fresh.com", "fresh.com", "mail.sub.fresh.com"):
+        response = client.post(
+            f"{BASE}/{hostname}/request", json={"action": "ensure"}
+        )
+        assert response.status_code == 404, hostname
+
+    assert list(config.requests_dir.glob("*.json")) == []
+
+
+def test_platform_admin_can_request_unlisted_mail_hostname(api):
+    build, _ = api
+    client = build(
+        ("mail.certificates.read", "mail.certificates.manage", "core.platform.admin")
+    )
+
+    response = client.post(f"{BASE}/mail.newbrand.net/request", json={"action": "ensure"})
+
+    assert response.status_code == 202
+    assert response.json()["hostname"] == "mail.newbrand.net"
+
+
+def test_new_hostname_job_is_hidden_from_other_tenant(api):
+    build, _ = api
+    owner = build(("mail.certificates.read", "mail.certificates.manage"))
+    job_id = owner.post(
+        f"{BASE}/mail.fresh.com/request", json={"action": "ensure"}
+    ).json()["job_id"]
+
+    other = build(
+        ("mail.certificates.read", "mail.certificates.manage"), tenant_id="t2"
+    )
+    assert other.get(f"{BASE}/mail.fresh.com/jobs/{job_id}").status_code == 404
+    assert other.post(
+        f"{BASE}/mail.fresh.com/request", json={"action": "ensure"}
+    ).status_code == 404
+
+
+def test_new_hostname_rejects_extra_payload_without_writing(api):
+    build, config = api
+    client = build(("mail.certificates.read", "mail.certificates.manage"))
+
+    response = client.post(
+        f"{BASE}/mail.fresh.com/request",
+        json={"action": "ensure", "args": ["--force-renewal"]},
+    )
+
+    assert response.status_code == 422
+    assert list(config.requests_dir.glob("*.json")) == []
 
 
 def test_invalid_hostname_and_extra_payload_are_rejected(api):

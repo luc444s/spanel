@@ -112,6 +112,37 @@ El plugin web lee las rutas de estado/solicitudes/jobs de
 `SPANEL_CERT_STATE_MAX_AGE`. La antigüedad máxima por defecto es 900 s; pasado
 ese umbral el inventario se marca `stale` y la UI muestra “Estado no disponible”.
 
+## Alta de un dominio nuevo (0041)
+
+Para pedir el certificado TLS de un dominio que el panel todavía no lista:
+
+1. Agregar el hostname a la allowlist del agente **sin reescribir el resto del
+   TOML** (idempotente; conserva comentarios, rutas, `[postfix]` y `[dovecot]`;
+   falla si la configuración no existe y en `--dry-run` no escribe):
+
+   ```bash
+   python3 scripts/install_cert_agent.py --add-allowlist mail.nuevo.com
+   ```
+
+2. Refrescar el estado del agente para que publique el hostname agregado:
+
+   ```bash
+   spanel-cert-agent refresh
+   ```
+
+3. Abrir **Correos → Certificados TLS → Agregar certificado**, ingresar el
+   hostname con la forma `mail.<dominio>` y solicitar. La acción aparece solo
+   con `mail.certificates.manage`; un tenant solo puede pedir
+   `mail.<su-dominio-primario>` y cualquier otro hostname responde `404`.
+   El administrador de plataforma (`core.platform.admin`) puede pedir
+   cualquier `mail.*` válido.
+
+La allowlist del agente es la **autoridad final**: si el hostname no está en
+`/etc/spanel/cert-agent.toml`, el agente falla el job y la UI muestra el error.
+El certificado solo se asocia a un tenant si `<dominio>` es su dominio
+primario; la solicitud ya puede encolarse y consultarse (`/jobs/{job_id}`) con
+`202`/`200` antes de que el hostname aparezca en `state.json`.
+
 ## Instalación
 
 ```bash

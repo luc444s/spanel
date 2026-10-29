@@ -17,6 +17,7 @@ from plugins.domains.backend.schemas import (
     CreateDomainsResponse,
     DomainCheckResponse,
     DomainsResponse,
+    LinkDomainRequest,
 )
 from plugins.domains.backend.service import DomainsService
 from systutor.api.deps import get_db_session
@@ -26,6 +27,15 @@ from systutor.kernel.auth.models import User
 from systutor.kernel.tenants.context import TenantContext
 
 logger = logging.getLogger(__name__)
+
+
+def _response(items, sites, proxy_error: str | None) -> DomainsResponse:
+    return DomainsResponse(
+        items=items,
+        sites=sites,
+        proxy_available=proxy_error is None,
+        proxy_error=proxy_error,
+    )
 
 router = APIRouter(tags=["domains"])
 
@@ -68,13 +78,13 @@ def list_domains(
                 status_code=403,
                 code="domains.platform_scope_forbidden",
             )
-        items, sites = service.list_all_domains()
-        return DomainsResponse(items=items, sites=sites)
-    items, sites = service.list_domains(
+        items, sites, proxy_error = service.list_all_domains()
+        return _response(items, sites, proxy_error)
+    items, sites, proxy_error = service.list_domains(
         tenant_context.current_tenant_id,
         can_manage=tenant_context.has_permission("domains.domains.manage"),
     )
-    return DomainsResponse(items=items, sites=sites)
+    return _response(items, sites, proxy_error)
 
 
 @router.get("/check", response_model=DomainCheckResponse)
@@ -105,6 +115,31 @@ def create_domain(
         _publish(
             request,
             "domains.domain.added",
+            tenant_id=tenant_context.current_tenant_id,
+            domain=item.domain,
+        )
+    return CreateDomainsResponse(items=items)
+
+
+@router.post("/{domain}/link", response_model=CreateDomainsResponse, status_code=200)
+def link_domain(
+    domain: str,
+    body: LinkDomainRequest,
+    request: Request,
+    tenant_context: TenantContext = Depends(get_current_tenant_context),
+    _current_user: User = Depends(require_permission("domains.domains.manage")),
+    service: DomainsService = Depends(_get_service),
+) -> CreateDomainsResponse:
+    items = service.link(
+        tenant_context,
+        domain=domain,
+        site_id=body.site_id,
+        www=body.www,
+    )
+    for item in items:
+        _publish(
+            request,
+            "domains.domain.linked",
             tenant_id=tenant_context.current_tenant_id,
             domain=item.domain,
         )

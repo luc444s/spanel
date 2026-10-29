@@ -7,6 +7,7 @@ import {
   createDomain,
   domainsKeys,
   getCertificate,
+  linkDomain,
   listDomains,
   removeDomain,
   type CertificateInfo,
@@ -17,6 +18,8 @@ import { Button } from "@systutor/shell/ui/button";
 import { Dialog } from "@systutor/shell/ui/dialog";
 import { Input } from "@systutor/shell/ui/input";
 import { toast } from "@systutor/shell/ui/toast";
+
+const RESERVAR = "";
 
 function certificateLabel(info: CertificateInfo | undefined) {
   if (!info) return "Sin datos";
@@ -31,7 +34,7 @@ function certificateTone(info: CertificateInfo | undefined) {
   return "text-amber-600";
 }
 
-function CertificateCell({ domain }: { domain: string }) {
+function CertificateCell({ domain, published }: { domain: string; published: boolean }) {
   const query = useQuery({
     queryKey: domainsKeys.certificate(domain),
     queryFn: () => getCertificate(domain),
@@ -39,6 +42,15 @@ function CertificateCell({ domain }: { domain: string }) {
     retry: false,
     staleTime: 60_000,
   });
+
+  // Un dominio reservado no tiene ruta ni certificado: no se consulta la red.
+  if (!published) {
+    return (
+      <span className="text-sm text-muted-foreground" title="Dominio reservado sin publicar">
+        Sin publicar
+      </span>
+    );
+  }
 
   const info = query.data;
   const tooltip = info
@@ -92,15 +104,19 @@ export default function DomainsPage() {
   });
 
   const [addOpen, setAddOpen] = useState(false);
-  const [siteId, setSiteId] = useState("");
+  const [siteId, setSiteId] = useState(RESERVAR);
   const [domain, setDomain] = useState("");
   const [www, setWww] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [linking, setLinking] = useState<DomainItem | null>(null);
+  const [linkSiteId, setLinkSiteId] = useState("");
   const [removing, setRemoving] = useState<DomainItem | null>(null);
 
   const items = domainsQuery.data?.items ?? [];
   const sites = domainsQuery.data?.sites ?? [];
   const selectedSite = sites.find((site) => site.site_id === siteId);
+  const linkTarget
+    = sites.find((site) => site.site_id === linkSiteId) ?? sites[0];
 
   const createMutation = useMutation({
     mutationFn: createDomain,
@@ -112,6 +128,20 @@ export default function DomainsPage() {
       setWww(false);
     },
     onError: (error: Error) => setFormError(error.message),
+  });
+
+  const linkMutation = useMutation({
+    mutationFn: (payload: { domain: string; site_id: string; www: boolean }) =>
+      linkDomain(payload.domain, {
+        site_id: payload.site_id,
+        www: payload.www,
+      }),
+    onSuccess: () => {
+      toast.success("Dominio vinculado");
+      void queryClient.invalidateQueries({ queryKey: domainsKeys.list });
+      setLinking(null);
+    },
+    onError: (error: Error) => toast.error(error.message),
   });
 
   const removeMutation = useMutation({
@@ -127,19 +157,25 @@ export default function DomainsPage() {
   function submit(event: FormEvent) {
     event.preventDefault();
     setFormError(null);
-    if (!siteId) {
-      setFormError("Elegí un sitio");
-      return;
-    }
-    createMutation.mutate({ site_id: siteId, domain: domain.trim(), www });
+    createMutation.mutate({
+      site_id: siteId || null,
+      domain: domain.trim(),
+      www,
+    });
   }
 
   function openAdd() {
     setFormError(null);
-    setSiteId(sites[0]?.site_id ?? "");
+    setSiteId(RESERVAR);
     setDomain("");
     setWww(false);
     setAddOpen(true);
+  }
+
+  function openLink(item: DomainItem) {
+    setLinkSiteId(sites[0]?.site_id ?? "");
+    setWww(false);
+    setLinking(item);
   }
 
   return (
@@ -148,16 +184,19 @@ export default function DomainsPage() {
         <div>
           <h1 className="text-lg font-semibold text-foreground">Dominios</h1>
         </div>
-        {canManage && (
-          <Button size="sm" onClick={openAdd} disabled={sites.length === 0}>
-            Agregar dominio extra
-          </Button>
-        )}
+        {canManage && <Button size="sm" onClick={openAdd}>Agregar dominio</Button>}
       </div>
 
       {domainsQuery.isError && (
         <Alert title="No se pudieron cargar los dominios">
           {(domainsQuery.error as Error).message}
+        </Alert>
+      )}
+
+      {domainsQuery.data && domainsQuery.data.proxy_available === false && (
+        <Alert title="El proxy no responde">
+          {domainsQuery.data.proxy_error ??
+            "Se muestran solo los dominios con propiedad registrada; faltan las rutas publicadas."}
         </Alert>
       )}
 
@@ -169,16 +208,17 @@ export default function DomainsPage() {
             text-muted-foreground"
         >
           {sites.length === 0
-            ? "Todavía no hay sitios. Creá uno en Hosting para publicar dominios extra."
-            : "Todavía no hay dominios extra. Agregá uno para publicar este sitio en otro nombre."}
+            ? "Todavía no hay dominios. Podés reservar uno sin sitio y vincularlo después."
+            : "Todavía no hay dominios. Agregá uno para publicarlo en este tenant."}
         </p>
       ) : (
         <div className="overflow-x-auto rounded-md border border-border">
-          <table className="w-full min-w-[720px] border-collapse text-sm">
+          <table className="w-full min-w-[760px] border-collapse text-sm">
             <thead className="bg-muted text-left text-xs uppercase text-muted-foreground">
               <tr>
                 <th className="px-3 py-2">Dominio</th>
                 <th className="px-3 py-2">Sitio</th>
+                <th className="px-3 py-2">Estado</th>
                 <th className="px-3 py-2">Dueño</th>
                 <th className="px-3 py-2">Certificado</th>
                 {canReadMail && <th className="px-3 py-2">Buzones</th>}
@@ -188,6 +228,7 @@ export default function DomainsPage() {
             <tbody>
               {items.map((item) => {
                 const extraConflict = item.conflict;
+                const published = item.published ?? true;
                 return (
                   <tr key={item.domain} className="border-t border-border">
                     <td className="px-3 py-2 font-medium text-foreground">
@@ -205,16 +246,25 @@ export default function DomainsPage() {
                       {item.container ?? "—"}
                     </td>
                     <td className="px-3 py-2">
+                      {published ? (
+                        <span className="text-muted-foreground">Publicado</span>
+                      ) : (
+                        <span className="text-amber-600">Sin publicar</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2">
                       {item.owner === "hosting" ? (
                         <span className="text-muted-foreground" title="Gestionado por Hosting">
                           Hosting 🔒
                         </span>
-                      ) : (
+                      ) : published ? (
                         <span className="text-foreground">Extra</span>
+                      ) : (
+                        <span className="text-foreground">Dominio</span>
                       )}
                     </td>
                     <td className="px-3 py-2">
-                      <CertificateCell domain={item.domain} />
+                      <CertificateCell domain={item.domain} published={published} />
                     </td>
                     {canReadMail && (
                       <td
@@ -222,7 +272,7 @@ export default function DomainsPage() {
                         title={
                           mailQuery.data && mailQuery.data.domain !== "all" &&
                           item.domain.toLowerCase() !== mailQuery.data.domain.toLowerCase()
-                            ? "El correo solo existe en el dominio del tenant"
+                            ? "El correo también existe en dominios del tenant"
                             : undefined
                         }
                       >
@@ -234,15 +284,27 @@ export default function DomainsPage() {
                       </td>
                     )}
                     <td className="px-3 py-2 text-right">
-                      {item.owner === "domains" && canManage ? (
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => setRemoving(item)}
-                        >
-                          Quitar
-                        </Button>
-                      ) : extraConflict && canManage ? (
+                      {item.owner === "domains" && canManage && (
+                        <span className="inline-flex gap-2">
+                          {!published && sites.length > 0 && (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => openLink(item)}
+                            >
+                              Vincular
+                            </Button>
+                          )}
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => setRemoving(item)}
+                          >
+                            Quitar
+                          </Button>
+                        </span>
+                      )}
+                      {extraConflict && canManage && item.owner !== "domains" && (
                         <Button
                           variant="secondary"
                           size="sm"
@@ -250,10 +312,6 @@ export default function DomainsPage() {
                         >
                           Quitar extra
                         </Button>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">
-                          Gestionado por Hosting
-                        </span>
                       )}
                     </td>
                   </tr>
@@ -264,15 +322,25 @@ export default function DomainsPage() {
         </div>
       )}
 
-      <Dialog open={addOpen} title="Agregar dominio extra" onClose={() => setAddOpen(false)}>
+      <Dialog open={addOpen} title="Agregar dominio" onClose={() => setAddOpen(false)}>
         <form className="space-y-3" onSubmit={submit}>
           <label className="block space-y-1 text-sm text-foreground">
-            <span>Sitio</span>
+            <span>Dominio</span>
+            <Input
+              value={domain}
+              onChange={(event) => setDomain(event.target.value)}
+              placeholder="ejemplo.com"
+              autoFocus
+            />
+          </label>
+          <label className="block space-y-1 text-sm text-foreground">
+            <span>Destino</span>
             <select
               className="w-full rounded-md border border-input bg-background px-2 py-2 text-sm"
               value={siteId}
               onChange={(event) => setSiteId(event.target.value)}
             >
+              <option value={RESERVAR}>Solo reservar (sin publicar)</option>
               {sites.map((site) => (
                 <option key={site.site_id} value={site.site_id}>
                   {site.container}
@@ -282,18 +350,9 @@ export default function DomainsPage() {
             </select>
             <span className="text-xs text-muted-foreground">
               {selectedSite
-                ? `El dominio se publicará en este sitio (${selectedSite.container}).`
-                : "Elegí el sitio donde se publicará el dominio."}
+                ? `El dominio se publicará en ${selectedSite.container}. Se creará la ruta en Traefik y se solicitará el certificado.`
+                : "Reserva el dominio para este tenant. No se publica en Traefik ni se emite certificado hasta que lo vincules a un sitio."}
             </span>
-          </label>
-          <label className="block space-y-1 text-sm text-foreground">
-            <span>Dominio</span>
-            <Input
-              value={domain}
-              onChange={(event) => setDomain(event.target.value)}
-              placeholder="ejemplo.spanel"
-              autoFocus
-            />
           </label>
           <label className="flex items-center gap-2 text-sm text-foreground">
             <input
@@ -301,7 +360,7 @@ export default function DomainsPage() {
               checked={www}
               onChange={(event) => setWww(event.target.checked)}
             />
-            <span>Agregar también www.</span>
+            <span>Agregar también www.{domain.trim() || "dominio"}</span>
           </label>
           {formError && <Alert title="No se pudo agregar">{formError}</Alert>}
           <div className="flex justify-end gap-2">
@@ -321,13 +380,69 @@ export default function DomainsPage() {
       </Dialog>
 
       <Dialog
+        open={Boolean(linking)}
+        title="Vincular dominio"
+        description={linking?.domain}
+        onClose={() => setLinking(null)}
+      >
+        <p className="text-sm text-muted-foreground">
+          El dominio se publicará en {linkTarget?.container ?? "el sitio elegido"}.
+        </p>
+        <label className="mt-3 block space-y-1 text-sm text-foreground">
+          <span>Sitio</span>
+          <select
+            className="w-full rounded-md border border-input bg-background px-2 py-2 text-sm"
+            value={linkTarget?.site_id ?? ""}
+            onChange={(event) => setLinkSiteId(event.target.value)}
+          >
+            {sites.map((site) => (
+              <option key={site.site_id} value={site.site_id}>
+                {site.container}
+                {site.primary_domain ? ` (${site.primary_domain})` : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="mt-3 flex items-center gap-2 text-sm text-foreground">
+          <input
+            type="checkbox"
+            checked={www}
+            onChange={(event) => setWww(event.target.checked)}
+          />
+          <span>Agregar también www.{linking?.domain ?? "dominio"}</span>
+        </label>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="secondary" size="sm" onClick={() => setLinking(null)}>
+            Cancelar
+          </Button>
+          <Button
+            size="sm"
+            disabled={linkMutation.isPending || !linkTarget}
+            onClick={() =>
+              linking
+                && linkTarget
+                && linkMutation.mutate({
+                  domain: linking.domain,
+                  site_id: linkTarget.site_id,
+                  www,
+                })
+            }
+          >
+            Vincular
+          </Button>
+        </div>
+      </Dialog>
+
+      <Dialog
         open={Boolean(removing)}
         title="Quitar dominio"
         description={removing?.domain}
         onClose={() => setRemoving(null)}
       >
         <p className="text-sm text-muted-foreground">
-          Se elimina la ruta del proxy. El sitio y su dominio primario no cambian.
+          {(removing?.published ?? true)
+            ? "Se elimina la ruta del proxy. El sitio y su dominio primario no cambian."
+            : "Se libera la reserva del dominio. No hay ruta publicada ni certificado."}
         </p>
         <div className="mt-4 flex justify-end gap-2">
           <Button variant="secondary" size="sm" onClick={() => setRemoving(null)}>

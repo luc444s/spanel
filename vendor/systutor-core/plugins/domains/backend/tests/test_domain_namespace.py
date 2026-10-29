@@ -11,12 +11,19 @@ from sqlalchemy.orm import Session
 
 import systutor.kernel.models  # noqa: F401
 from plugins.domains.backend import service as service_module
-from plugins.domains.backend.proxy import CertificateInfo, ManagedDomain
+from plugins.domains.backend.proxy import (
+    CertificateInfo,
+    ManagedDomain,
+    ProxyError,
+)
 from plugins.domains.backend.schemas import DomainCheckResponse
 from plugins.domains.backend.service import DomainsService
 from plugins.hosting.backend.models import HostingSite
 from plugins.tenant.backend.models import TenantSiteSettings  # noqa: F401
-from systutor.contracts.domain_namespace import register_domain_providers
+from systutor.contracts.domain_namespace import (
+    register_domain_providers,
+    release_domain,
+)
 from systutor.contracts.domain_ownership import (
     OwnedSite,
     register_extra_claims,
@@ -144,7 +151,7 @@ def no_audit(monkeypatch):
 def test_list_keeps_published_domain_visible_even_without_explicit_row() -> None:
     service, _, _, _ = build_service("spanel.site")
 
-    items, _ = service.list_domains(TENANT, can_manage=True)
+    items, _, _ = service.list_domains(TENANT, can_manage=True)
     by_domain = {item.domain: item for item in items}
 
     # Un extra publicado por un contenedor del tenant es parte de su
@@ -155,19 +162,93 @@ def test_list_keeps_published_domain_visible_even_without_explicit_row() -> None
 def test_list_no_depende_del_platform_admin() -> None:
     service, _, _, _ = build_service("spanel.site")
 
-    items, _ = service.list_domains(TENANT, can_manage=True)
+    items, _, _ = service.list_domains(TENANT, can_manage=True)
     by_domain = {item.domain for item in items}
 
     assert by_domain == {"a.spanel", "b.spanel", "lucas.spanel"}
 
 
-def test_list_does_not_invent_unpublished_owned_domains() -> None:
+def test_list_lists_unpublished_owned_domains_as_reserved() -> None:
+    """A.SPEC 0040: ahora el dominio propio no publicado SÍ se lista."""
     owned = {"t1": {"a.spanel", "b.spanel", "debug.com"}, "t2": {"c.spanel"}}
     service, _, _, _ = build_service("spanel", owned=owned)
 
-    items, _ = service.list_domains(TENANT, can_manage=True)
+    items, _, _ = service.list_domains(TENANT, can_manage=True)
+    by_domain = {item.domain: item for item in items}
+
+    reserved = by_domain["debug.com"]
+    assert reserved.published is False
+    assert reserved.site_id is None
+    assert reserved.container is None
+    assert reserved.owner == "domains"
+    assert reserved.editable is True
+
+
+def test_list_tolerates_proxy_down_with_reserved_domains() -> None:
+    service, ops, _, _ = build_service(
+        "spanel", owned={"t1": {"debug.com"}, "t2": set()}
+    )
+
+    def broken():
+        raise ProxyError("traefik caído")
+
+    ops.managed_domains = broken  # type: ignore[method-assign]
+
+    items, _, err = service.list_domains(TENANT, can_manage=True)
+    by_domain = {item.domain: item for item in items}
+
+    assert by_domain["debug.com"].published is False
+    assert err is not None and "traefik caído" in err
+    # Primarios aparecen igualmente (se leen de Hosting, no del proxy).
+    assert "a.spanel" in by_domain
+
+
+def test_list_excludes_the_tenant_mail_primary_from_reserved() -> None:
+    service, _, _, _ = build_service(
+        "spanel", owned={"t1": {"a.spanel", "b.spanel", "debug.com"}, "t2": {"c.spanel"}}
+    )
+
+    class PrimaryDb(FakeDb):
+        def get(self, model, key):
+            if model.__name__ == "Tenant":
+                return SimpleNamespace(domain="debug.com")
+            return None
+
+    service._db = PrimaryDb()  # type: ignore[attr-defined]
+    items, _, _ = service.list_domains(TENANT, can_manage=True)
 
     assert "debug.com" not in {item.domain for item in items}
+
+
+def test_release_domain_delegates_to_optional_provider() -> None:
+    app = FastAPI()
+    calls: list[tuple[str, str]] = []
+
+    def release(db, tenant_id, domain):  # noqa: ANN001
+        calls.append((tenant_id, domain))
+
+    register_domain_providers(
+        app,
+        "tenant",
+        list_domains=lambda db, tenant: [],
+        owner=lambda db, domain: None,
+        release=release,
+    )
+
+    assert release_domain(app, None, "t1", "debug.com") is True  # type: ignore[arg-type]
+    assert calls == [("t1", "debug.com")]
+
+
+def test_release_domain_without_provider_returns_false() -> None:
+    app = FastAPI()
+    register_domain_providers(
+        app,
+        "tenant",
+        list_domains=lambda db, tenant: [],
+        owner=lambda db, domain: None,
+    )
+
+    assert release_domain(app, None, "t1", "debug.com") is False  # type: ignore[arg-type]
 
 
 def test_owned_domain_published_as_extra_is_listed() -> None:
@@ -177,7 +258,7 @@ def test_owned_domain_published_as_extra_is_listed() -> None:
         ManagedDomain("debug.com", "spanel-a-wp", "external", "spanel-a.yml")
     ]
 
-    items, _ = service.list_domains(TENANT, can_manage=True)
+    items, _, _ = service.list_domains(TENANT, can_manage=True)
 
     assert "debug.com" in {row.domain for row in items}
 
