@@ -48,6 +48,10 @@ from .schemas import (
     SiteConfigUpdateRequest,
     SiteDatabaseResponse,
     SiteLogsResponse,
+    StaticProfileCreate,
+    StaticProfileListResponse,
+    StaticProfileSummary,
+    StaticProfileUpdate,
     WordPressUserListResponse,
 )
 from .service import HostingService
@@ -92,7 +96,12 @@ def create_site(
     service: HostingService = Depends(_get_hosting_service),
 ) -> CreateSiteResponse:
     result = service.create_site(
-        tenant_context, body.name, body.domain, kind=body.kind, app=request.app
+        tenant_context,
+        body.name,
+        body.domain,
+        kind=body.kind,
+        profile=body.profile,
+        app=request.app,
     )
     response.headers["Cache-Control"] = "no-store"
     return result
@@ -386,3 +395,78 @@ def reset_user_password(
     # The generated password must not be cached by any intermediary.
     response.headers["Cache-Control"] = "no-store"
     return result
+
+
+# --------------------------------------------------------------------------
+# A.SPEC 0042 — static profiles. The list is for the "create site" selector
+# (`hosting.sites.read`); the CRUD is platform capability, decided by the
+# RBAC permission `hosting.profiles.manage` — never by is_superadmin (I4).
+# --------------------------------------------------------------------------
+
+profiles_router = APIRouter(prefix="/static-profiles", tags=["hosting"])
+
+
+@profiles_router.get("", response_model=StaticProfileListResponse)
+def list_static_profiles(
+    _current_user: User = Depends(require_permission("hosting.sites.read")),
+    service: HostingService = Depends(_get_hosting_service),
+) -> StaticProfileListResponse:
+    return service.list_profiles()
+
+
+@profiles_router.get("/{profile_id}", response_model=StaticProfileSummary)
+def get_static_profile(
+    profile_id: str,
+    _current_user: User = Depends(require_permission("hosting.sites.read")),
+    service: HostingService = Depends(_get_hosting_service),
+) -> StaticProfileSummary:
+    return service.get_profile(profile_id)
+
+
+@profiles_router.post("", response_model=StaticProfileSummary, status_code=201)
+def create_static_profile(
+    body: StaticProfileCreate,
+    tenant_context: TenantContext = Depends(get_current_tenant_context),
+    _current_user: User = Depends(require_permission("hosting.profiles.manage")),
+    service: HostingService = Depends(_get_hosting_service),
+    db: Session = Depends(get_db_session),
+) -> StaticProfileSummary:
+    summary = service.create_profile(tenant_context, body)
+    db.commit()
+    return summary
+
+
+@profiles_router.put("/{profile_id}", response_model=StaticProfileSummary)
+def update_static_profile(
+    profile_id: str,
+    body: StaticProfileUpdate,
+    tenant_context: TenantContext = Depends(get_current_tenant_context),
+    _current_user: User = Depends(require_permission("hosting.profiles.manage")),
+    service: HostingService = Depends(_get_hosting_service),
+    db: Session = Depends(get_db_session),
+) -> StaticProfileSummary:
+    summary = service.update_profile(tenant_context, profile_id, body)
+    db.commit()
+    return summary
+
+
+@profiles_router.delete("/{profile_id}", status_code=204)
+def delete_static_profile(
+    profile_id: str,
+    tenant_context: TenantContext = Depends(get_current_tenant_context),
+    _current_user: User = Depends(require_permission("hosting.profiles.manage")),
+    service: HostingService = Depends(_get_hosting_service),
+    db: Session = Depends(get_db_session),
+) -> None:
+    service.delete_profile(tenant_context, profile_id)
+    db.commit()
+
+
+# The module exports ONE aggregate router so the plugin registers both
+# prefixes without touching register.py: /sites (A.SPEC 0031 surface,
+# unchanged) and /static-profiles (0042). Both keep their own prefix, so
+# the mounted URLs stay exactly where the callers expect them.
+_plugin_router = APIRouter(tags=["hosting"])
+_plugin_router.include_router(router)
+_plugin_router.include_router(profiles_router)
+router = _plugin_router

@@ -37,13 +37,28 @@ All three routes require the kernel `TenantContext`:
   `site_suffix` and be free in `hosting_sites` and in the proxy extras.
 - `POST /api/v1/plugins/hosting/sites` with `kind="static"` provisions
   `spanel-<slug>-web` plus its homonymous volume, seeds `index.html`,
-  `styles.css` and `app.js`, and serves them with `nginx:alpine`. It creates no
-  database, WordPress user or password. When the `domains` plugin is enabled,
+  `styles.css` and `app.js`, and serves them with the image of the chosen
+  profile (default `nginx`, image `SPANEL_HOSTING_STATIC_IMAGE`). It creates no
+  database, WordPress user or password. The payload may carry
+  `"profile": "<id>"` (A.SPEC 0042): an unknown id is
+  `404 hosting_profile_unknown`, and a profile with `kind="wordpress"` is a
+  schema 422. Every static container carries the `spanel.profile=<id>` label.
+  When the `domains` plugin is enabled,
   its file-provider publisher owns the primary route; otherwise the container
-  gets Traefik labels exactly like WordPress. `start`, `stop`, `restart`,
+  gets Traefik labels exactly like WordPress (with the profile's port).
+  `start`, `stop`, `restart`,
   `logs` and the filemanager work for both kinds; `config`, `database`,
   `phpmyadmin`, `users`, `secrets/salts` and password reset answer
   `409 hosting_site_wrong_kind` on a static site.
+- `GET /api/v1/plugins/hosting/static-profiles` — `hosting.sites.read`; lists
+  the static profiles the selector of "crear sitio" consumes (A.SPEC 0042).
+  Responses carry the env variable NAMES, never their values.
+- `POST/PUT/DELETE /api/v1/plugins/hosting/static-profiles/{profile_id}` —
+  `hosting.profiles.manage` (platform RBAC, no `is_superadmin`). Every change
+  audits `hosting.profile.{created,updated,deleted}`; `DELETE` answers
+  `409 hosting_profile_in_use` when a site uses the profile and
+  `409 hosting_profile_builtin` on the builtin `nginx` (its image stays
+  editable, its name is immutable and it can never be deleted).
 - `POST /api/v1/plugins/hosting/sites/{site_id}/{start|stop|restart}` —
   `hosting.sites.manage`
 - `GET /api/v1/plugins/hosting/sites/{site_id}/logs?lines=200` — `hosting.sites.read`

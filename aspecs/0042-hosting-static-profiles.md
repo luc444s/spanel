@@ -76,8 +76,10 @@ comportamiento en el plugin `hosting`, en este orden:
   (`hosting_profile_in_use`, `hosting_profile_builtin`),
   `create_site(..., profile=...)` con `404 hosting_profile_unknown`.
 - **M3 — Frontend**: selector de perfil en "Crear sitio" (`GET
-  /hosting/static-profiles` llena el select) + gestor de perfiles visible con
-  `hosting.profiles.manage`.
+  /hosting/static-profiles` llena el select) + gestor de perfiles visible
+  **solo con control absoluto de plataforma**: `core.platform.admin` AND
+  `hosting.profiles.manage` (patrón idéntico al de eliminar sitio; nunca
+  `users.is_superadmin`).
 - **M4 — Gates y cierre**: V0–V6 de esta spec, `blast_radius` intacto
   (nada fuera del change_surface) y DoD marcado.
 
@@ -171,6 +173,130 @@ apps multi-contenedor, imágenes arbitrarias elegidas por el tenant y
 Dockerfile libre — quedan como `out of scope` con su riesgo documentado, para
 una spec futura (catálogo de apps).
 
+## UI — Frontend del plugin hosting
+
+Patrón de la página: `vendor/systutor-core/plugins/hosting/frontend/`
+(`HostingPage.tsx` + componentes). El gestor vive en la misma página Hosting
+(botón "Perfiles"), no en una ruta nueva.
+
+### Visibilidad
+
+- Selector de perfil en "Crear sitio": visible para cualquier usuario con
+  `hosting.sites.create` (los datos vienen de `GET /hosting/static-profiles`,
+  `hosting.sites.read`).
+- Botón "Perfiles" y gestor: **solo control absoluto de plataforma**, es decir
+  `permissions.includes("core.platform.admin") && permissions.includes(
+  "hosting.profiles.manage")` — el mismo doble-check del botón Eliminar sitio.
+  El análogo del superadmin aquí es ese RBAC; `users.is_superadmin` queda
+  prohibido. La decisión de autorización del backend ya la toma
+  `require_permission("hosting.profiles.manage")` (I4).
+
+### Mockups
+
+Página Hosting (tarjeta estática con badge de perfil; "Perfiles" solo para
+control absoluto):
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│  Hosting                       [+ Crear sitio] [Perfiles]      │
+├────────────────────────────────────────────────────────────────┤
+│  ┌───────────────────────┐  ┌───────────────────────┐          │
+│  │ blog.lucas.spanel     │  │ web.lucas.spanel      │          │
+│  │ Tipo:  WordPress      │  │ Tipo:  Estático       │          │
+│  │ Estado: running  ●    │  │ Perfil: nginx         │          │
+│  └───────────────────────┘  └───────────────────────┘          │
+└────────────────────────────────────────────────────────────────┘
+```
+
+Dialog "Crear sitio" con `kind=static` (perfil llenado por la API; el detalle
+del perfil es solo lectura; con wordpress el select no existe):
+
+```
+┌───────────────────────────────────────────┐
+│  Crear sitio                          [x] │
+├───────────────────────────────────────────┤
+│  Tipo                                     │
+│  ┌─────────────────────────────────────┐  │
+│  │ Estático                          ▾ │  │
+│  └─────────────────────────────────────┘  │
+│  Perfil                                   │
+│  ┌─────────────────────────────────────┐  │
+│  │ Astro (build + preview)           ▾ │  │
+│  └─────────────────────────────────────┘  │
+│  node:24-alpine · :80 · /site · http_200  │
+│  Nombre   ┌─────────────────────────────┐ │
+│           │ mi.sitio                  │ │ │
+│           └─────────────────────────────┘ │
+│  Dominio  ┌─────────────────────────────┐ │
+│           │ mi.sitio                  │ │ │
+│           └─────────────────────────────┘ │
+│  ✓ Dominio disponible                     │
+│                             [ Crear ]     │
+└───────────────────────────────────────────┘
+```
+
+Gestor "Perfiles" (solo control absoluto; `nginx*` builtin sin Delete y name
+readonly):
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│  Perfiles de sitio estático                  [+ Nuevo perfil]  │
+├────────────────────────────────────────────────────────────────┤
+│  ID      Nombre              Imagen          Pu  Health  Acc.  │
+│  ───────────────────────────────────────────────────────────   │
+│  nginx*  Nginx (estático)    nginx:alpine    80  marker  Edit  │
+│  react   React (Caddy SPA)   caddy:2-alpine  80  marker  Edit  │
+│  boot    Bootstrap (Apache)  httpd:alpine    80  http_200 Edit [x]
+│  astro   Astro (build)       node:24-alpine  80  http_200 Edit [x]
+│  * builtin: imagen editable; no se borra ni renombra.          │
+└────────────────────────────────────────────────────────────────┘
+```
+
+Dialog "Nuevo perfil" / "Editar perfil" (`env_json` y `command` colapsables;
+solo en crear el `id` es editable; tras guardar se listan solo NOMBRES de
+variables, nunca valores):
+
+```
+┌───────────────────────────────────────────┐
+│  Nuevo perfil                         [x] │
+├───────────────────────────────────────────┤
+│  ID (new only)  ┌──────────────────────┐  │
+│                 │ hugo               │ │  │
+│                 └──────────────────────┘  │
+│  Nombre         ┌──────────────────────┐  │
+│                 │ Hugo (server)      │ │  │
+│                 └──────────────────────┘  │
+│  Imagen         ┌──────────────────────┐  │
+│                 │ hugomr/hugo-server:s │ │  │
+│                 └──────────────────────┘  │
+│  Web root   ┌──────────────┐ ┌────────┐   │
+│             │ /srv/hugo    │ │ 80     │   │
+│             └──────────────┘ └────────┘   │
+│  Health        ┌──────────────────────┐   │
+│                │ marker             ▾ │   │
+│                └──────────────────────┘   │
+│  ▸ Variables de entorno                   │
+│  ▸ Comando de arranque                    │
+│     [ Cancelar ]           [ Guardar ]    │
+└───────────────────────────────────────────┘
+```
+
+Delete de perfil con confirmación por id (409 in-use / builtin lo dicta el
+backend, la UI solo muestra el toast del error):
+
+```
+┌───────────────────────────────────────────┐
+│  Eliminar perfil                      [x] │
+├───────────────────────────────────────────┤
+│  Se eliminará el perfil "boot".           │
+│  Escriba: boot                            │
+│  ┌─────────────────────────────────────┐  │
+│  │                                   │ │  │
+│  └─────────────────────────────────────┘  │
+│     [ Cancelar ]          [ Eliminar ]    │
+└───────────────────────────────────────────┘
+```
+
 ## SCOPE
 
 - `models.py`: `StaticProfile` nuevo + `profile_id` en `HostingSite`.
@@ -185,8 +311,10 @@ una spec futura (catálogo de apps).
 - `service.py`: create con perfil, listado con perfil, CRUD de perfiles.
 - `router.py`: rutas CRUD + listado de perfiles.
 - `permissions/hosting.json`: permiso nuevo `hosting.profiles.manage`.
-- Frontend `apps/web`: selector de perfil en "Crear sitio" y gestor de
-  perfiles visible solo con `hosting.profiles.manage`.
+- Frontend del plugin hosting: selector de perfil en "Crear sitio" y gestor de
+  perfiles visible **solo con control absoluto de plataforma**
+  (`core.platform.admin` AND `hosting.profiles.manage`; nunca
+  `users.is_superadmin` — el análogo del superadmin aquí es ese RBAC).
 - Tests: migración, schemas, CRUD de perfiles (incluye builtin-inmutable y
   in-use), creación con perfil custom, run args puros y health http_200.
 
@@ -232,6 +360,10 @@ Postcondiciones:
    labels (`spanel.site`, `spanel.tenant`, `spanel.kind=static`,
    `spanel.profile=<id>`) y la ruta publicada.
 10. Ninguna respuesta expone secretos ni valores de `env_json`.
+11. La UI del gestor solo se renderiza con `core.platform.admin` AND
+    `hosting.profiles.manage` (control absoluto de plataforma, nunca
+    `users.is_superadmin`); el selector de "Crear sitio" basta con
+    `hosting.sites.create`.
 
 ## INVARIANTS
 
@@ -361,7 +493,7 @@ change_surface:
     - vendor/systutor-core/plugins/hosting/permissions/hosting.json
     - vendor/systutor-core/plugins/hosting/backend/tests/**
     - vendor/systutor-core/plugins/hosting/README.md
-    - apps/web/src/**   (pantalla hosting: selector de perfil + gestor)
+    - vendor/systutor-core/plugins/hosting/frontend/**   (selector de perfil + gestor)
     - aspecs/0042-hosting-static-profiles.md
   prohibited:
     - vendor/systutor-core/src/systutor/kernel/**

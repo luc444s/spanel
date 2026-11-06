@@ -11,6 +11,7 @@ plugin and never written to the audit row or a log line.
 
 from __future__ import annotations
 
+import json
 import re
 import secrets
 import shlex
@@ -46,7 +47,7 @@ from .database import (
 from .database_binding import database_binding
 from .database_binding import database_credentials as _database_credentials
 from .inspection import candidato_de, inspect_container
-from .models import HostingSite
+from .models import HostingSite, StaticProfile
 from .network import (
     connect_args,
     multi_database_enabled,
@@ -55,6 +56,7 @@ from .network import (
 )
 from .passwords import hash_de_password
 from .phpmyadmin_proxy import PmaClient
+from .profiles import ProfileSpec, spec_from_row
 from .provisioner import Provisioner, SiteNames, slug_for
 from .reset import actualizar_hash, leer_hash
 from .schemas import (
@@ -66,6 +68,10 @@ from .schemas import (
     SiteConfigResponse,
     SiteDatabaseResponse,
     SiteLogsResponse,
+    StaticProfileCreate,
+    StaticProfileListResponse,
+    StaticProfileSummary,
+    StaticProfileUpdate,
     WordPressUserListResponse,
     WordPressUserSummary,
 )
@@ -263,13 +269,25 @@ class HostingService:
         admin_email: str | None = None,
         *,
         kind: str = "wordpress",
+        profile: str = "nginx",
         app: FastAPI | None = None,
     ) -> CreateSiteResponse:
         try:
             slug = slug_for(name)
         except ValueError as exc:
             raise AppError(str(exc), status_code=422, code="hosting_invalid_name") from exc
-        names = StaticNames(slug) if kind == "static" else SiteNames(slug)
+        spec: ProfileSpec | None = None
+        if kind == "static":
+            row = self._db.get(StaticProfile, profile)
+            if row is None:
+                # BEFORE any Docker call, any volume or any row (I2/I3).
+                raise AppError(
+                    f"El perfil {profile} no existe",
+                    status_code=404,
+                    code="hosting_profile_unknown",
+                )
+            spec = spec_from_row(row)
+        names = StaticNames.for_profile(slug, spec) if kind == "static" else SiteNames(slug)
         container_name = names.container if kind == "static" else names.wp
         tenant_id = tenant_context.current_tenant_id
         tenant = self._db.get(Tenant, tenant_id)
@@ -304,7 +322,7 @@ class HostingService:
             claim_needed = owner is None
         if kind == "static":
             return self._create_static(
-                tenant_context, names, tenant_id, domain, app=app, claim=claim_needed
+                tenant_context, names, tenant_id, domain, spec=spec, app=app, claim=claim_needed
             )
         return self._create_wordpress(
             tenant_context, names, tenant_id, domain, admin_email,
@@ -349,6 +367,7 @@ class HostingService:
         *,
         app: FastAPI | None,
         claim: bool = False,
+        spec: ProfileSpec | None = None,
     ) -> CreateSiteResponse:
         provisioner = StaticProvisioner(self._settings)
         publisher = get_site_domain_publisher(app)
@@ -358,6 +377,7 @@ class HostingService:
                 tenant_id,
                 domain,
                 traefik=publisher is None and self._settings.traefik,
+                profile=spec,
             )
         except Fallo as exc:
             failures = provisioner.cleanup(names, tenant_id)
@@ -376,6 +396,7 @@ class HostingService:
             publisher=publisher,
             app=app,
             claim=claim,
+            profile_id=names.profile,
         )
 
     def _finish_create(
@@ -391,6 +412,7 @@ class HostingService:
         publisher=None,
         app: FastAPI | None = None,
         claim: bool = False,
+        profile_id: str | None = None,
     ) -> CreateSiteResponse:
         published = False
         if publisher is not None:
@@ -409,13 +431,17 @@ class HostingService:
             container_name=container_name,
             domain=domain,
             kind=kind,
+            profile_id=profile_id,
         )
         try:
             if claim and app is not None:
                 claim_domain(app, self._db, tenant_id, domain)
             self._db.add(site)
             self._db.flush()
-            self._audit_site(site, tenant_context, "create", {"kind": kind})
+            details = {"kind": kind}
+            if profile_id:
+                details["profile"] = profile_id
+            self._audit_site(site, tenant_context, "create", details)
             self._db.commit()
         except DomainConflictError as exc:
             self._db.rollback()
@@ -459,6 +485,7 @@ class HostingService:
                 status="running",
                 managed=True,
                 kind=kind,
+                profile=site.profile_id,
             ),
             admin_password=password,
         )
@@ -479,6 +506,7 @@ class HostingService:
             status="exited" if action == "stop" else "running",
             managed=True,
             kind=site.kind,
+            profile=site.profile_id,
         )
 
     def start_site(self, site: HostingSite, tenant_context: TenantContext) -> HostingSiteSummary:
@@ -617,6 +645,7 @@ class HostingService:
                         status="missing",
                         managed=False,
                         kind=site.kind,
+                        profile=site.profile_id,
                     )
                 )
                 continue
@@ -628,6 +657,7 @@ class HostingService:
                     status=estado_del_contenedor(info),
                     managed=candidato_de(info).gestionable,
                     kind=site.kind,
+                    profile=site.profile_id,
                 )
             )
         return HostingSiteListResponse(sites=summaries)
@@ -986,3 +1016,158 @@ class HostingService:
             generated=generated,
             password=new_password if generated else None,
         )
+
+    # ------------------------------------------------------------------
+    # A.SPEC 0042 — CRUD de perfiles de sitio estático.
+    # El permiso `hosting.profiles.manage` decide (RBAC). Los VALUES de
+    # env_json no salen nunca de la tabla: ni audit ni respuesta los
+    # devuelven, solo la lista de nombres de variables.
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _env_keys(row: StaticProfile) -> list[str]:
+        loaded: object = None
+        if row.env_json:
+            try:
+                loaded = json.loads(row.env_json)
+            except ValueError:
+                loaded = None
+        if isinstance(loaded, dict):
+            return sorted(key for key, _ in loaded.items() if isinstance(key, str))
+        return []
+
+    def _summary_of_profile(self, row: StaticProfile) -> StaticProfileSummary:
+        return StaticProfileSummary(
+            id=row.id,
+            name=row.name,
+            image=row.image,
+            web_root=row.web_root,
+            container_port=int(row.container_port),
+            health_mode=row.health_mode,
+            env_keys=self._env_keys(row),
+            command=row.command,
+            builtin=row.id == "nginx",
+        )
+
+    def _audit_profile(
+        self, profile_id: str, context: TenantContext, action: str, details: dict | None = None
+    ) -> None:
+        record_audit(
+            self._db,
+            tenant_id=context.current_tenant_id,
+            branch_id=context.current_branch_id,
+            actor_user_id=context.current_user_id,
+            actor_type="user",
+            module="hosting",
+            action=f"hosting.profile.{action}",
+            entity_type="hosting_profile",
+            entity_id=profile_id,
+            result="success",
+            correlation_id=None,
+            request_id=None,
+            # Only the id and the shape, NEVER the env values (I8).
+            details=details if details else {},
+        )
+
+    def list_profiles(self) -> StaticProfileListResponse:
+        stmt = select(StaticProfile).order_by(StaticProfile.id.asc())
+        return StaticProfileListResponse(
+            profiles=[self._summary_of_profile(row) for row in self._db.scalars(stmt)]
+        )
+
+    def get_profile(self, profile_id: str) -> StaticProfileSummary:
+        row = self._db.get(StaticProfile, profile_id)
+        if row is None:
+            raise NotFoundError(f"Profile {profile_id} not found")
+        return self._summary_of_profile(row)
+
+    def create_profile(
+        self, context: TenantContext, data: StaticProfileCreate
+    ) -> StaticProfileSummary:
+        if self._db.get(StaticProfile, data.id) is not None:
+            raise AppError(
+                f"El perfil {data.id} ya existe",
+                status_code=409,
+                code="hosting_profile_conflict",
+            )
+        row = StaticProfile(
+            id=data.id,
+            name=data.name,
+            image=data.image,
+            web_root=data.web_root,
+            container_port=data.container_port,
+            health_mode=data.health_mode,
+            env_json=json.dumps(data.env_json) if data.env_json is not None else None,
+            command=data.command,
+        )
+        self._db.add(row)
+        self._db.flush()
+        self._audit_profile(row.id, context, "created")
+        return self._summary_of_profile(row)
+
+    def update_profile(
+        self, context: TenantContext, profile_id: str, data: StaticProfileUpdate
+    ) -> StaticProfileSummary:
+        row = self._db.get(StaticProfile, profile_id)
+        if row is None:
+            raise NotFoundError(f"Profile {profile_id} not found")
+        if data.name is not None:
+            # The builtin keeps its curated name; the image stays editable.
+            if row.id == "nginx" and data.name != row.name:
+                raise AppError(
+                    "El perfil builtin nginx no se puede renombrar",
+                    status_code=409,
+                    code="hosting_profile_builtin",
+                )
+            row.name = data.name
+        if data.image is not None:
+            row.image = data.image
+        if data.web_root is not None:
+            row.web_root = data.web_root
+        if data.container_port is not None:
+            row.container_port = data.container_port
+        if data.health_mode is not None:
+            row.health_mode = data.health_mode
+        if data.env_json is not None:
+            row.env_json = json.dumps(data.env_json)
+        elif "env_json" in data.model_fields_set:
+            row.env_json = None
+        if data.command is not None:
+            row.command = data.command
+        elif "command" in data.model_fields_set:
+            row.command = None
+        self._db.flush()
+        self._audit_profile(
+            profile_id,
+            context,
+            "updated",
+            {
+                "web_root": row.web_root,
+                "container_port": row.container_port,
+                "health_mode": row.health_mode,
+            },
+        )
+        return self._summary_of_profile(row)
+
+    def delete_profile(self, context: TenantContext, profile_id: str) -> None:
+        row = self._db.get(StaticProfile, profile_id)
+        if row is None:
+            raise NotFoundError(f"Profile {profile_id} not found")
+        if row.id == "nginx":
+            # The builtin is the backfill target of every migration; without
+            # it, existing static rows would dangle.
+            raise AppError(
+                "El perfil builtin nginx no se puede borrar",
+                status_code=409,
+                code="hosting_profile_builtin",
+            )
+        in_use = self._db.scalar(select(HostingSite.id).where(HostingSite.profile_id == profile_id))
+        if in_use:
+            raise AppError(
+                f"El perfil {profile_id} está en uso por sitios existentes",
+                status_code=409,
+                code="hosting_profile_in_use",
+            )
+        self._db.delete(row)
+        self._db.flush()
+        self._audit_profile(profile_id, context, "deleted")

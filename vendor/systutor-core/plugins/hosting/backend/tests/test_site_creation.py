@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 import systutor.kernel.models  # noqa: F401
 from plugins.hosting.backend import service as service_module
-from plugins.hosting.backend.models import HostingSite
+from plugins.hosting.backend.models import HostingSite, StaticProfile
 from plugins.hosting.backend.schemas import CreateSiteRequest
 from plugins.hosting.backend.service import HostingService
 from plugins.hosting.backend.settings import HostingSettings
@@ -53,8 +53,9 @@ class FakeStaticProvisioner:
     def __init__(self, settings) -> None:
         pass
 
-    def create(self, names, tenant_id, domain, *, traefik=True):  # noqa: ANN001
+    def create(self, names, tenant_id, domain, *, traefik=True, profile=None):  # noqa: ANN001
         type(self).calls.append((names.container, tenant_id, domain, traefik))
+        assert names.profile == (profile.id if profile else "nginx")
 
     def cleanup(self, names, tenant_id, resources=None):  # noqa: ANN001
         type(self).cleaned.append(names.container)
@@ -82,6 +83,10 @@ def db(tmp_path):
     Base.metadata.create_all(engine)
     with Session(engine) as session:
         session.add(Tenant(id="t1", name="Tenant", slug="tenant"))
+        # The builtin profile the migration 003 creates in every deployment.
+        session.add(StaticProfile(id="nginx", name="Nginx (estático)",
+                                  image="nginx:alpine", web_root="/usr/share/nginx/html",
+                                  container_port=80, health_mode="marker"))
         session.commit()
         yield session
     engine.dispose()
@@ -124,8 +129,17 @@ def test_static_is_valid_and_kind_defaults_to_wordpress() -> None:
         {"kind": "static", "name": "sitio", "domain": "sitio.spanel"}
     )
     assert static.kind == "static"
+    assert static.profile == "nginx"
     default = CreateSiteRequest.model_validate({"name": "sitio", "domain": "sitio.spanel"})
     assert default.kind == "wordpress"
+
+
+def test_wordpress_rejects_a_profile() -> None:
+    # 422 (schema): the profile is only accepted for static sites.
+    with pytest.raises(Exception):
+        CreateSiteRequest.model_validate(
+            {"kind": "wordpress", "profile": "king", "name": "sitio", "domain": "sitio.spanel"}
+        )
 
 
 def test_invalid_kind_is_rejected() -> None:
@@ -327,6 +341,60 @@ class DeletingProvisioner:
         self.deleted = list(resources or [])
         DeletingProvisioner.last = self
         return []
+
+
+def test_create_static_with_unknown_profile_fails_clean(db: Session) -> None:
+    # 404 BEFORE any Docker call, any volume, any row (I2/I3).
+    with pytest.raises(AppError) as exc:
+        service(db).create_site(
+            context(), "sitio", "sitio.spanel", kind="static", profile="king",
+            app=suffix_app(),
+        )
+    assert exc.value.code == "hosting_profile_unknown"
+    assert FakeStaticProvisioner.calls == []
+    assert db.query(HostingSite).count() == 0
+
+
+class RecordingStaticProvisioner(FakeStaticProvisioner):
+    """Captures the StaticNames object to assert the profile seated in argv."""
+
+    last_names: list = []
+
+    def create(self, names, tenant_id, domain, *, traefik=True, profile=None):  # noqa: ANN001
+        super().create(names, tenant_id, domain, traefik=traefik, profile=profile)
+        RecordingStaticProvisioner.last_names.append(names)
+
+
+def test_create_static_with_custom_profile_seats_the_profile(db: Session, monkeypatch):
+    db.add(
+        StaticProfile(
+            id="king",
+            name="King (httpd)",
+            image="httpd:alpine",
+            web_root="/usr/local/apache2/htdocs",
+            container_port=8080,
+            health_mode="http_200",
+        )
+    )
+    db.commit()
+    monkeypatch.setattr(service_module, "StaticProvisioner", RecordingStaticProvisioner)
+    app = suffix_app()
+    publisher = FakePublisher()
+    register_site_domain_publisher(app, "domains", publisher)
+
+    response = service(db).create_site(
+        context(), "sitio", "sitio.spanel", kind="static", profile="king", app=app
+    )
+    names = RecordingStaticProvisioner.last_names[-1]
+    assert dict(names.labels("t1", "sitio.spanel"))["spanel.profile"] == "king"
+    assert dict(names.labels("t1", "sitio.spanel"))["com.spanel.static"] == "true"
+    assert names.web_root == "/usr/local/apache2/htdocs"
+    assert names.container_port == 8080
+    assert response.site.profile == "king"
+    assert response.site.kind == "static"
+    row = db.query(HostingSite).one()
+    assert row.profile_id == "king"
+    assert row.kind == "static"
 
 
 def test_delete_static_unpublishes_and_removes_owned_resources(

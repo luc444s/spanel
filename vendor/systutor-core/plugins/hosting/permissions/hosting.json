@@ -23,6 +23,10 @@
     {
       "name": "hosting.sites.delete",
       "description": "Delete an owned WordPress site and its resources (platform only)"
+    },
+    {
+      "name": "hosting.profiles.manage",
+      "description": "Manage the catalog of static-site profiles (platform only)"
     }
   ]
 }

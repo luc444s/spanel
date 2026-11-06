@@ -11,6 +11,15 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from .profiles import (
+    validate_profile_command,
+    validate_profile_env,
+    validate_profile_id,
+    validate_profile_image,
+    validate_profile_port,
+    validate_profile_web_root,
+)
+
 
 class CreateSiteRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -18,6 +27,24 @@ class CreateSiteRequest(BaseModel):
     kind: Literal["wordpress", "static"] = "wordpress"
     name: str = Field(min_length=3, max_length=100)
     domain: str = Field(min_length=4, max_length=253)
+    # Only meaningful for `kind="static"`; the tenant picks an id from the
+    # curated catalog, never an image or runtime parameter of its own (I3).
+    profile: str = "nginx"
+
+    @field_validator("profile")
+    @classmethod
+    def valid_profile(cls, value: str, info) -> str:
+        value = value.strip()
+        if info.data.get("kind") == "wordpress" and value != "nginx":
+            raise ValueError("El perfil solo se acepta para sitios estáticos")
+        if not value or len(value) > 32:
+            raise ValueError("Invalid profile")
+        import re
+
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", value):
+            raise ValueError("Invalid profile")
+        return value
+
 
     @field_validator("domain")
     @classmethod
@@ -96,6 +123,7 @@ class HostingSiteSummary(BaseModel):
     status: str
     managed: bool
     kind: str = "wordpress"
+    profile: str | None = None
 
 
 class HostingSiteListResponse(BaseModel):
@@ -128,3 +156,108 @@ class ResetPasswordResponse(BaseModel):
     login: str
     generated: bool
     password: str | None = None
+
+
+# --- A.SPEC 0042: profiles ------------------------------------------------
+
+
+class StaticProfileSummary(BaseModel):
+    """A profile for the UI. NEVER carries env_json values, only their names."""
+
+    id: str
+    name: str
+    image: str
+    web_root: str
+    container_port: int
+    health_mode: str
+    env_keys: list[str] = []
+    command: str | None = None
+    builtin: bool = False
+
+
+class StaticProfileListResponse(BaseModel):
+    profiles: list[StaticProfileSummary]
+
+
+class StaticProfileCreate(BaseModel):
+    """Every invalid shape becomes a Pydantic 422 (all cases in the spec)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    name: str = Field(min_length=1, max_length=120)
+    image: str
+    web_root: str
+    container_port: int = 80
+    health_mode: Literal["marker", "http_200"] = "marker"
+    env_json: dict[str, str] | None = None
+    command: str | None = None
+
+    @field_validator("id")
+    @classmethod
+    def valid_id(cls, value: str) -> str:
+        return validate_profile_id(value)
+
+    @field_validator("image")
+    @classmethod
+    def valid_image(cls, value: str) -> str:
+        return validate_profile_image(value)
+
+    @field_validator("web_root")
+    @classmethod
+    def valid_web_root(cls, value: str) -> str:
+        return validate_profile_web_root(value)
+
+    @field_validator("container_port")
+    @classmethod
+    def valid_port(cls, value: int) -> int:
+        return validate_profile_port(value)
+
+    @field_validator("env_json")
+    @classmethod
+    def valid_env(cls, value: dict[str, str] | None) -> dict[str, str] | None:
+        return validate_profile_env(value)
+
+    @field_validator("command")
+    @classmethod
+    def valid_command(cls, value: str | None) -> str | None:
+        return validate_profile_command(value)
+
+
+class StaticProfileUpdate(BaseModel):
+    """Partial update; only the PROVIDED fields are validated and changed."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    image: str | None = None
+    web_root: str | None = None
+    container_port: int | None = None
+    health_mode: Literal["marker", "http_200"] | None = None
+    env_json: dict[str, str] | None = None
+    command: str | None = None
+
+    @field_validator("image")
+    @classmethod
+    def valid_image(cls, value: str | None) -> str | None:
+        return None if value is None else validate_profile_image(value)
+
+    @field_validator("web_root")
+    @classmethod
+    def valid_web_root(cls, value: str | None) -> str | None:
+        return None if value is None else validate_profile_web_root(value)
+
+    @field_validator("container_port")
+    @classmethod
+    def valid_port(cls, value: int | None) -> int | None:
+        return None if value is None else validate_profile_port(value)
+
+    @field_validator("env_json")
+    @classmethod
+    def valid_env(cls, value: dict[str, str] | None) -> dict[str, str] | None:
+        return validate_profile_env(value)
+
+    @field_validator("command")
+    @classmethod
+    def valid_command(cls, value: str | None) -> str | None:
+        return validate_profile_command(value)
