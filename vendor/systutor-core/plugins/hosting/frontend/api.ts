@@ -9,6 +9,8 @@ export type HostingSite = {
   status: string;
   managed: boolean;
   kind: HostingSiteKind;
+  /** Id of the static profile; null for wordpress. */
+  profile: string | null;
 };
 
 export type DomainCheck = {
@@ -74,6 +76,62 @@ export type HostingSiteDatabase = {
 
 export type PhpMyAdminSessionResponse = { url: string; expires_in: number };
 
+/** A profile for the UI. The backend returns env NAMES, never their values. */
+export type StaticProfile = {
+  id: string;
+  name: string;
+  image: string;
+  web_root: string;
+  container_port: number;
+  health_mode: "marker" | "http_200";
+  env_keys: string[];
+  command: string | null;
+  builtin: boolean;
+};
+
+export type StaticProfileListResponse = { profiles: StaticProfile[] };
+
+export type StaticProfilePayload = {
+  id: string;
+  name: string;
+  image: string;
+  web_root: string;
+  container_port: number;
+  health_mode: "marker" | "http_200";
+  env_json: Record<string, string> | null;
+  command: string | null;
+};
+
+export function listHostingProfiles() {
+  return apiRequest<StaticProfileListResponse>(
+    "/api/v1/plugins/hosting/static-profiles"
+  );
+}
+
+export function createHostingProfile(payload: StaticProfilePayload) {
+  return apiRequest<StaticProfile>("/api/v1/plugins/hosting/static-profiles", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateHostingProfile(
+  profileId: string,
+  payload: Partial<Omit<StaticProfilePayload, "id">>
+) {
+  return apiRequest<StaticProfile>(
+    `/api/v1/plugins/hosting/static-profiles/${encodeURIComponent(profileId)}`,
+    { method: "PUT", body: JSON.stringify(payload) }
+  );
+}
+
+export function deleteHostingProfile(profileId: string) {
+  return apiRequest<void>(
+    `/api/v1/plugins/hosting/static-profiles/${encodeURIComponent(profileId)}`,
+    { method: "DELETE" }
+  );
+}
+
 export function createPhpMyAdminSession(siteId: string) {
   return apiRequest<PhpMyAdminSessionResponse>(
     `/api/v1/plugins/hosting/sites/${encodeURIComponent(siteId)}/phpmyadmin/session`,
@@ -92,12 +150,14 @@ export const hostingKeys = {
   sites: ["hosting", "sites"] as const,
   users: (siteId: string) => ["hosting", siteId, "users"] as const,
   config: (siteId: string) => ["hosting", siteId, "config"] as const,
+  profiles: ["hosting", "profiles"] as const,
 };
 
 export function createHostingSite(payload: {
   kind: HostingSiteKind;
   name: string;
   domain: string;
+  profile?: string;
 }) {
   return apiRequest<{ site: HostingSite; admin_password: string | null }>(
     "/api/v1/plugins/hosting/sites",

@@ -67,8 +67,12 @@ export function SiteCard({ site, onOpen }: SiteCardProps) {
       <p className="mt-1 truncate text-sm text-muted-foreground">
         {site.domain ?? "Sin dominio"}
       </p>
-      <div className="mt-3">
+      <div className="flex items-center gap-2">
         <Badge>{kindLabel(site.kind)}</Badge>
+        {/* A.SPEC 0042: a static site carries its profile as a badge */}
+        {site.kind === "static" && site.profile ? (
+          <Badge className="border border-border text-muted-foreground">{site.profile}</Badge>
+        ) : null}
       </div>
       <p className="mt-3 text-xs text-muted-foreground">
         {site.managed ? "Gestionable" : "Solo lectura"}
