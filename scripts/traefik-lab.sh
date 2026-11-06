@@ -549,7 +549,21 @@ ensure_ca_container() {
     named_container_is_lab "$LAB_CA_NAME" \
       || fail "existe un contenedor '${LAB_CA_NAME}' que no es del laboratorio; no se toca"
     if container_is_running "$LAB_CA_NAME"; then
-      info "contenedor ${LAB_CA_NAME} ya está running; se reutiliza"
+      # El DNS del CA queda fijado con --dns en la creación. Si el contenedor
+      # de DNS se recreó, obtiene OTRA IP y el CA quedaría resolviendo hacia
+      # una IP muerta: ACME daría 'validation target' sin éxito. El volumen
+      # de la CA se conserva, así que recrear es barato.
+      if [ "$(docker inspect -f '{{json .HostConfig.Dns}}' "$LAB_CA_NAME" 2>/dev/null)" != "[\"$DNS_IP\"]" ]; then
+        info "el CA ${LAB_CA_NAME} fija --dns con una IP distinta del DNS actual; se recrea (el volumen se conserva)"
+        docker rm -f "$LAB_CA_NAME" >/dev/null
+        build_ca_args
+        if ! docker "${CA_RUN_ARGS[@]}" >/dev/null; then
+          fail "no se pudo recrear ${LAB_CA_NAME} con el DNS actual"
+        fi
+        wait_running "$LAB_CA_NAME" || fail "el CA recreado no quedó running"
+      else
+        info "contenedor ${LAB_CA_NAME} ya está running; se reutiliza"
+      fi
     else
       info "iniciando contenedor ${LAB_CA_NAME}"
       docker start "$LAB_CA_NAME" >/dev/null
