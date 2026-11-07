@@ -122,7 +122,7 @@ npm run dev
 | `MAIL_DMS_CONTAINER` | Nombre del container DMS | `mailserver` |
 | `MAIL_ACCOUNTS_CACHE_ENABLED` | Cache Redis de la lista de correos | `true` |
 | `MAIL_ACCOUNTS_CACHE_TTL` | TTL (segundos) de la lista de correos en cache | `60` |
-| `SPANEL_DOCKER_TRANSPORT` | Cómo llega el panel al host Docker (`ssh` o `local`) | `ssh` |
+| `SPANEL_DOCKER_TRANSPORT` | Cómo llega el panel al demonio Docker (`ssh` o `local`); en Docker local hay que declararlo explícitamente | `ssh` |
 | `SPANEL_DOCKER_SSH_HOST` | Host Docker para el plugin de hosting | - |
 | `SPANEL_DOCKER_SSH_USER` | Usuario SSH del host Docker | - |
 | `SPANEL_HOSTING_SITES_DIR` | Directorio estable por sitio en el host Docker | `/opt/spanel/sites` |
@@ -135,6 +135,23 @@ npm run dev
 | `SPANEL_PHPMYADMIN_DB_NETWORK` | Red interna que comparten phpMyAdmin y los MariaDB; vacío = desactivado | - |
 | `SPANEL_HOSTING_FILES_ROOT` | Raíz interna autorizada para el gestor de archivos de sitios WordPress | `/var/www/html` |
 | `SPANEL_FILEMANAGER_HELPER_IMAGE` | Imagen con PHP + ZipArchive usada para el gestor de archivos de sitios estáticos | `wordpress:cli` |
+
+### Transporte Docker (hosting y gestor de archivos)
+
+`SPANEL_DOCKER_TRANSPORT` decide cómo llegan los plugins `hosting` y
+`filemanager` al demonio de Docker. El valor por defecto sigue siendo `ssh`, así
+que en el despliegue contenedorizado hay que declararlo explícitamente:
+
+```bash
+SPANEL_DOCKER_TRANSPORT=local
+```
+
+Con `local`, cada comando se ejecuta como `sh -c "docker ..."` dentro del
+contenedor de la app, contra el demonio del host a través de
+`/var/run/docker.sock` (ya montado en `docker-compose.yml`). No usa
+`SPANEL_DOCKER_SSH_*` ni `MAIL_SERVER_PASSWORD`. Si la variable falta, el panel
+intenta SSH y las operaciones de sitios y archivos fallan aunque el socket esté
+disponible.
 
 ### Configuración del Servidor de Correo
 
