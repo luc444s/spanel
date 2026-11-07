@@ -9,6 +9,7 @@ services:
       WORKERS: ${WORKERS:-1}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - hosting_backups:/var/lib/spanel/hosting-backups
       # Estado del agente de certificados de correo (A.SPEC 0035/0036).
       # La app solo lee state/jobs y escribe requests; nunca claves privadas.
       - /var/lib/spanel/cert-manager:/var/lib/spanel/cert-manager
@@ -56,6 +57,7 @@ services:
 
 volumes:
   pgdata:
+  hosting_backups:
 
 networks:
   proxy:

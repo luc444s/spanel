@@ -35,6 +35,9 @@ RUN find plugins/ -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null; \
     find plugins/ -name "*.pyc" -delete 2>/dev/null; \
     true
 
+COPY scripts/site_backup.py scripts/site_backup_link.py scripts/site_restore.py /app/scripts/
+RUN chmod 755 /app/scripts/site_backup.py /app/scripts/site_backup_link.py /app/scripts/site_restore.py
+
 COPY --from=frontend-build /app/apps/web/dist/ ./static/
 
 COPY entrypoint.sh /app/entrypoint.sh

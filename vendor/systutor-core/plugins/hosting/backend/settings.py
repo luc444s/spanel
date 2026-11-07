@@ -25,6 +25,15 @@ _ENV_CANDIDATES = (
 )
 
 
+def _default_backup_scripts_dir() -> str:
+    """Use checkout scripts in development and the image path in production."""
+    checkout = _CORE_ROOT.parent.parent / "scripts"
+    required = ("site_backup.py", "site_backup_link.py", "site_restore.py")
+    if all((checkout / name).is_file() for name in required):
+        return str(checkout)
+    return "/app/scripts"
+
+
 def _load_env_files() -> None:
     """Fill missing variables from the first env files that exist.
 
@@ -73,6 +82,10 @@ class HostingSettings(BaseModel):
     phpmyadmin_arbitrary: bool = False
     phpmyadmin_db_network: str = ""
     files_root: str = "/var/www/html"
+    backups_dir: str = "/var/lib/spanel/hosting-backups"
+    backup_scripts_dir: str = "/app/scripts"
+    backup_link_ttl: int = 300
+    backup_max_upload_bytes: int = 5 * 1024 * 1024 * 1024
 
 
 def _int_env(name: str, default: int) -> int:
@@ -130,6 +143,21 @@ def register_hosting_settings() -> HostingSettings:
         phpmyadmin_arbitrary=_bool_env("SPANEL_PHPMYADMIN_ARBITRARY", False),
         phpmyadmin_db_network=os.getenv("SPANEL_PHPMYADMIN_DB_NETWORK", "").strip(),
         files_root=os.getenv("SPANEL_HOSTING_FILES_ROOT", "/var/www/html").strip(),
+        backups_dir=os.getenv(
+            "SPANEL_HOSTING_BACKUPS_DIR", "/var/lib/spanel/hosting-backups"
+        ).strip()
+        or "/var/lib/spanel/hosting-backups",
+        backup_scripts_dir=os.getenv(
+            "SPANEL_HOSTING_BACKUP_SCRIPTS_DIR", _default_backup_scripts_dir()
+        ).strip()
+        or _default_backup_scripts_dir(),
+        backup_link_ttl=min(
+            900, max(30, _int_env("SPANEL_HOSTING_BACKUP_LINK_TTL", 300))
+        ),
+        backup_max_upload_bytes=max(
+            1024 * 1024,
+            _int_env("SPANEL_HOSTING_BACKUP_MAX_UPLOAD_BYTES", 5 * 1024 * 1024 * 1024),
+        ),
     )
     _hosting_settings = settings
     return settings

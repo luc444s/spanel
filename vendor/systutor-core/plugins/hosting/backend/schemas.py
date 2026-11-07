@@ -130,6 +130,18 @@ class HostingSiteListResponse(BaseModel):
     sites: list[HostingSiteSummary]
 
 
+class BackupExportResponse(BaseModel):
+    url: str
+    expires_in: int
+    filename: str
+
+
+class BackupImportResponse(BaseModel):
+    site_id: str
+    container_name: str
+    restored: bool
+
+
 class WordPressUserSummary(BaseModel):
     id: int
     login: str

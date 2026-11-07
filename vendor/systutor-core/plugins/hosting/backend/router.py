@@ -22,6 +22,7 @@ from systutor.kernel.auth.dependencies import get_current_tenant_context, requir
 from systutor.kernel.auth.models import User
 from systutor.kernel.tenants.context import TenantContext
 
+from .backups import backup_router
 from .guard import get_owned_site
 from .models import HostingSite
 from .phpmyadmin_proxy import PmaClient, proxy_response, validate_url
@@ -468,5 +469,6 @@ def delete_static_profile(
 # the mounted URLs stay exactly where the callers expect them.
 _plugin_router = APIRouter(tags=["hosting"])
 _plugin_router.include_router(router)
+_plugin_router.include_router(backup_router)
 _plugin_router.include_router(profiles_router)
 router = _plugin_router

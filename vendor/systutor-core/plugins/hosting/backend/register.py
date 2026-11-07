@@ -3,6 +3,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from plugins.hosting.backend.backups import initialize_backup_storage
 from plugins.hosting.backend.models import HostingSite
 from plugins.hosting.backend.router import router
 from plugins.hosting.backend.settings import get_hosting_settings, register_hosting_settings
@@ -48,7 +49,13 @@ def resolve_hosting_files(
 
 
 def register(context: PluginContext) -> None:
-    register_hosting_settings()
+    settings = register_hosting_settings()
+    try:
+        initialize_backup_storage(settings)
+    except OSError:
+        # An operation will return the public runtime-unavailable error. Plugin
+        # discovery itself must still work on hosts not configured for backups.
+        pass
     context.register_router(router)
     if context.router_registry is not None:
         register_file_target(context.router_registry, "hosting", resolve_hosting_files)
