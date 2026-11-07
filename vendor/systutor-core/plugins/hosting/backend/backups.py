@@ -236,6 +236,17 @@ class BackupService:
                         and path.is_file()
                     ]
                     if result.returncode != 0 or len(candidates) != 1 or len(valid) != 1:
+                        logger.warning(
+                            "hosting_backup_export_failed",
+                            extra={
+                                "container": site.container_name,
+                                "returncode": result.returncode,
+                                "candidates": [path.name for path in candidates],
+                                "valid": [path.name for path in valid],
+                                "stdout": result.stdout[-4000:],
+                                "stderr": result.stderr[-4000:],
+                            },
+                        )
                         raise AppError(
                             "No se pudo generar el respaldo",
                             status_code=503,

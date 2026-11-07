@@ -160,6 +160,12 @@ def resolve_site_path(kind: str, labels: dict[str, str], env: dict[str, str], ov
     return PROFILE_CATALOG.get(profile, FALLBACK_SITE_PATH)
 
 
+def db_container_from_host(host: str | None) -> str | None:
+    """WORDPRESS_DB_HOST is `name` or `name:port`; docker exec needs `name`."""
+    name = (host or "").split(":", 1)[0].strip()
+    return name or None
+
+
 def build_target(
     tooling: Tooling, container: str, args: argparse.Namespace
 ) -> Target:
@@ -177,7 +183,7 @@ def build_target(
             "db-user": db_user,
             "db-name": db_name,
             "db-pass (env o --db-pass)": db_pass,
-            "db-container": args.db_container or db_host,
+            "db-container": args.db_container or db_container_from_host(db_host),
         }
         missing = [name for name, value in fields.items() if not value]
         if missing:
@@ -192,7 +198,7 @@ def build_target(
             site_path=resolve_site_path("wp", labels, env, args.path),
             env={k: v for k, v in env.items() if k != "WORDPRESS_DB_PASSWORD"},
             db_host=db_host,
-            db_container=args.db_container or db_host,
+            db_container=args.db_container or db_container_from_host(db_host),
             db_user=db_user,
             db_name=db_name,
             db_pass=db_pass,
