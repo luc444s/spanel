@@ -158,3 +158,166 @@ def test_builtin_image_reads_the_settings_env(seed, monkeypatch) -> None:
             assert image == "caddy:2-lab"
     finally:
         engine.dispose()
+
+
+# --- 004_seed_default_static_profiles (A.SPEC 0046) ------------------------
+
+FOURTH = "004_seed_default_static_profiles"
+
+# Exact values of the lab-validated prototype
+# (scripts/spanel_profiles/profiles.py, build_profiles()).
+ASTRO_COMMAND = (
+    "cd /site; i=0; while [ ! -f src/pages/index.astro ]; do "
+    "i=$((i+1)); [ $i -gt 300 ] && exit 1; sleep 1; done; "
+    "npm install --no-fund --no-audit "
+    "&& npx astro build "
+    "&& npx astro preview --host 0.0.0.0 --port 80"
+)
+
+EXPECTED_ROWS = {
+    "react": (
+        "React SPA (Caddy)", "caddy:2-alpine", "/usr/share/caddy", 80,
+        "marker", None, None,
+    ),
+    "boot": (
+        "Bootstrap (Apache)", "httpd:alpine", "/usr/local/apache2/htdocs", 80,
+        "marker", None, None,
+    ),
+    "astro": (
+        "Astro (build + preview)", "node:24-alpine", "/site", 80,
+        "http_200", None, ASTRO_COMMAND,
+    ),
+}
+
+SEED_IDS = ("react", "boot", "astro")
+
+
+def _load_rows(engine) -> dict[str, tuple]:
+    with Session(engine) as session:
+        return {
+            str(row[0]): tuple(row[1:])
+            for row in session.execute(
+                text(
+                    "SELECT id, name, image, web_root, container_port, "
+                    "health_mode, env_json, command "
+                    "FROM hosting_static_profiles"
+                )
+            ).fetchall()
+        }
+
+
+def _seed_003(engine) -> None:
+    _seed_sites(engine)
+    third = _load("003_add_hosting_static_profiles")
+    with Session(engine) as session:
+        third.upgrade(session)
+
+
+def test_004_up_inserts_the_three_lab_rows_next_to_nginx(seed) -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    try:
+        _seed_003(engine)
+        fourth = _load(FOURTH)
+        with Session(engine) as session:
+            fourth.upgrade(session)
+
+        rows = _load_rows(engine)
+        # I4: the builtin nginx survives 004, plus exactly the three rows.
+        assert set(rows) == {"nginx", *SEED_IDS}
+        assert rows["nginx"] == (
+            "Nginx (estático)", "nginx:alpine-lab", "/usr/share/nginx/html",
+            80, "marker", None, None,
+        )
+        for seed_id in SEED_IDS:
+            # I1: every field matches the lab-validated prototype.
+            assert rows[seed_id] == EXPECTED_ROWS[seed_id]
+    finally:
+        engine.dispose()
+
+
+def test_004_up_is_idempotent_and_keeps_admin_edits(seed) -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    try:
+        _seed_003(engine)
+        fourth = _load(FOURTH)
+        with Session(engine) as session:
+            fourth.upgrade(session)
+        # The admin edits the react image in the panel (I2 prep).
+        with Session(engine) as session:
+            session.execute(
+                text(
+                    "UPDATE hosting_static_profiles SET image = :image "
+                    "WHERE id = 'react'"
+                ),
+                {"image": "caddy:custom-editada"},
+            )
+            session.commit()
+
+        # Repeated upgrade: zero writes, no duplicates, no overrides.
+        with Session(engine) as session:
+            fourth.upgrade(session)
+            fourth.upgrade(session)
+
+        rows = _load_rows(engine)
+        assert len(rows) == 4
+        # I2: the admin-edited image survives untouched.
+        _name, image, _web, _port, _health, _env, _cmd = rows["react"]
+        assert image == "caddy:custom-editada"
+        # The rest of the row stays as seeded.
+        assert rows["react"][2:] == EXPECTED_ROWS["react"][2:]
+    finally:
+        engine.dispose()
+
+
+def test_004_downgrade_keeps_in_use_and_removes_unused(seed) -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    try:
+        _seed_003(engine)
+        fourth = _load(FOURTH)
+        with Session(engine) as session:
+            fourth.upgrade(session)
+        # A site leans on `react` (the "hosting_profile_in_use" guard).
+        with Session(engine) as session:
+            session.execute(
+                text(
+                    "UPDATE hosting_sites SET profile_id = 'react' "
+                    "WHERE id = 's-static'"
+                )
+            )
+            session.commit()
+
+        with Session(engine) as session:
+            fourth.downgrade(session)
+
+        rows = _load_rows(engine)
+        # I3: the in-use profile stays; the unused ones disappear.
+        assert "react" in rows
+        assert "boot" not in rows and "astro" not in rows
+        # I4: the builtin nginx is never touched by the downgrade.
+        assert "nginx" in rows
+
+        # A later upgrade re-seeds only the missing rows (react survives).
+        with Session(engine) as session:
+            fourth.upgrade(session)
+        rows = _load_rows(engine)
+        assert set(rows) == {"nginx", "react", "boot", "astro"}
+        with Session(engine) as session:
+            profile_id = session.execute(
+                text("SELECT profile_id FROM hosting_sites WHERE id = 's-static'")
+            ).scalar()
+            assert profile_id == "react"
+    finally:
+        engine.dispose()
+
+
+def test_004_downgrade_without_table_is_harmless(seed) -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    try:
+        _seed_sites(engine)
+        fourth = _load(FOURTH)
+        with Session(engine) as session:
+            fourth.downgrade(session)
+        assert not inspect(engine).has_table("hosting_static_profiles")
+        assert inspect(engine).has_table("hosting_sites")
+    finally:
+        engine.dispose()
