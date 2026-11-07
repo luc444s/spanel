@@ -216,6 +216,28 @@ def test_kind_wp_uses_the_database_resolved_by_the_panel(tmp_path: Path, monkeyp
     assert "secret-from-env" not in " ".join(argv)
 
 
+def test_zip_staging_lives_on_the_output_filesystem(tmp_path: Path, monkeypatch):
+    """os.replace only works within one device: /tmp may differ from the volume."""
+    fake = FakeDocker(
+        inspects={"portafolio": inspect_json("portafolio")},
+        tars={"portafolio": make_tar_bytes({"index.html": b"<h1>hola</h1>"})},
+    )
+    moves: list[tuple[Path, Path]] = []
+    real_replace = sb.os.replace
+
+    def tracking(src, dst):
+        moves.append((Path(src), Path(dst)))
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(sb.os, "replace", tracking)
+    code = run(tmp_path, fake, FakeClock(), backup_args(tmp_path, container="portafolio"))
+    assert code == 0
+    assert moves, "debería publicar el zip con os.replace"
+    src, dst = moves[-1]
+    assert src.parent.parent == dst.parent
+    assert not list((tmp_path / "out").glob(".site-backup-*"))
+
+
 def test_static_backup_no_database(tmp_path: Path):
     fake = FakeDocker(
         inspects={"portafolio": inspect_json("portafolio")},

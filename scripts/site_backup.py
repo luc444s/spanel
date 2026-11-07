@@ -417,7 +417,10 @@ def run_backup(args: argparse.Namespace, tooling: Tooling) -> int:
         return EXIT_OK
 
     out_dir = Path(args.out)
-    tmp = Path(tempfile.mkdtemp(prefix="site-backup-"))
+    # Stage inside the output directory: `os.replace` is only atomic on the
+    # same filesystem, and /tmp may be a different device from the volume.
+    out_dir.mkdir(parents=True, exist_ok=True)
+    tmp = Path(tempfile.mkdtemp(prefix=".site-backup-", dir=out_dir))
     try:
         capture_files(tooling, target, tmp)
         if target.kind == "wp":
