@@ -127,7 +127,9 @@ def tooling_with(
     fake: FakeDocker, clock: FakeClock | None = None
 ) -> tuple[sb.Tooling, FakeClock]:
     clock = clock or FakeClock()
-    return sb.Tooling(docker=fake, now=clock), clock
+    # El dump viaja por docker_bytes; el fake sirve ambos caminos (I5/byte-loyal
+    # es asunto del CLI real, del fake salen Result de texto y el caller codifica).
+    return sb.Tooling(docker=fake, docker_bytes=fake, now=clock), clock
 
 
 def backup_args(tmp_path: Path, **kw) -> list[str]:

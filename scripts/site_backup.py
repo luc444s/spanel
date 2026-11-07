@@ -46,6 +46,7 @@ FALLBACK_SITE_PATH = "/usr/share/nginx/html"
 # spanel.profile → web_root del catálogo default (caddy/httpd alias de react/boot).
 PROFILE_CATALOG = {
     "nginx": "/usr/share/nginx/html",
+    "plain": "/usr/share/nginx/html",  # alias del prototipo de lab (0042)
     "caddy": "/usr/share/caddy",
     "react": "/usr/share/caddy",
     "astro": "/site",
@@ -64,28 +65,53 @@ class VerifyError(Exception):
     """Error de verificación → exit 2."""
 
 
+def _argv_text(argv: list[str]) -> list[str]:
+    """El argv del dump puede llevar el password; se enmascara en stderr (I4)."""
+    out = []
+    for token in argv:
+        if len(token) > 256:  # el comando mysqldump en sh -c cruza este size
+            out.append(token[:24] + "...<redactado>")
+        else:
+            out.append(token)
+    return out
+
+
 @dataclass(frozen=True)
 class Result:
     stdout: str = ""
     stderr: str = ""
     returncode: int = 0
+    stdout_bytes: bytes | None = None  # para el mysqldump sin transcodificación
 
 
 def docker_cli(args: list[str]) -> Result:
-    """Docker CLI real (respeta DOCKER_HOST). I1: solo inspect/cp/exec-mysqldump."""
+    """Docker CLI real (respeta DOCKER_HOST). I1: solo inspect/cp/exec-mysqldump.
+
+    Captura SIN text=True: el tar del `docker cp -` y el mysqldump son
+    binarios (los dumps llevan bytes latin-1) y el decode automático
+    UnicodeDecodeError-iza (bug real del lab). stdout lleva un preview UTF-8
+    con replacement; stdout_bytes trae los bytes exactos para cp/DB."""
     try:
         proc = subprocess.run(
-            ["docker", *args], capture_output=True, text=True, timeout=600, check=False
+            ["docker", *args],
+            capture_output=True, timeout=600, check=False,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         return Result("", f"docker CLI indisponible: {exc}", 127)
-    return Result(proc.stdout, proc.stderr, proc.returncode)
+    return Result(
+        stdout=proc.stdout[:16_384].decode("utf-8", errors="replace"),
+        stderr=proc.stderr.decode("utf-8", errors="replace"),
+        returncode=proc.returncode,
+        stdout_bytes=proc.stdout,
+    )
 
 
 @dataclass
 class Tooling:
     """Puntos de inyección para tests: docker CLI y reloj."""
     docker: Callable[[list[str]], Result] = docker_cli
+    # El dump viaja en bytes sin transcodificación; los tests inyectan también.
+    docker_bytes: Callable[[list[str]], Result] = docker_cli
     now: Callable[[], float] = time.time
 
 
@@ -190,7 +216,8 @@ def extract_tar_stream(result: Result, dest: Path) -> int:
     dest.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(suffix=".tar", delete=False) as tmp:
         tmp_path = Path(tmp.name)
-        tmp.write(result.stdout.encode("utf-8", "surrogateescape"))
+        raw = result.stdout_bytes if result.stdout_bytes is not None else result.stdout.encode("utf-8")
+        tmp.write(raw)
     try:
         extracted = 0
         with tarfile.open(tmp_path, "r:") as tar:
@@ -221,19 +248,43 @@ def dump_db(tooling: Tooling, target: Target, tmp: Path) -> None:
             "container corriendo?); usar --db-container"
         )
     password = target.db_pass or ""
-    command = f"exec mysqldump -u{target.db_user} -p{password} --no-tablespaces {target.db_name}"
+    base = (
+        f"exec mysqldump -u{target.db_user} -p{password} "
+        f"--no-tablespaces {target.db_name}"
+    )
+    # mariadb:11+ no trae mysqldump en PATH (solo mariadb-dump); fallback.
+    candidates = [base] + [
+        base.replace("exec mysqldump", f"exec {alt}")
+        for alt in ("mariadb-dump",)
+    ]
     print(f"[db] mysqldump {target.db_host}/{target.db_name} via {target.db_container}")
-    result = tooling.docker(["exec", target.db_container, "sh", "-c", command])
-    sql = result.stdout
-    if result.returncode != 0:
-        detail = (result.stderr.strip() or "sin stderr").replace(password, "***")
-        raise BackupError(f"mysqldump falló en {target.db_container}: {detail}")
-    if not sql.strip():
+    result = None
+    last_detail = ""
+    for command in candidates:
+        result = tooling.docker_bytes(["exec", target.db_container, "sh", "-c", command])
+        sql_bytes = (
+            result.stdout_bytes
+            if result.stdout_bytes is not None
+            else result.stdout.encode("utf-8")
+        )
+        if result.returncode == 0:
+            break
+        last_detail = (result.stderr.strip() or "sin stderr").replace(password, "***")
+        if "not found" not in last_detail.lower():
+            break
+    sql_bytes = (
+        result.stdout_bytes
+        if result.stdout_bytes is not None
+        else result.stdout.encode("utf-8")
+    )
+    if result is None or result.returncode != 0:
+        raise BackupError(f"mysqldump falló en {target.db_container}: {last_detail}")
+    if not sql_bytes.strip():
         raise BackupError("mysqldump produjo SQL vacío — fallando antes del zip (I2)")
     dest = tmp / "database" / "backup.sql"
     dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_text(sql, encoding="utf-8")
-    print(f"[db] {len(sql.splitlines())} grafas SQL capturadas")
+    dest.write_bytes(sql_bytes)
+    print(f"[db] {len(sql_bytes)} bytes SQL capturados (binario-loyal)")
 
 
 # --- Empaquetado + self-verify (I2/I3) ---------------------------------------- #
@@ -313,8 +364,9 @@ def verify_zip(zip_path: Path) -> dict:
                 info = zipped.getinfo(arcname)
                 if hashlib.sha256(zipped.read(arcname)).hexdigest() != meta.get("sha256"):
                     raise VerifyError(f"SHA256 mismatch en {arcname}")
-                if not info.file_size or int(meta.get("size", -1)) != info.file_size:
-                    raise VerifyError(f"size mismatch/entry vacío: {arcname}")
+                meta_size = int(meta.get("size", -1))
+                if meta_size != info.file_size:
+                    raise VerifyError(f"size mismatch: {arcname} ({info.file_size} vs {meta_size})")
             kind = manifest.get("kind")
             if kind not in ("wp", "static"):
                 raise VerifyError(f"kind inválido en manifest: {kind!r}")
