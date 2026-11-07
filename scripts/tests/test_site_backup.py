@@ -539,3 +539,37 @@ def test_missing_container_exits_1(tmp_path: Path):
     clock = FakeClock()
     code = run(tmp_path, fake, clock, backup_args(tmp_path, container="fantasma"))
     assert code == 1
+
+
+
+def test_multi_tenant_mariadb_dumps_only_site_db():
+    """Un mariadb SHARED (multi-tenant, muchas DBs) nunca se volca entero:
+    el dump apunta a UNA base — la del container WP (contrato 0047)."""
+    from tempfile import mkdtemp
+    fake = FakeDocker({}, {})
+    tooling, _ = tooling_with(fake)
+    target = sb.Target(
+        container="wp-compartido",
+        kind="wp",
+        site_path="/var/www/html",
+        env={},
+        db_host="mariadb",
+        db_container="mariadb",
+        db_user="usuario_sitio_a",
+        db_name="base_de_este_sitio",
+        db_pass="clave",
+    )
+    tmp = Path(mkdtemp()) / "mt"
+    tmp.mkdir(parents=True)
+    sb.dump_db(tooling, target, tmp)
+    dumps = [c for c in fake.calls if "exec" in c and "sh" in c]
+    assert dumps, "no hubo dump"
+    for call in dumps:
+        command = call[-1]
+        assert "--all-databases" not in command
+        assert "--databases" not in command
+        assert "base_de_este_sitio" in command
+
+def tmp_path() -> Path:
+    import tempfile
+    return Path(tempfile.mkdtemp())

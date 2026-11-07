@@ -248,6 +248,10 @@ def dump_db(tooling: Tooling, target: Target, tmp: Path) -> None:
             "container corriendo?); usar --db-container"
         )
     password = target.db_pass or ""
+    # Multi-tenant: la DB compartida (p.ej. un mariadb global con N bases)
+    # se respeta siempre con un dump de UNA base — la del sitio
+    # (WORDPRESS_DB_NAME). Jamás --all-databases/--databases con comodines:
+    # el volcado no debe tomar el resto de los tenants dentro de la multi-DB.
     base = (
         f"exec mysqldump -u{target.db_user} -p{password} "
         f"--no-tablespaces {target.db_name}"
