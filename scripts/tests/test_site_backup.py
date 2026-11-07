@@ -186,6 +186,36 @@ def test_wp_backup_roundtrip(tmp_path: Path):
             assert meta["size"] == zipped.getinfo(arcname).file_size
 
 
+def test_kind_wp_uses_the_database_resolved_by_the_panel(tmp_path: Path, monkeypatch):
+    """The app resolves env/wp-config/alias and passes it explicitly.
+
+    The password arrives in the child environment, never in argv.
+    """
+    monkeypatch.setenv("SPANEL_BACKUP_DB_PASSWORD", "secret-from-env")
+    fake = FakeDocker(
+        inspects={"site": inspect_json("site")},  # sin WORDPRESS_DB_*
+        tars={"site": make_tar_bytes({"wp-config.php": b"cfg"})},
+    )
+    argv = [
+        "--container", "site",
+        "--kind", "wp",
+        "--path", "/var/www/html",
+        "--db-host", "db:3306",
+        "--db-container", "real-db",
+        "--db-user", "wordpress",
+        "--db-name", "wordpressdb",
+        "--out", str(tmp_path / "out"),
+    ]
+    code = run(tmp_path, fake, FakeClock(), argv)
+    assert code == 0
+    zp = zip_path_of(tmp_path, "wp", "site")
+    with zipfile.ZipFile(zp) as zipped:
+        assert "database/backup.sql" in zipped.namelist()
+    assert any(call[:2] == ["exec", "real-db"] for call in fake.calls)
+    # The script receives the password from the environment, not the argv.
+    assert "secret-from-env" not in " ".join(argv)
+
+
 def test_static_backup_no_database(tmp_path: Path):
     fake = FakeDocker(
         inspects={"portafolio": inspect_json("portafolio")},

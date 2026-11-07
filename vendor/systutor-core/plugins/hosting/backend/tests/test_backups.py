@@ -82,6 +82,42 @@ def test_export_runs_only_the_validated_script_with_server_owned_values(
     assert (Path(calls[0][5]) / result.filename).stat().st_mode & 0o777 == 0o600
 
 
+def test_wordpress_export_passes_the_resolved_database_to_the_script(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from plugins.hosting.backend import backups as backups_module
+
+    monkeypatch.setattr(backup_tickets, "require_store", lambda: None)
+    monkeypatch.setattr(backup_tickets, "issue", lambda payload, ttl: "ticket")
+    monkeypatch.setattr(
+        backups_module,
+        "resolve_database_binding",
+        lambda *args, **kwargs: ("db:3306", "real-db", "wpdb", "wpuser", "s3cret"),
+    )
+
+    seen: dict[str, object] = {}
+
+    def runner(argv, env=None):
+        seen["argv"] = argv
+        seen["env"] = env
+        output = Path(argv[argv.index("--out") + 1])
+        (output / "wp-site.zip").write_bytes(b"zip")
+        return _result(argv)
+
+    site = SimpleNamespace(id="site-123", container_name="wp-site", kind="wordpress")
+    service = BackupService(_settings(tmp_path), runner=runner, inspector=_running)
+    service.export(site, user_id="user-1", tenant_id="tenant-1")
+
+    argv = seen["argv"]
+    env = seen["env"]
+    assert isinstance(argv, list) and isinstance(env, dict)
+    assert argv[argv.index("--kind") + 1] == "wp"
+    assert argv[argv.index("--path") + 1] == "/var/www/html"
+    assert argv[argv.index("--db-container") + 1] == "real-db"
+    assert env["SPANEL_BACKUP_DB_PASSWORD"] == "s3cret"
+    assert "s3cret" not in " ".join(argv)
+
+
 @pytest.mark.parametrize("contents", [(), ("a.zip", "b.zip"), ("not-a-zip.txt",)])
 def test_export_rejects_any_surface_other_than_exactly_one_regular_zip(
     tmp_path: Path, monkeypatch, contents: tuple[str, ...]

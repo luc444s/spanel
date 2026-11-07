@@ -34,6 +34,7 @@ from systutor.kernel.tenants.context import TenantContext, build_tenant_context
 from systutor.kernel.tenants.service import validate_user_branch_scope
 
 from . import backup_tickets
+from .database_binding import resolve_database_binding
 from .guard import get_owned_site
 from .inspection import inspect_container
 from .models import HostingSite
@@ -56,8 +57,10 @@ Runner = Callable[[list[str]], subprocess.CompletedProcess[str]]
 Inspector = Callable[..., dict | None]
 
 
-def _default_runner(argv: list[str]) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(argv, capture_output=True, text=True, check=False)
+def _default_runner(
+    argv: list[str], env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(argv, capture_output=True, text=True, check=False, env=env)
 
 
 def _private_directory(path: Path) -> None:
@@ -151,7 +154,7 @@ class BackupService:
             )
         return candidate
 
-    def _require_running(self, site: HostingSite) -> None:
+    def _require_running(self, site: HostingSite) -> dict:
         try:
             info = self.inspector(
                 docker_env(self.settings),
@@ -172,6 +175,7 @@ class BackupService:
                 status_code=409,
                 code="hosting_backup_site_not_running",
             )
+        return info if isinstance(info, dict) else {}
 
     @contextmanager
     def _site_lock(self, site_id: str) -> Iterator[None]:
@@ -197,9 +201,13 @@ class BackupService:
             finally:
                 handle.close()
 
-    def _run(self, argv: list[str]) -> subprocess.CompletedProcess[str]:
+    def _run(
+        self, argv: list[str], env: dict[str, str] | None = None
+    ) -> subprocess.CompletedProcess[str]:
         try:
-            return self.runner(argv)
+            if env is None:
+                return self.runner(argv)
+            return self.runner(argv, env=env)
         except (OSError, subprocess.SubprocessError) as exc:
             raise AppError(
                 "El runtime de respaldos no está disponible",
@@ -207,17 +215,66 @@ class BackupService:
                 code="hosting_backup_runtime_unavailable",
             ) from exc
 
+    def _database_args(
+        self, site: HostingSite, info: dict
+    ) -> tuple[list[str], dict[str, str] | None]:
+        """Resolve the DB the same way the panel does and hand it to the script.
+
+        The script is standalone, so it cannot import the plugin's resolver.
+        The app resolves environment → `wp-config.php` → network alias and
+        passes the result explicitly. The password travels in the child
+        environment, never in argv.
+        """
+        if getattr(site, "kind", "") != "wordpress":
+            return [], None
+        env = docker_env(self.settings)
+        try:
+            raw_host, db_container, database, user, password = resolve_database_binding(
+                env,
+                site.container_name,
+                info,
+                inspector=lambda name: self.inspector(
+                    env, name, timeout=self.settings.command_timeout
+                ),
+                timeout=self.settings.command_timeout,
+            )
+        except AppError as exc:
+            logger.warning(
+                "hosting_backup_db_unresolved container=%s error=%s",
+                site.container_name,
+                exc,
+            )
+            return [], None
+        return (
+            [
+                "--kind",
+                "wp",
+                "--path",
+                "/var/www/html",
+                "--db-host",
+                raw_host,
+                "--db-container",
+                db_container,
+                "--db-user",
+                user,
+                "--db-name",
+                database,
+            ],
+            {**os.environ, "SPANEL_BACKUP_DB_PASSWORD": password},
+        )
+
     def export(self, site: HostingSite, *, user_id: str, tenant_id: str) -> ExportResult:
         self._require_local()
         backup_tickets.require_store()
         try:
             self.purge_expired()
             with self._site_lock(site.id):
-                self._require_running(site)
+                info = self._require_running(site)
                 backup_id = secrets.token_hex(16)
                 directory = self.exports / backup_id
                 _private_directory(directory)
                 try:
+                    db_args, run_env = self._database_args(site, info)
                     argv = [
                         sys.executable,
                         str(self._script("site_backup.py")),
@@ -225,8 +282,9 @@ class BackupService:
                         site.container_name,
                         "--out",
                         str(directory),
+                        *db_args,
                     ]
-                    result = self._run(argv)
+                    result = self._run(argv, env=run_env)
                     candidates = list(directory.iterdir())
                     valid = [
                         path

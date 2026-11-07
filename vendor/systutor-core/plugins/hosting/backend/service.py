@@ -44,8 +44,8 @@ from .database import (
     roles_desde_capacidades,
     usuarios_con_rol,
 )
-from .database_binding import database_binding
 from .database_binding import database_credentials as _database_credentials
+from .database_binding import resolve_database_binding
 from .inspection import candidato_de, inspect_container
 from .models import HostingSite, StaticProfile
 from .network import (
@@ -207,30 +207,20 @@ class HostingService:
     def _database_binding_for(
         self, site: HostingSite, info: dict
     ) -> tuple[str, str, str, str, str]:
-        """Environment first; `wp-config.php` only when the environment fails.
+        """Environment first, `wp-config.php` when needed, alias last.
 
-        When the declared host is not a Docker container, its network alias is
-        resolved inside the site's own networks. The raw host is returned
-        untouched for WordPress; only the inspected container changes.
+        Delegates to the shared resolver so backups and the database dialog
+        can never disagree about where a site's database lives.
         """
-        try:
-            crudo, host, database, user, password = database_binding(info)
-        except AppError:
-            wp_config = read_wp_config(
-                self._env,
-                site.container_name,
-                timeout=self._settings.command_timeout,
-            )
-            if wp_config is None:
-                raise
-            crudo, host, database, user, password = database_binding(
-                info, wp_config=wp_config
-            )
-        if self._inspect(host) is None:
-            resuelto = resolver_alias_de_contenedor(self._env, info, host)
-            if resuelto is not None:
-                host = resuelto
-        return crudo, host, database, user, password
+        return resolve_database_binding(
+            self._env,
+            site.container_name,
+            info,
+            inspector=self._inspect,
+            timeout=self._settings.command_timeout,
+            read_config=read_wp_config,
+            resolve_alias=resolver_alias_de_contenedor,
+        )
 
     def _managed_site(self, site: HostingSite) -> dict:
         info, managed = self._require_site(site)

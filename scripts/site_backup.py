@@ -173,24 +173,31 @@ def build_target(
     env = env_of(inspect_data)
     labels = dict(inspect_data.get("Config", {}).get("Labels") or {})
 
-    if any(key in env for key in WP_ENV_KEYS):
+    detected = "wp" if any(key in env for key in WP_ENV_KEYS) else "static"
+    kind = detected if args.kind == "auto" else args.kind
+
+    if kind == "wp":
         db_host = args.db_host or env.get("WORDPRESS_DB_HOST")
         db_user = args.db_user or env.get("WORDPRESS_DB_USER")
         db_name = args.db_name or env.get("WORDPRESS_DB_NAME")
-        db_pass = args.db_pass or env.get("WORDPRESS_DB_PASSWORD")
+        db_pass = (
+            args.db_pass
+            or os.getenv("SPANEL_BACKUP_DB_PASSWORD")
+            or env.get("WORDPRESS_DB_PASSWORD")
+        )
         fields = {
             "db-host": db_host,
             "db-user": db_user,
             "db-name": db_name,
-            "db-pass (env o --db-pass)": db_pass,
+            "db-pass (env, SPANEL_BACKUP_DB_PASSWORD o --db-pass)": db_pass,
             "db-container": args.db_container or db_container_from_host(db_host),
         }
         missing = [name for name, value in fields.items() if not value]
         if missing:
             raise BackupError(
-                "container WP sin env DB completo; faltan: "
+                "container WP sin base de datos completa; faltan: "
                 + ", ".join(sorted(missing))
-                + " — usar --db-host/--db-user/--db-pass/--db-name"
+                + " — usar --db-host/--db-user/--db-pass/--db-name/--db-container"
             )
         return Target(
             container=container,
@@ -437,6 +444,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--db-pass", default=None, help="override del password de DB (no persiste, I4)")
     parser.add_argument("--db-name", default=None, help="override del nombre de la DB")
     parser.add_argument("--path", default=None, help="override del site path dentro del container")
+    parser.add_argument(
+        "--kind",
+        choices=("auto", "wp", "static"),
+        default="auto",
+        help="forzar el tipo de sitio (auto detecta por WORDPRESS_DB_*)",
+    )
     parser.add_argument("--out", default=DEFAULT_OUT, help=f"dir de salida (default {DEFAULT_OUT})")
     parser.add_argument("--dry-run", action="store_true", help="printear el plan sin escribir")
     parser.add_argument("--verify", default=None, metavar="ZIP", help="re-verificar un.zip previo (exit 0/2)")

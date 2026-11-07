@@ -9,11 +9,13 @@ the host validation; `wpconfig.py` owns reading and parsing.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 
 from systutor.core.errors import AppError
 
 from .config import env_of
-from .wpconfig import credentials_from_wp_config
+from .database import resolver_alias_de_contenedor
+from .wpconfig import credentials_from_wp_config, read_wp_config
 
 # A Docker network alias: the WordPress env names its database container, and
 # phpMyAdmin resolves that same name. A scheme, a path or an IP is not a name
@@ -90,4 +92,42 @@ def database_credentials(
     return host, database, user, password
 
 
-__all__ = ["database_binding", "database_credentials"]
+def resolve_database_binding(
+    env: dict[str, str],
+    container_name: str,
+    info: dict,
+    *,
+    inspector: Callable[[str], dict | None],
+    timeout: int = 60,
+    read_config: Callable[..., str | None] = read_wp_config,
+    resolve_alias: Callable[[dict[str, str], dict, str], str | None] = (
+        resolver_alias_de_contenedor
+    ),
+) -> tuple[str, str, str, str, str]:
+    """Resolve a site's database the same way the panel does.
+
+    Environment first, `wp-config.php` second, and finally the network alias
+    is mapped to the real container name. Returns the raw host (port
+    included), the Docker container, database, user and password.
+    """
+    try:
+        raw_host, host, database, user, password = database_binding(info)
+    except AppError:
+        wp_config = read_config(env, container_name, timeout=timeout)
+        if wp_config is None:
+            raise
+        raw_host, host, database, user, password = database_binding(
+            info, wp_config=wp_config
+        )
+    if inspector(host) is None:
+        resolved = resolve_alias(env, info, host)
+        if resolved is not None:
+            host = resolved
+    return raw_host, host, database, user, password
+
+
+__all__ = [
+    "database_binding",
+    "database_credentials",
+    "resolve_database_binding",
+]
