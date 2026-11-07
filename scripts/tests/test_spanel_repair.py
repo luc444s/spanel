@@ -486,3 +486,35 @@ def test_main_json_ok_exit_zero(tmp_path, capsys):
 
 if __name__ == "__main__":  # standalone-runnable como test_mail_cert_live.py
     sys.exit(pytest.main([__file__, "-q"]))
+
+
+# --------------------------------------------------------------------------- #
+# Mapeo mount Destination -> Source del host (caso real: /config del container
+# montado desde /opt/stacks/traefik/config; el dir deltraefik.yml es del CONTAINER)
+# --------------------------------------------------------------------------- #
+
+
+def test_detectmaps_container_dir_to_host_mount(tmp_path):
+    host = tmp_path / "stacks" / "traefik" / "config"
+    host.mkdir(parents=True)
+    ins = {
+        "Name": "/traefik",
+        "Args": [],
+        "Config": {"Cmd": ["traefik"]},
+        "Mounts": [
+            {"Source": str(host), "Destination": "/config"},
+            {"Source": "/host/traefik.yml", "Destination": "/traefik.yml"},
+        ],
+    }
+    docker = FakeDocker(
+        ["traefik\ttraefik\ttraefik"], ins, "providers:\n  file:\n    directory: /config\n"
+    )
+    tooling = sr.Tooling(
+        docker=docker,
+        dns=lambda host_: None,
+        tls_issuer=lambda host_: "issuer=CN=TRAEFIK DEFAULT CERT",
+        public_ip=lambda: "198.51.100.1",
+        now=lambda: 1_000.0,
+    )
+    det = sr.detect(tooling)
+    assert det.config_dir == str(host)

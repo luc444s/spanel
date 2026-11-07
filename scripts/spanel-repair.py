@@ -234,6 +234,30 @@ def traefik_yml_text(tooling: Tooling, container: str, ins: dict) -> str:
     return ""
 
 
+def host_path_for_mount(ins: dict, path: str) -> str:
+    """Traduce un path del contenedor a su Source en el host si hay un mount
+    que lo cubra (exacto o como prefijo de un dir). Sin mount => igual."""
+    target = path.rstrip("/") or "/"
+    best: tuple[int, str] | None = None  # (len(dest), host_path)
+    for mount in ins.get("Mounts", []):
+        dest = str(mount.get("Destination", "")).rstrip("/") or "/"
+        source = mount.get("Source")
+        if not source:
+            continue
+        if target == dest or (dest != "/" and target.startswith(dest + "/")):
+            rel = target[len(dest):].lstrip("/")
+            host = paths_join(str(source), rel)
+            if best is None or len(dest) > best[0]:
+                best = (len(dest), host)
+    if best is not None:
+        return best[1]
+    return path
+
+
+def paths_join(base: str, rel: str) -> str:
+    return f"{base.rstrip('/')}/{rel}" if rel else base
+
+
 def detect(
     tooling: Tooling,
     traefik_override: str | None = None,
@@ -273,6 +297,14 @@ def detect(
             "en el contenedor, ni providers.file.directory en su traefik.yml); "
             "usá --config-dir o SPANEL_DYNAMIC_DIR"
         )
+
+    # El dir detectado vive en el SISTEMA DE ARCHIVOS DEL CONTENEDOR; el script
+    # corre en el host. Si hay un mount cuyo Destination lo cubre, usar su
+    # Source (el path real del host). Caso real: /opt/stacks/traefik/config
+    # montado como /config.
+    host_dir = host_path_for_mount(ins, config_dir)
+    if host_dir != config_dir and Path(host_dir).is_dir():
+        config_dir = host_dir
 
     return Detection(
         traefik_container=container,
