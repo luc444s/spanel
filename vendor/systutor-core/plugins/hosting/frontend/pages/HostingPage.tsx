@@ -25,6 +25,7 @@ import { CreateSiteDialog } from "../components/CreateSiteDialog";
 import { ProfilesDialog } from "../components/ProfilesDialog";
 import { SiteConfigDialog } from "../components/SiteConfigDialog";
 import { DatabaseDialog } from "../components/DatabaseDialog";
+import { BackupDialogs } from "../components/BackupDialogs";
 import { LogsDialog, UsersDialog } from "../components/SiteDataDialogs";
 
 type GeneratedPassword = {
@@ -295,6 +296,7 @@ export default function HostingPage() {
                   {databaseMutation.isPending ? "Leyendo..." : "Base de datos"}
                 </Button>
               ) : null}
+              {canManage ? <BackupDialogs site={detail} /> : null}
               {canManage
                 ? (["start", "stop", "restart"] as const).map((action) => (
                     <Button

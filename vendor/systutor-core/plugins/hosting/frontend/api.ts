@@ -76,6 +76,18 @@ export type HostingSiteDatabase = {
 
 export type PhpMyAdminSessionResponse = { url: string; expires_in: number };
 
+export type BackupExportResponse = {
+  url: string;
+  expires_in: number;
+  filename: string;
+};
+
+export type BackupImportResponse = {
+  site_id: string;
+  container_name: string;
+  restored: boolean;
+};
+
 /** A profile for the UI. The backend returns env NAMES, never their values. */
 export type StaticProfile = {
   id: string;
@@ -194,6 +206,23 @@ export function deleteHostingSite(siteId: string) {
   return apiRequest<void>(`/api/v1/plugins/hosting/sites/${encodeURIComponent(siteId)}`, {
     method: "DELETE",
   });
+}
+
+export function exportHostingBackup(siteId: string) {
+  return apiRequest<BackupExportResponse>(
+    `/api/v1/plugins/hosting/sites/${encodeURIComponent(siteId)}/backup/export`,
+    { method: "POST" }
+  );
+}
+
+export function importHostingBackup(siteId: string, file: File, confirmation: string) {
+  const body = new FormData();
+  body.append("file", file);
+  body.append("confirmation", confirmation);
+  return apiRequest<BackupImportResponse>(
+    `/api/v1/plugins/hosting/sites/${encodeURIComponent(siteId)}/backup/import`,
+    { method: "POST", body }
+  );
 }
 
 export function listHostingSites() {
