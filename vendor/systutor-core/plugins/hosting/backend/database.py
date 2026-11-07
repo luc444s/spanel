@@ -4,14 +4,16 @@ There is ONE helper that builds every database command (`build_db_command`)
 and ONE helper that runs SQL (`ejecutar_sql`). No caller builds
 `mariadb -p...` by hand.
 
-Primary path: the DB container already exposes `MARIADB_USER` and
-`MARIADB_PASSWORD`, so the client reads them from `MYSQL_PWD` inside the
-container. Neither value is interpolated on the host.
+Primary path: the site's own database user and password arrive over stdin and
+become a `--defaults-extra-file` inside the container with mode 600, removed
+after the query. That is what WordPress itself uses, and on a shared MariaDB
+it is the only user guaranteed to have grants on the site's database. The
+password never becomes an argv element.
 
-Fallback: when the container does not expose those variables, the user and
-password arrive over stdin and become a `--defaults-extra-file` inside the
-container with mode 600, removed after the query. The password never becomes
-an argv element, not on the laptop and not inside the container.
+Fallback: if those credentials are rejected with an authentication error and
+the DB container exposes `MARIADB_USER`/`MARIADB_PASSWORD`, the client reads
+them from `MYSQL_PWD` inside the container. Neither value is interpolated on
+the host, and a failing statement is never retried blindly.
 
 SQL also travels over stdin. A shell never parses it, so a hash with `$` does
 not need shell escaping; `para_sql` still validates it because the statement
@@ -47,14 +49,24 @@ def validar_prefijo(prefijo: str) -> str:
     return validar_sql_seguro(prefijo, etiqueta="el prefijo de tablas")
 
 
-def build_db_command(db: str, base: str, *, batch: bool = True) -> str:
+def build_db_command(
+    db: str, base: str, *, batch: bool = True, from_environment: bool = False
+) -> str:
     """Build the command that runs `mariadb` inside the DB container.
 
-    It does NOT take the password as text. Either the container has it in its
-    environment, or it is read from stdin and written to a mode-600 defaults
-    file inside the container.
+    It does NOT take the password as text. The default reads user and password
+    from stdin and writes a mode-600 defaults file inside the container. The
+    `from_environment` variant is a fallback for a container that exposes
+    `MARIADB_USER`/`MARIADB_PASSWORD` and is used only after the site's own
+    credentials were rejected.
     """
     flags = " -N -B" if batch else ""
+    if from_environment:
+        return (
+            f"docker exec -i {db} sh -c '"
+            f'MYSQL_PWD="$MARIADB_PASSWORD" exec mariadb -u "$MARIADB_USER" {base}{flags}'
+            "'"
+        )
     # The body is wrapped in single quotes, and that wrapper is what every
     # shell between here and the container removes. A single quote INSIDE the
     # body would close it early: `printf '[client]\n...'` arrived as
@@ -62,9 +74,6 @@ def build_db_command(db: str, base: str, *, batch: bool = True) -> str:
     # without a password. Double quotes here keep the \n for printf.
     return (
         f"docker exec -i {db} sh -c '"
-        'if [ -n "${MARIADB_USER:-}" ] && [ -n "${MARIADB_PASSWORD:-}" ]; then '
-        f'MYSQL_PWD="$MARIADB_PASSWORD" exec mariadb -u "$MARIADB_USER" {base}{flags}; '
-        "fi; "
         "IFS= read -r spanel_u; IFS= read -r spanel_p; "
         "spanel_f=$(mktemp); "
         "chmod 600 \"$spanel_f\"; "
@@ -100,6 +109,12 @@ def credenciales_en_el_contenedor(env: dict[str, str], db: str) -> bool:
     return bool(entorno.get("MARIADB_USER") and entorno.get("MARIADB_PASSWORD"))
 
 
+def _auth_denied(exc: Fallo) -> bool:
+    """MariaDB rejected the credentials (not a broken SQL statement)."""
+    detail = str(exc).lower()
+    return "access denied" in detail or "error 1045" in detail
+
+
 def ejecutar_sql(
     env: dict[str, str],
     db: str,
@@ -111,13 +126,31 @@ def ejecutar_sql(
     batch: bool = True,
     secretos: tuple[str, ...] = (),
 ) -> str:
-    """Run one statement over the credential-safe channel and return stdout."""
-    comando = build_db_command(db, base, batch=batch)
+    """Run one statement over the credential-safe channel and return stdout.
+
+    The site's own credentials (what WordPress itself uses) go first: on a
+    shared MariaDB the container environment can name a different user without
+    grants on this database. The container's `MARIADB_*` values are only a
+    fallback, and only after an authentication failure: a failing statement
+    is never retried blindly.
+    """
     tapar = (password, *secretos)
-    if credenciales_en_el_contenedor(env, db):
-        return pedir(env, comando, secretos=tapar, entrada=sentencia)
-    # Fallback: user and password go first, over stdin, never in argv.
-    return pedir(env, comando, secretos=tapar, entrada=f"{usuario}\n{password}\n{sentencia}")
+    try:
+        return pedir(
+            env,
+            build_db_command(db, base, batch=batch),
+            secretos=tapar,
+            entrada=f"{usuario}\n{password}\n{sentencia}",
+        )
+    except Fallo as exc:
+        if not _auth_denied(exc) or not credenciales_en_el_contenedor(env, db):
+            raise
+        return pedir(
+            env,
+            build_db_command(db, base, batch=batch, from_environment=True),
+            secretos=tapar,
+            entrada=sentencia,
+        )
 
 
 # ---------------------------------------------------------------------------

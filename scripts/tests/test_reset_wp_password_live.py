@@ -691,7 +691,11 @@ def test_la_password_no_aparece_dentro_del_contenedor(sitio: Sitio) -> None:
 def test_ningun_comando_lleva_la_password() -> None:
     """I2: there is one helper, and it does not take the password as text."""
     fuente = (RUTA_DEL_PAQUETE / "database.py").read_text(encoding="utf-8")
-    assert "def build_db_command(db: str, base: str, *, batch: bool = True) -> str:" in fuente
+    assert (
+        "def build_db_command(\n"
+        "    db: str, base: str, *, batch: bool = True, from_environment: bool = False\n"
+        ") -> str:" in fuente
+    )
 
     inicio = fuente.index("def build_db_command(")
     fin = fuente.index("\ndef ", inicio + 1)
