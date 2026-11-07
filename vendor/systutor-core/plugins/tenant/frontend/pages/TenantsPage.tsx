@@ -320,7 +320,6 @@ export default function TenantsPage() {
             <label className="block space-y-1 text-sm text-foreground">
               <span>Sufijo de sitios</span>
               <Input type="text" value={editSiteSuffix} onChange={(e) => { setEditSiteSuffix(e.target.value); setEditError(null); }} placeholder="empresa.com" />
-              <span className="text-xs text-muted-foreground">Informativo: ya no limita los dominios de los sitios. Vacío = sin sufijo.</span>
             </label>
             {editError && <Alert title="Error">{editError}</Alert>}
             <div className="flex justify-end gap-2">
