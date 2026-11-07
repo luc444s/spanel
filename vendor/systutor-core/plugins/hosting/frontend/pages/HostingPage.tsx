@@ -112,14 +112,23 @@ export default function HostingPage() {
     mutationFn: ({ siteId, action }: { siteId: string; action: "start" | "stop" | "restart" }) =>
       operateHostingSite(siteId, action),
     onSuccess: async () => {
-      setOperateTarget(null);
       await queryClient.invalidateQueries({ queryKey: hostingKeys.sites });
     },
-    onError: (error: Error) => {
-      setOperateTarget(null);
-      toast.error(error.message);
-    },
   });
+
+  /**
+   * A.SPEC 0043: the confirm dialog closes at the submit instant; the
+   * operation runs in background and toast.promise reports the result.
+   * Errors keep the real backend message (I2).
+   */
+  function submitOperate(siteId: string, action: "start" | "stop" | "restart") {
+    setOperateTarget(null);
+    toast.promise(operateMutation.mutateAsync({ siteId, action }), {
+      loading: `Aplicando ${OPERATE_LABELS[action]}…`,
+      success: `Sitio ${OPERATE_LABELS[action].toLowerCase()} ejecutado`,
+      error: (error: Error) => error.message || `No se pudo aplicar ${OPERATE_LABELS[action]}`,
+    });
+  }
 
   const deleteMutation = useMutation({
     mutationFn: deleteHostingSite,
@@ -395,10 +404,7 @@ export default function HostingPage() {
               disabled={operateMutation.isPending}
               onClick={() => {
                 if (!operateTarget) return;
-                operateMutation.mutate({
-                  siteId: operateTarget.site.id,
-                  action: operateTarget.action,
-                });
+                submitOperate(operateTarget.site.id, operateTarget.action);
               }}
             >
               {operateMutation.isPending

@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 
 import {
   createHostingProfile,
@@ -8,7 +8,6 @@ import {
   hostingKeys,
   type StaticProfile,
 } from "../api";
-import { Alert } from "@systutor/shell/ui/alert";
 import { Button } from "@systutor/shell/ui/button";
 import { Dialog } from "@systutor/shell/ui/dialog";
 import { toast } from "@systutor/shell/ui/toast";
@@ -94,7 +93,6 @@ export function ProfilesDialog({ open, profiles, onClose }: ProfilesDialogProps)
   const [form, setForm] = useState<FormState | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<StaticProfile | null>(null);
   const [confirmation, setConfirmation] = useState("");
-  const [editError, setEditError] = useState<string | null>(null);
 
   async function refresh() {
     await queryClient.invalidateQueries({ queryKey: hostingKeys.profiles });
@@ -144,41 +142,64 @@ export function ProfilesDialog({ open, profiles, onClose }: ProfilesDialogProps)
       }
     },
     onSuccess: async () => {
-      toast.success(editing ? "Perfil actualizado" : "Perfil creado");
       setForm(null);
       setEditing(null);
-      setEditError(null);
       await refresh();
     },
-    onError: (error: Error) => setEditError(error.message),
   });
+
+  /**
+   * A.SPEC 0043: the form closes at the submit instant (the manager stays
+   * open); the mutation runs in background and toast.promise shows the
+   * pending/final states. Errors keep the backend message (422 included).
+   */
+  function submitProfile(event: FormEvent) {
+    event.preventDefault();
+    setForm(null);
+    setEditing(null);
+    setEditError(null);
+    toast.promise(saveMutation.mutateAsync(), {
+      loading: "Guardando perfil…",
+      success: "Perfil guardado",
+      error: (error: Error) => error.message || "No se pudo guardar el perfil",
+    });
+  }
 
   const deleteMutation = useMutation({
     mutationFn: deleteHostingProfile,
     onSuccess: async () => {
-      toast.success("Perfil eliminado");
       setDeleteTarget(null);
       setConfirmation("");
       await refresh();
     },
-    onError: async (error: Error) => {
-      setDeleteTarget(null);
-      setConfirmation("");
-      toast.error(error.message);
-      await refresh();
-    },
+    onError: async () => await refresh(),
   });
+
+  /**
+   * A.SPEC 0043: the confirm dialog closes at the submit instant; the
+   * DELETE runs in background and toast.promise reports the result with
+   * the real backend message (409 in-use / builtin included).
+   */
+  function submitDeleteProfile() {
+    if (!deleteTarget) return;
+    const id = deleteTarget.id;
+    setDeleteTarget(null);
+    setConfirmation("");
+    toast.promise(deleteMutation.mutateAsync(id), {
+      loading: "Eliminando perfil…",
+      success: "Perfil eliminado",
+      error: (error: Error) => error.message || "No se pudo eliminar el perfil",
+    });
+  }
 
   function openCreate() {
     setEditing(null);
     setForm(EMPTY_FORM);
-    setEditError(null);
   }
 
   function openEdit(profile: StaticProfile) {
     setEditing(profile);
     setForm(formOf(profile));
-    setEditError(null);
   }
 
   const isBuiltin = (profile: StaticProfile) => profile.id === "nginx";
@@ -265,10 +286,7 @@ export function ProfilesDialog({ open, profiles, onClose }: ProfilesDialogProps)
         {form ? (
           <form
             className="space-y-3"
-            onSubmit={(event) => {
-              event.preventDefault();
-              saveMutation.mutate();
-            }}
+            onSubmit={submitProfile}
           >
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground">
@@ -360,7 +378,6 @@ export function ProfilesDialog({ open, profiles, onClose }: ProfilesDialogProps)
                 onChange={(event) => setForm({ ...form, command: event.target.value })}
               />
             </details>
-            {editError ? <Alert title="Error">{editError}</Alert> : null}
             <div className="flex justify-end gap-2">
               <Button
                 type="button"
@@ -411,9 +428,7 @@ export function ProfilesDialog({ open, profiles, onClose }: ProfilesDialogProps)
             disabled={
               !deleteTarget || confirmation !== deleteTarget.id || deleteMutation.isPending
             }
-            onClick={() => {
-              if (deleteTarget) deleteMutation.mutate(deleteTarget.id);
-            }}
+            onClick={submitDeleteProfile}
           >
             {deleteMutation.isPending ? "..." : "Eliminar"}
           </Button>

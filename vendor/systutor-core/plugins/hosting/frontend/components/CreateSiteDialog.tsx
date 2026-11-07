@@ -1,9 +1,10 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type FormEvent } from "react";
 
 import {
   checkHostingDomain,
   createHostingSite,
+  hostingKeys,
   type HostingSiteKind,
   type StaticProfile,
 } from "../api";
@@ -72,6 +73,7 @@ export function CreateSiteDialog({
   onClose,
   onCreated,
 }: CreateSiteDialogProps) {
+  const queryClient = useQueryClient();
   const [kind, setKind] = useState<HostingSiteKind>("wordpress");
   const [profileId, setProfileId] = useState("nginx");
   const [name, setName] = useState("");
@@ -140,23 +142,40 @@ export function CreateSiteDialog({
         domain: data.site.domain ?? domain,
         adminPassword: data.admin_password,
       });
+      // La lista se refresca detrás del usuario (A.SPEC 0043).
+      await queryClient.invalidateQueries({ queryKey: hostingKeys.sites });
     },
-    onError: (error: Error) => toast.error(error.message),
   });
+
+  /**
+   * A.SPEC 0043: the dialog closes at the submit instant; the POST keeps
+   * running in background (react-query) and toast.promise shows the
+   * pending/final states. Errors always surface the backend message.
+   */
+  function submitSite(event: FormEvent) {
+    event.preventDefault();
+    onClose();
+    toast.promise(
+      createMutation.mutateAsync({
+        kind,
+        name: name.trim(),
+        domain: domain.trim(),
+        ...(kind === "static" ? { profile: profileId } : {}),
+      }),
+      {
+        loading: "Creando sitio…",
+        success: (data) =>
+          data.site.domain ? `Sitio creado (${data.site.domain})` : "Sitio creado",
+        error: (error: Error) => error.message || "No se pudo crear el sitio",
+      },
+    );
+  }
 
   return (
     <Dialog open={open} title="Crear sitio" onClose={onClose}>
       <form
         className="space-y-3"
-        onSubmit={(event: FormEvent) => {
-          event.preventDefault();
-          createMutation.mutate({
-            kind,
-            name: name.trim(),
-            domain: domain.trim(),
-            ...(kind === "static" ? { profile: profileId } : {}),
-          });
-        }}
+        onSubmit={submitSite}
       >
         <div className="space-y-1">
           <label className="text-xs text-muted-foreground">Tipo</label>
