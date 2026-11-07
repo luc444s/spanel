@@ -1,0 +1,14 @@
+[Unit]
+Description=SPanel: auto-reparación periódica de Traefik — cada 15 min (A.SPEC 0044)
+Documentation=file:///home/lucas/mailadmin/aspecs/0044-spanel-repair-script.md
+
+[Timer]
+# El cooldown del script es el que evita restarts repetidos; el timer solo
+# releva síntomas con cadencia.
+OnCalendar=*:0/15
+RandomizedDelaySec=3min
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

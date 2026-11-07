@@ -1,0 +1,17 @@
+[Unit]
+Description=SPanel: auto-reparación TLS/rutas de Traefik (A.SPEC 0044)
+Documentation=file:///home/lucas/mailadmin/aspecs/0044-spanel-repair-script.md
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# El script autodetecta contenedor traefik, dynamic-config dir, resolvers,
+# dominios e IP pública; agnóstico al server (flag > env > detect).
+ExecStart=/usr/bin/python3 /usr/local/sbin/spanel-repair.py --fix
+TimeoutStartSec=10min
+Nice=10
+
+[Install]
+WantedBy=multi-user.target
