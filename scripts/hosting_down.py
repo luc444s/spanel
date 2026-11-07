@@ -9,14 +9,16 @@ MariaDB o una convención de Docker.
 No detiene ni modifica contenedores y no elimina imágenes, volúmenes, redes,
 bases de datos, usuarios ni archivos. Si el dominio se publica mediante labels
 Traefik del propio contenedor, bloquea la baja: quitar esa ruta requeriría
-alterar o detener el contenedor.
+alterar o detener el contenedor. ``--keep-labeled-route`` habilita de forma
+explícita el flujo de reemplazo: oculta el sitio y conserva temporalmente los
+labels activos hasta que el nuevo contenedor publique la ruta sustituta.
 
 Sin ``--execute`` es siempre dry-run.
 
 Uso:
     python3 scripts/hosting_down.py --container tutorabusiness
     python3 scripts/hosting_down.py --container tutorabusiness \
-        --execute --confirm tutorabusiness
+        --keep-labeled-route --execute --confirm tutorabusiness
 
 Exit codes: 0 correcto/plan, 1 validación o ejecución, 2 confirmación inválida.
 """
@@ -72,6 +74,7 @@ class DownPlan:
     domain: str
     container_present: bool
     route_file: str | None
+    labeled_route_retained: bool
     domain_reserved: bool
     reserve_domain: bool
     blocked_reason: str | None = None
@@ -108,6 +111,7 @@ def build_plan(
     *,
     container: str,
     operations: ProxyOperations,
+    keep_labeled_route: bool = False,
 ) -> DownPlan:
     """Inspecciona DB, Docker y proxy sin modificar ningún estado."""
     site = _registered_site(db, container)
@@ -130,10 +134,10 @@ def build_plan(
         raise DownError(f"el dominio {domain} aparece en múltiples rutas administradas")
     claim = claims[0] if claims else None
     blocked: str | None = None
-    if labels_route:
+    if labels_route and not keep_labeled_route:
         blocked = (
             "el contenedor publica el dominio mediante labels Traefik; "
-            "la baja lógica no altera contenedores"
+            "usá --keep-labeled-route para ocultarlo conservando temporalmente esa ruta"
         )
     elif claim is not None and claim.container != container:
         blocked = f"la ruta pertenece a otro contenedor: {claim.container}"
@@ -157,6 +161,7 @@ def build_plan(
         domain=domain,
         container_present=info is not None,
         route_file=claim.file if claim else None,
+        labeled_route_retained=labels_route and keep_labeled_route,
         domain_reserved=reserved,
         reserve_domain=not reserved,
         blocked_reason=blocked,
@@ -169,7 +174,10 @@ def print_plan(plan: DownPlan) -> None:
     print(f"  tenant:      {plan.tenant_slug} ({plan.tenant_id})")
     print(f"  dominio:     {plan.domain}")
     print(f"  contenedor:  {'presente; no se tocará' if plan.container_present else 'ausente'}")
-    print(f"  ruta proxy:  {plan.route_file or 'ya ausente'}")
+    if plan.labeled_route_retained:
+        print("  ruta proxy:  labels del contenedor; se conservará temporalmente")
+    else:
+        print(f"  ruta proxy:  {plan.route_file or 'ya ausente'}")
     if plan.reserve_domain:
         print("  namespace:   se reservará para el mismo tenant")
     else:
@@ -186,7 +194,12 @@ def execute_plan(db: Session, plan: DownPlan, operations: ProxyOperations) -> No
         raise DownError(plan.blocked_reason)
 
     # Revalidación de carrera inmediatamente antes de tocar el proxy.
-    fresh = build_plan(db, container=plan.container, operations=operations)
+    fresh = build_plan(
+        db,
+        container=plan.container,
+        operations=operations,
+        keep_labeled_route=plan.labeled_route_retained,
+    )
     if fresh.blocked_reason:
         raise DownError(fresh.blocked_reason)
     if fresh.route_file:
@@ -227,6 +240,7 @@ def execute_plan(db: Session, plan: DownPlan, operations: ProxyOperations) -> No
             "kind": plan.kind,
             "domain": plan.domain,
             "route_removed": bool(plan.route_file),
+            "labeled_route_retained": plan.labeled_route_retained,
             "container_preserved": True,
             "domain_reserved": True,
             "source": "hosting_down.py",
@@ -245,6 +259,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--execute", action="store_true", help="aplica la baja lógica")
     parser.add_argument("--confirm", default="", help="debe coincidir con --container")
+    parser.add_argument(
+        "--keep-labeled-route",
+        action="store_true",
+        help="oculta el sitio pero conserva temporalmente su ruta por labels Traefik",
+    )
     args = parser.parse_args(argv)
 
     # También carga el .env operativo; ProxySettings consume luego ese entorno.
@@ -260,7 +279,12 @@ def main(argv: list[str] | None = None) -> int:
     session_factory = build_session_factory(settings)
     with session_factory() as db:
         try:
-            plan = build_plan(db, container=args.container, operations=operations)
+            plan = build_plan(
+                db,
+                container=args.container,
+                operations=operations,
+                keep_labeled_route=args.keep_labeled_route,
+            )
             print_plan(plan)
             if not args.execute:
                 print("\nSolo dry-run. Para ejecutar agregá --execute --confirm " + plan.container)
