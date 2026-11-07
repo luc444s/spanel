@@ -8,6 +8,7 @@ import {
   listHostingSites,
   listHostingProfiles,
   openHostingSiteDatabase,
+  operateHostingSite,
   resetUserPassword,
   type HostingSite,
   type HostingSiteDatabase,
