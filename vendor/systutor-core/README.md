@@ -136,6 +136,12 @@ A plugin is a directory containing a `plugin.json` manifest:
 }
 ```
 
+Optional `platform_permissions` (A.SPEC 0045): permissions granted additively
+at every boot to each role that already holds `core.platform.admin`. The sync
+is additive-only and never revokes; roles that do not hold `core.platform.admin`
+(such as `tenant_admin`) never receive them. Legacy manifests without the key
+keep loading unchanged.
+
 The backend entrypoint exposes a `register` function:
 
 ```python

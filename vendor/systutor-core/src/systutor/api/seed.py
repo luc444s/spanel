@@ -248,6 +248,11 @@ def ensure_seed(
             )
         granted = sync_permissions(db, tenant, plugins)
         sync_tenant_admin_roles(db, plugins)
+        # A.SPEC 0045: the plugin-permission runtime sync must also run on
+        # existing deployments, not only on the first-boot demo seeding —
+        # new manifest permissions reach the catalog and platform roles
+        # on every boot (idempotent, additive).
+        sync_plugin_registry(db, list(plugins))
         return {
             "status": "permissions_synced",
             "user_email": existing.email,

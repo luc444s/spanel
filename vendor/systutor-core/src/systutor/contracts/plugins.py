@@ -21,6 +21,9 @@ class PluginManifestContract(BaseModel):
     frontend_entrypoint: str
     permissions: list[str] = Field(default_factory=list)
     tenant_admin_permissions: list[str] = Field(default_factory=list)
+    # A.SPEC 0045: permissions granted additively to every role holding
+    # `core.platform.admin` at boot. Optional so legacy manifests keep parsing.
+    platform_permissions: list[str] = Field(default_factory=list)
     events: list[str] = Field(default_factory=list)
     description: str
 
@@ -90,6 +93,18 @@ class PluginManifestContract(BaseModel):
             if not PERMISSION_PATTERN.match(item):
                 raise ValueError(
                     "tenant_admin_permissions must use <module>.<resource>.<action>"
+                )
+        return value
+
+    @field_validator("platform_permissions")
+    @classmethod
+    def validate_platform_permissions(cls, value: list[str]) -> list[str]:
+        if len(set(value)) != len(value):
+            raise ValueError("platform_permissions must not contain duplicates")
+        for item in value:
+            if not PERMISSION_PATTERN.match(item):
+                raise ValueError(
+                    "platform_permissions must use <module>.<resource>.<action>"
                 )
         return value
 
