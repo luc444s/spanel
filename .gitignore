@@ -12,6 +12,7 @@ node_modules/
 *.db
 *.sqlite
 *.sqlite3
+dump.rdb
 *.sql
 *.log
 logs/
