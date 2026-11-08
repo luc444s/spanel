@@ -6,15 +6,73 @@
 
 ## WHY
 
-El Gestor de archivos borra hoy una selección con un `for ... of` que espera un
-`DELETE /entries` por elemento. Cada petición crea un proceso Docker distinto:
+Antes de esta A.SPEC, el Gestor de archivos borraba una selección con un
+`for ... of` que esperaba un `DELETE /entries` por elemento. Cada petición
+creaba un proceso Docker distinto:
 
 - WordPress: 20 archivos tardan una mediana de 2.425 s;
 - estático/helper: 20 archivos tardan una mediana de 8.047 s.
 
 El prototipo E2E de laboratorio demostró que un único `delete_many` síncrono
-reduce esas medianas a 0.116 s y 0.410 s. Con 500 archivos mantuvo 0.148 s y
-0.408 s respectivamente. Traversal, raíz y preflight-all también pasaron.
+elimina ese costo repetido. Traversal, raíz y preflight-all también pasaron.
+
+### Antes y después
+
+Antes, el frontend enviaba un `DELETE` por elemento y esperaba cada respuesta
+antes de continuar. La medición real disponible fue de 20 archivos; 100 y 500
+son proyecciones lineales de ese baseline y se identifican como tales.
+
+Después, el frontend envía un POST con todas las rutas y el backend ejecuta un
+único proceso Docker. Los tres tamaños posteriores son mediciones E2E reales del
+código integrado, con tres rondas y mediana, sobre recursos desechables.
+
+| Runtime | Cantidad | Antes 1-a-1 | Después batch | Mejora aprox. |
+|---|---:|---:|---:|---:|
+| WordPress/PHP | 20 | 2.425 s (real) | 0.117 s | 21x |
+| WordPress/PHP | 100 | ~12.1 s (proyección) | 0.144 s | 84x |
+| WordPress/PHP | 500 | ~60.6 s (proyección) | 0.177 s | 343x |
+| Estático/helper | 20 | 8.047 s (real) | 0.366 s | 22x |
+| Estático/helper | 100 | ~40.2 s (proyección) | 0.494 s | 81x |
+| Estático/helper | 500 | ~201 s (proyección) | 0.579 s | 347x |
+
+La operación sigue siendo síncrona: la petición espera el resultado completo.
+La mejora proviene de pagar autorización, HTTP y arranque Docker una sola vez,
+no de introducir paralelismo, workers ni una cola.
+
+#### Pruebas que originaron y validaron el cambio
+
+**Baseline anterior — lab `ada3b501`:**
+
+- contenedores desechables `spanel-lab-bench-wp-*` y
+  `spanel-lab-bench-static-*`, cada uno con volumen propio;
+- transporte Docker local desde la app del laboratorio;
+- 3 rondas por runtime;
+- creación de 20 archivos de 16 KiB y reproducción exacta del frontend:
+  loop secuencial, una llamada `delete` y un proceso Docker por archivo;
+- medianas observadas: 2.425 s WordPress y 8.047 s estático;
+- también confirmó que `extract` ya era una operación única y rápida, por lo
+  que no formaba parte del problema.
+
+**Prototipo previo a integración — lab `464d153f`:**
+
+- `delete_many` inyectado sólo en el laboratorio, sin modificar producción;
+- lotes de 20, 100 y 500 archivos, 3 rondas por tamaño y runtime;
+- verificó rechazo de traversal y raíz y que el preflight conserva el primer
+  archivo válido cuando una ruta posterior es inválida;
+- confirmó tiempo casi constante y justificó integrar el contrato.
+
+**Código integrado por GENERATOR — lab `8e80fe49`:**
+
+- ejecutó el `container.php` real del working tree, no el prototipo;
+- sembró cada lote mediante ZIP/extract para que la preparación no contaminara
+  el tiempo medido; el cronómetro cubrió sólo `delete_many`;
+- 3 rondas para 20, 100 y 500 archivos en runtime PHP y helper estático;
+- verificó respuesta `deleted=N`, carpeta vacía, traversal, raíz y preflight;
+- confirmó al terminar la ausencia de ambos contenedores y volúmenes lab.
+
+Las pruebas permanentes añadidas por esta A.SPEC cubren además una sola llamada
+al driver, tenant/RBAC, límite 1000, auditoría count-only, duplicados,
+solapamientos padre/hijo y conservación del árbol ante preflight inválido.
 
 ## WHAT
 
@@ -235,16 +293,17 @@ structural_constraints:
   síncrono sin cola ni proceso Docker por archivo.
 - owner: luc444s
 - approver: luc444s
-- benchmark: lab `464d153f`, 2026-11-07, 20/100/500 en php y helper.
-- Commit: pendiente de GENERATOR.
+- benchmarks: baseline `ada3b501`, prototipo `464d153f` e integrado
+  `8e80fe49`, 2026-11-07, 20/100/500 en PHP y helper.
+- Commit: `1feac07`.
 - Deployment: rebuild de `spanel-app` después de integración.
 
 ## Definition of Done
 
-- [ ] Multi-selección envía una petición y crea un proceso Docker.
-- [ ] Preflight completo, límite, duplicados y solapamientos probados.
-- [ ] Single-delete y operaciones no relacionadas permanecen verdes.
-- [ ] API tenant/RBAC y auditoría batch probadas.
-- [ ] Build frontend verde.
-- [ ] E2E WordPress + estático supera baseline y limpia recursos lab.
-- [ ] Sin colas, jobs, nuevos permisos, migraciones ni cambios ajenos.
+- [x] Multi-selección envía una petición y crea un proceso Docker.
+- [x] Preflight completo, límite, duplicados y solapamientos probados.
+- [x] Single-delete y operaciones no relacionadas permanecen verdes.
+- [x] API tenant/RBAC y auditoría batch probadas.
+- [x] Build frontend verde.
+- [x] E2E WordPress + estático supera baseline y limpia recursos lab.
+- [x] Sin colas, jobs, nuevos permisos, migraciones ni cambios ajenos.
