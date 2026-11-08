@@ -1,6 +1,9 @@
+# The mandated root-level test command requires this local package bootstrap.
+# ruff: noqa: E402
 from __future__ import annotations
 
 import asyncio
+import sys
 import threading
 from pathlib import Path
 from typing import cast
@@ -11,6 +14,10 @@ from sqlalchemy import Engine, create_engine, delete, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import QueuePool
 
+CORE = Path(__file__).resolve().parents[4]
+sys.path.insert(0, str(CORE / "src"))
+sys.path.insert(0, str(CORE))
+
 from plugins.filemanager.backend import router as routes
 from plugins.filemanager.backend.tickets import consume
 from plugins.hosting.backend.models import HostingSite
@@ -18,6 +25,7 @@ from plugins.hosting.backend.register import resolve_hosting_files
 from systutor.contracts.file_targets import register_file_target
 from systutor.core.config import Settings
 from systutor.core.database import Base
+from systutor.kernel.audit.models import AuditLog
 from systutor.kernel.auth.models import User
 from systutor.kernel.auth.security import create_access_token
 from systutor.kernel.permissions.models import Permission, Role, RolePermission, UserRole
@@ -146,6 +154,89 @@ def test_provider_scopes_site_and_upload_requires_manage(tmp_path, monkeypatch) 
     try:
         asyncio.run(exercise())
         assert seen == [("demo-wp", "list"), ("demo-wp", "abc")]
+    finally:
+        engine.dispose()
+
+
+def test_batch_delete_uses_one_operation_and_audits_only_the_count(
+    tmp_path, monkeypatch
+) -> None:
+    app, engine, token, own_id, other_id = _app(tmp_path / "batch.sqlite")
+    seen: list[tuple[str, str, dict]] = []
+
+    def fake_operation(target, op, env, **kwargs):
+        seen.append((target.container, op, kwargs))
+        return {"ok": True, "deleted": len(kwargs["paths"])}
+
+    monkeypatch.setattr(routes, "operation", fake_operation)
+
+    async def exercise():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://test",
+            headers={"Authorization": f"Bearer {token}"},
+        ) as client:
+            base = "/api/v1/plugins/filemanager/targets/hosting/"
+            paths = ["folder/a.txt", "folder/b.txt"]
+            response = await client.post(
+                base + own_id + "/entries/delete-batch", json={"paths": paths}
+            )
+            assert response.status_code == 200
+            assert response.json()["deleted"] == 2
+            assert (
+                await client.post(
+                    base + other_id + "/entries/delete-batch", json={"paths": paths}
+                )
+            ).status_code == 404
+            assert (
+                await client.post(
+                    base + own_id + "/entries/delete-batch", json={"paths": []}
+                )
+            ).status_code == 422
+            assert (
+                await client.post(
+                    base + own_id + "/entries/delete-batch", json={"paths": [1]}
+                )
+            ).status_code == 422
+            assert (
+                await client.post(
+                    base + own_id + "/entries/delete-batch",
+                    json={"paths": ["x"] * 1001},
+                )
+            ).status_code == 422
+
+            with app.state.session_factory.begin() as db:
+                permission_id = db.scalar(
+                    select(Permission.id).where(
+                        Permission.name == "filemanager.files.manage"
+                    )
+                )
+                db.execute(
+                    delete(RolePermission).where(
+                        RolePermission.permission_id == permission_id
+                    )
+                )
+            assert (
+                await client.post(
+                    base + own_id + "/entries/delete-batch", json={"paths": paths}
+                )
+            ).status_code == 403
+
+    try:
+        asyncio.run(exercise())
+        assert seen == [
+            (
+                "demo-wp",
+                "delete_many",
+                {"paths": ["folder/a.txt", "folder/b.txt"]},
+            )
+        ]
+        with app.state.session_factory() as db:
+            audit = db.scalar(
+                select(AuditLog).where(AuditLog.action == "filemanager.delete_batch")
+            )
+            assert audit is not None
+            assert audit.details == {"count": 2}
     finally:
         engine.dispose()
 

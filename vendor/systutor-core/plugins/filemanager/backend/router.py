@@ -11,7 +11,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from starlette.types import Receive, Scope, Send
 
 from systutor.contracts.file_targets import FileTarget, resolve_file_target
@@ -51,6 +51,10 @@ class Archive(BaseModel):
 class Extract(BaseModel):
     path: str
     destination: str
+
+
+class DeleteBatch(BaseModel):
+    paths: list[str] = Field(min_length=1, max_length=1000)
 
 
 @dataclass(frozen=True)
@@ -164,7 +168,13 @@ def ticket_access(
 
 
 def audited(
-    request: Request, access: Access, action: str, path: str, result: str = "success"
+    request: Request,
+    access: Access,
+    action: str,
+    path: str | None = None,
+    result: str = "success",
+    *,
+    details: dict | None = None,
 ) -> None:
     with ensure_session_factory(request.app)() as db:
         record_audit(
@@ -180,7 +190,7 @@ def audited(
             result=result,
             correlation_id=getattr(request.state, "correlation_id", None),
             request_id=getattr(request.state, "request_id", None),
-            details={"path": path},
+            details=details if details is not None else {"path": path},
         )
         db.commit()
 
@@ -336,6 +346,22 @@ def rename(body: Rename, request: Request, access: Access = Depends(authorize)) 
 def remove(path: str, request: Request, access: Access = Depends(authorize)) -> dict:
     result = operation(access.target, "delete", docker_environment(), path=path)
     audited(request, access, "filemanager.delete", path)
+    return result
+
+
+@router.post("/entries/delete-batch")
+def remove_batch(
+    body: DeleteBatch, request: Request, access: Access = Depends(authorize)
+) -> dict:
+    result = operation(
+        access.target, "delete_many", docker_environment(), paths=body.paths
+    )
+    audited(
+        request,
+        access,
+        "filemanager.delete_batch",
+        details={"count": len(body.paths)},
+    )
     return result
 
 

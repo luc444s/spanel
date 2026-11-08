@@ -339,12 +339,18 @@ export function FileExplorer({ provider, resourceId, onClose }: Props) {
     if (!deleting) return;
     const targets = deleting;
     setDeleting(null);
-    for (const entry of targets) {
-      try {
+    try {
+      if (targets.length === 1) {
+        const [entry] = targets;
         await apiRequest(`${base}/entries?path=${encodeURIComponent(within(folder, entry.name))}`, { method: "DELETE" });
-      } catch (error) {
-        toast.error(`${entry.name}: ${(error as Error).message}`);
+      } else {
+        await apiRequest(`${base}/entries/delete-batch`, {
+          method: "POST",
+          body: JSON.stringify({ paths: targets.map((entry) => within(folder, entry.name)) }),
+        });
       }
+    } catch (error) {
+      toast.error((error as Error).message);
     }
     setSelected(new Set());
     refresh();

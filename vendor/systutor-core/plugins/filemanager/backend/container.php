@@ -147,6 +147,28 @@ try {
             nonroot($relative);
             delete_tree($path);
             break;
+        case 'delete_many':
+            $paths = $args['paths'] ?? null;
+            if (!is_array($paths) || !array_is_list($paths) || count($paths) < 1 || count($paths) > 1000)
+                fail_op('400', 'Invalid path batch');
+            $prepared = [];
+            foreach ($paths as $item) {
+                if (!is_string($item)) fail_op('400', 'Invalid path batch');
+                nonroot($item);
+                $target = target_path($item);
+                $normalized = implode('/', array_values(array_filter(
+                    explode('/', $item), fn($part) => $part !== ''
+                )));
+                foreach ($prepared as [$existing]) {
+                    if ($normalized === $existing || str_starts_with($normalized, $existing . '/') ||
+                        str_starts_with($existing, $normalized . '/'))
+                        fail_op('400', 'Duplicate or overlapping paths');
+                }
+                $prepared[] = [$normalized, $target];
+            }
+            foreach ($prepared as [, $target]) delete_tree($target);
+            $result = ['deleted' => count($prepared)];
+            break;
         case 'download':
             if (!is_file($path)) fail_op('400', 'Not a file');
             $in = fopen($path, 'rb');

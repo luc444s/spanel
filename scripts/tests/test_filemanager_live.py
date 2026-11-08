@@ -17,7 +17,12 @@ CORE = Path(__file__).resolve().parents[2] / "vendor" / "systutor-core"
 sys.path.insert(0, str(CORE / "src"))
 sys.path.insert(0, str(CORE))
 
-from plugins.filemanager.backend.driver import TRANSFER_LIMIT, download, operation, upload
+from plugins.filemanager.backend.driver import (
+    TRANSFER_LIMIT,
+    download,
+    operation,
+    upload,
+)
 from plugins.hosting.backend.settings import docker_env, get_hosting_settings
 from plugins.hosting.backend.transport import build_docker_argv, run
 from systutor.contracts.file_targets import FileTarget
@@ -41,7 +46,7 @@ def test_wordpress_filemanager_binary_roundtrip_and_zip_confinement() -> None:
             path=folder + "/binary.dat",
         )
         assert uploaded["size"] == len(original)
-        process, chunks = download(target, env, folder + "/binary.dat")
+        _process, chunks = download(target, env, folder + "/binary.dat")
         assert b"".join(chunks) == original
         operation(target, "rename", env, path=folder + "/binary.dat", name="renamed.dat")
         operation(target, "zip", env, path=folder, name="archive.zip", entries=["renamed.dat"])
@@ -49,7 +54,7 @@ def test_wordpress_filemanager_binary_roundtrip_and_zip_confinement() -> None:
         assert operation(
             target, "extract", env, path=folder + "/archive.zip", destination=folder + "/extracted"
         )["extracted"] == 1
-        process, chunks = download(target, env, folder + "/extracted/renamed.dat")
+        _process, chunks = download(target, env, folder + "/extracted/renamed.dat")
         assert b"".join(chunks) == original
 
         archive = io.BytesIO()
@@ -65,6 +70,58 @@ def test_wordpress_filemanager_binary_roundtrip_and_zip_confinement() -> None:
         with pytest.raises(HTTPException) as error:
             operation(target, "list", env, path="../")
         assert error.value.status_code == 400
+
+        for name in ("batch-a.txt", "batch-b.txt", "survivor.txt", "duplicate.txt"):
+            upload(
+                target, "upload", env, io.BytesIO(name.encode()), TRANSFER_LIMIT,
+                path=folder + "/" + name,
+            )
+        deleted = operation(
+            target, "delete_many", env,
+            paths=[folder + "/batch-a.txt", folder + "/batch-b.txt"],
+        )
+        assert deleted["deleted"] == 2
+        names = [entry["name"] for entry in operation(target, "list", env, path=folder)["entries"]]
+        assert "batch-a.txt" not in names and "batch-b.txt" not in names
+
+        with pytest.raises(HTTPException) as error:
+            operation(
+                target, "delete_many", env,
+                paths=[folder + "/survivor.txt", "../escape"],
+            )
+        assert error.value.status_code == 400
+        assert operation(target, "read", env, path=folder + "/survivor.txt")["content"] == "survivor.txt"
+
+        duplicate = folder + "/duplicate.txt"
+        with pytest.raises(HTTPException) as error:
+            operation(target, "delete_many", env, paths=[duplicate, duplicate])
+        assert error.value.status_code == 400
+        assert operation(target, "read", env, path=duplicate)["content"] == "duplicate.txt"
+
+        operation(target, "mkdir", env, path=folder + "/parent")
+        upload(
+            target, "upload", env, io.BytesIO(b"child"), TRANSFER_LIMIT,
+            path=folder + "/parent/child.txt",
+        )
+        with pytest.raises(HTTPException) as error:
+            operation(
+                target, "delete_many", env,
+                paths=[folder + "/parent", folder + "/parent/child.txt"],
+            )
+        assert error.value.status_code == 400
+        assert operation(
+            target, "read", env, path=folder + "/parent/child.txt"
+        )["content"] == "child"
+        with pytest.raises(HTTPException) as error:
+            operation(target, "delete_many", env, paths=[""])
+        assert error.value.status_code == 400
+        with pytest.raises(HTTPException) as error:
+            operation(target, "delete_many", env, paths=[duplicate] * 1001)
+        assert error.value.status_code == 400
+        with pytest.raises(HTTPException) as error:
+            operation(target, "delete_many", env, paths=[duplicate, 1])
+        assert error.value.status_code == 400
+        assert operation(target, "read", env, path=duplicate)["content"] == "duplicate.txt"
 
         upload(
             target, "upload", env, io.BytesIO(b"first"), TRANSFER_LIMIT,
