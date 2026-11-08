@@ -261,6 +261,33 @@ def test_strict_zip_rejects_entry_not_declared(tmp_path: Path):
     assert not fake.calls
 
 
+def test_manifest_larger_than_one_mib_is_accepted(tmp_path: Path):
+    path = tmp_path / "large-manifest.zip"
+    manifest = {
+        "kind": "static",
+        "container": "sitio",
+        "entries": {},
+        "padding": "x" * (1024 * 1024),
+    }
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zipped:
+        zipped.writestr("manifest.json", json.dumps(manifest))
+
+    with zipfile.ZipFile(path) as zipped:
+        assert restore._read_manifest(zipped)["container"] == "sitio"
+
+
+def test_manifest_over_bounded_limit_is_rejected(tmp_path: Path):
+    path = tmp_path / "oversized-manifest.zip"
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zipped:
+        zipped.writestr("manifest.json", b"x" * (restore.MANIFEST_MAX_BYTES + 1))
+
+    with (
+        zipfile.ZipFile(path) as zipped,
+        pytest.raises(restore.StrictVerifyError, match="demasiado grande"),
+    ):
+        restore._read_manifest(zipped)
+
+
 @pytest.mark.parametrize("unsafe", ["site/html/../escape", "/site/html/escape", "site\\html\\x"])
 def test_strict_zip_rejects_traversal_or_noncanonical_names(tmp_path: Path, unsafe: str):
     broken = make_zip(tmp_path, extra={unsafe: b"bad"})

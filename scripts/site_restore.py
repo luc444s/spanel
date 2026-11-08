@@ -34,7 +34,10 @@ EXIT_ERROR = 1
 EXIT_VERIFY = 2
 EXIT_ROLLBACK_FAILED = 3
 DEFAULT_MAX_BYTES = 20 * 1024 * 1024 * 1024
-MANIFEST_MAX_BYTES = 1024 * 1024
+# Manifests contain one hash record per archived file. Real packages with
+# thousands of small WordPress files exceed 1 MiB, so keep a generous but
+# bounded parser limit that remains tiny compared with DEFAULT_MAX_BYTES.
+MANIFEST_MAX_BYTES = 16 * 1024 * 1024
 CHUNK_SIZE = 1024 * 1024
 
 
@@ -248,8 +251,12 @@ def _strict_extract(zip_path: Path, destination: Path, max_bytes: int) -> Restor
 
 def _target(args: argparse.Namespace, tooling: Tooling) -> backup.Target:
     adapter = _backup_tooling(tooling)
+    # site_backup gained an explicit --kind selector after site_restore was
+    # introduced. Restore must always detect the current target; the ZIP kind
+    # is checked separately below and must never select the runtime.
+    target_args = argparse.Namespace(**{**vars(args), "kind": "auto"})
     try:
-        target = backup.build_target(adapter, args.container, args)
+        target = backup.build_target(adapter, args.container, target_args)
         inspected = backup.inspect_container(adapter, args.container)
     except backup.BackupError as exc:
         raise RestoreError(str(exc)) from exc
@@ -445,6 +452,7 @@ def create_safety_backup(args: argparse.Namespace, tooling: Tooling) -> Path:
     os.chmod(directory, 0o700)
     backup_args = argparse.Namespace(
         container=args.container,
+        kind="auto",
         db_container=args.db_container,
         db_host=args.db_host,
         db_user=args.db_user,
