@@ -328,7 +328,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--base-url",
-        default=os.environ.get("SPANEL_E2E_BASE_URL", "https://core.systutor.com"),
+        default=os.environ.get("SPANEL_E2E_BASE_URL", "https://spanel.systutor.com"),
     )
     parser.add_argument("--operation-timeout", type=int, default=300)
     parser.add_argument("--deploy-timeout", type=int, default=2400)
