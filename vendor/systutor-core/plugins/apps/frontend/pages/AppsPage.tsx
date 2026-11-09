@@ -64,8 +64,6 @@ export default function AppsPage() {
       {canCreate ? <Button disabled={!githubStatus.data?.connected} onClick={() => setCreateOpen(true)}>Nueva aplicación</Button> : null}
     </div>
     <GithubConnectionCard canConnect={canConnect} statusQuery={githubStatus} />
-    <Alert title="Modelo de seguridad">La auditoría estática no demuestra seguridad y Docker build ejecuta código no confiable. Los errores bloquean el despliegue sin bypass.</Alert>
-
     {tracked.length ? <div className="space-y-2"><h2 className="text-sm font-semibold">Operaciones activas y recientes</h2>{tracked.map((item) => <OperationTracker key={item.operation_id} operationId={item.operation_id} applicationId={item.application_id} onUpdate={updateOperation} />)}</div> : null}
 
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
