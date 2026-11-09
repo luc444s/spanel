@@ -28,3 +28,4 @@ id_ed25519*
 *.rar
 apps/web/dist/
 apps/web/node_modules/
+/secrets/

@@ -502,6 +502,12 @@ El proyecto está optimizado para desplegarse con [Dokploy](https://dokploy.com/
 ### Manual
 
 ```bash
+# Configurar Manifest Flow de Apps de forma idempotente. Detecta una única
+# label Traefik Host(...), crea/reutiliza secrets/apps_key y actualiza sólo las
+# variables SPANEL_APPS_* de .env.docker. Use --public-url si hay varios hosts.
+python3 scripts/configure_apps.py --dry-run
+python3 scripts/configure_apps.py --restart
+
 # Construir imagen
 docker compose build
 
@@ -513,6 +519,17 @@ docker compose logs -f app
 
 # Detener
 docker compose down
+```
+
+El configurador nunca ejecuta `down`, no recrea PostgreSQL/Redis y arranca
+`apps-worker` sólo después de que `app` responda healthy. Para un origen distinto
+al detectado:
+
+```bash
+python3 scripts/configure_apps.py \
+  --public-url https://panel.example.com \
+  --key-path /opt/spanel/secrets/apps_key \
+  --restart
 ```
 
 ## Troubleshooting
