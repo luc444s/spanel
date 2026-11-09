@@ -1,8 +1,83 @@
-import type { Application, Finding, Operation } from "./types";
+import type { Application, Finding, GithubStatus, Operation } from "./types";
+
+export const GITHUB_CARD_STATES = [
+  "loading", "unconfigured", "registering", "pending_installation",
+  "syncing", "connected", "suspended", "error",
+] as const;
+
+export type GithubCardState = (typeof GITHUB_CARD_STATES)[number];
+
+const GITHUB_ORGANIZATION = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
 
 export const TERMINAL_STATUSES = new Set(["succeeded", "failed", "interrupted"]);
 export const isTerminalOperation = (operation?: Pick<Operation, "status"> | null) =>
   Boolean(operation && TERMINAL_STATUSES.has(operation.status));
+
+const GITHUB_CARD_LABELS: Record<GithubCardState, string> = {
+  loading: "Comprobando estado de GitHub…",
+  unconfigured: "Sin conexión",
+  registering: "Registrando GitHub App…",
+  pending_installation: "App registrada; falta instalar y elegir repositorios",
+  syncing: "Sincronizando repositorios autorizados…",
+  connected: "GitHub conectado",
+  suspended: "Instalación suspendida",
+  error: "No se pudo leer el estado de GitHub",
+};
+
+const GITHUB_ERROR_MESSAGE = "No se pudo leer el estado de GitHub";
+
+export function githubCardContent(state: GithubCardState) {
+  if (state === "error") {
+    return { label: null, alert: GITHUB_ERROR_MESSAGE };
+  }
+  return { label: GITHUB_CARD_LABELS[state], alert: null };
+}
+
+export function githubCardState(input: {
+  loading: boolean;
+  error: boolean;
+  registering: boolean;
+  status?: GithubStatus | null;
+}): GithubCardState {
+  if (input.loading) return "loading";
+  if (input.error) return "error";
+  if (input.registering) return "registering";
+  const state = input.status?.state;
+  if (state === "syncing") return "syncing";
+  if (state === "pending_installation") return "pending_installation";
+  if (state === "connected") return "connected";
+  if (state === "suspended") return "suspended";
+  if (state === "unconfigured") return "unconfigured";
+  return "error";
+}
+
+export function validateGithubManifestUrl(value: string, organization: string | null) {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" || url.hostname !== "github.com" || url.port) {
+      throw new Error("invalid");
+    }
+    if (url.username || url.password || url.search || url.hash) throw new Error("invalid");
+    const path = url.pathname.replace(/\/+$/, "");
+    if (!organization) {
+      if (path !== "/settings/apps/new") throw new Error("invalid");
+    } else {
+      if (!GITHUB_ORGANIZATION.test(organization)) throw new Error("invalid");
+      if (path !== `/organizations/${organization}/settings/apps/new`) throw new Error("invalid");
+    }
+    return url.href;
+  } catch {
+    throw new Error("GitHub devolvió una URL de manifest no válida");
+  }
+}
+
+export function validateGithubOrganization(value: string) {
+  const slug = value.trim();
+  if (!GITHUB_ORGANIZATION.test(slug)) {
+    throw new Error("El slug de organización de GitHub no es válido");
+  }
+  return slug;
+}
 
 export function validateGithubAuthorizationUrl(value: string) {
   const url = new URL(value, window.location.origin);

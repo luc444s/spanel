@@ -1,3 +1,14 @@
+export type GithubStatus = {
+  state: "unconfigured" | "pending_installation" | "syncing" | "connected" | "suspended" | "error";
+  configured: boolean;
+  connected: boolean;
+  reconnect_required: boolean;
+  login?: string | null;
+  provider_count?: number;
+  installation_count?: number;
+  syncing?: boolean;
+};
+
 export type GithubConnection = {
   connected: boolean;
   reconnect_required: boolean;

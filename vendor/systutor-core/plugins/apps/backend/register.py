@@ -9,22 +9,21 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from plugins.apps.backend.crypto import TokenCipher
+from plugins.apps.backend.dispatcher import DramatiqDispatcher
+from plugins.apps.backend.models import Application, Deployment
+from plugins.apps.backend.oauth import GithubHttp, OAuthFlow, RedisStateStore, UrllibGithubHttp
+from plugins.apps.backend.router import router
+from plugins.apps.backend.settings import AppsSettings
 from systutor.contracts.domain_ownership import OwnedSite, register_site_provider
 from systutor.sdk.context import PluginContext
-
-from .crypto import TokenCipher
-from .dispatcher import DramatiqDispatcher
-from .models import Application, Deployment
-from .oauth import OAuthFlow, RedisStateStore, UrllibGithubHttp
-from .router import router
-from .settings import AppsSettings
 
 
 @dataclass
 class AppsResources:
     settings: AppsSettings
     dispatcher: object
-    github_http: object
+    github_http: GithubHttp
     _cipher: TokenCipher | None = None
 
     def cipher(self) -> TokenCipher:

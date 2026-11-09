@@ -19,6 +19,7 @@ from systutor.kernel.tenants.context import TenantContext
 from .models import Application, Deployment, Operation
 from .oauth import OAuthUnavailable
 from .operations import create_operation, dispatch_operation, write_pending_env
+from .readiness import github_status as read_github_status
 from .schemas import (
     ApplicationCreate,
     ApplicationView,
@@ -86,18 +87,41 @@ def _queue(
     return _queued(operation)
 
 
+@router.get("/github/status")
+def github_status(
+    request: Request, db: Session = Depends(get_db_session),
+    user: User = Depends(require_permission("apps.github.connect")),
+) -> dict:
+    """Readiness is DB-only and never requires the encryption key."""
+
+    return read_github_status(
+        db,
+        tenant_id=user.tenant_id,
+        user_id=user.id,
+        settings=_resources(request).settings,
+    )
+
+
 @router.get("/github/connection")
 def github_connection(
     request: Request, db: Session = Depends(get_db_session),
     user: User = Depends(require_permission("apps.github.connect")),
 ) -> dict:
-    row = _service(request, db).connection(user.id)
-    if row is None:
-        return {"connected": False, "reconnect_required": False}
+    """Legacy alias kept until the OAuth surface is retired in 0053E."""
+
+    status = read_github_status(
+        db,
+        tenant_id=user.tenant_id,
+        user_id=user.id,
+        settings=_resources(request).settings,
+    )
     return {
-        "connected": not row.reconnect_required, "reconnect_required": row.reconnect_required,
-        "github_user_id": row.github_user_id, "login": row.login,
-        "avatar_url": row.avatar_url, "scopes": row.scopes,
+        "connected": status["connected"],
+        "reconnect_required": status["reconnect_required"],
+        "github_user_id": status.get("github_user_id"),
+        "login": status.get("login"),
+        "avatar_url": status.get("avatar_url"),
+        "scopes": status.get("scopes", []),
     }
 
 

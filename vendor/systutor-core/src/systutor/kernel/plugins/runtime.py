@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -396,7 +397,12 @@ class PluginRuntime:
         if spec is None or spec.loader is None:
             raise PluginRuntimeError(f"cannot load plugin module: {module_path}")
         module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
+        sys.modules[import_name] = module
+        try:
+            spec.loader.exec_module(module)
+        except Exception:
+            sys.modules.pop(import_name, None)
+            raise
         return module
 
 

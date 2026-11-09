@@ -2,7 +2,7 @@ import { apiRequest } from "@systutor/shell/api/client";
 
 import type {
   AppAction, Application, ApplicationCreate, Deployment, EnvironmentEntry,
-  GithubConnection, Operation, OperationSummary,
+  GithubConnection, GithubStatus, Operation, OperationSummary,
 } from "./types";
 
 const ROOT = "/api/v1/plugins/apps";
@@ -11,6 +11,7 @@ export const appsKeys = {
   applications: ["apps", "applications"] as const,
   application: (id: string) => ["apps", "applications", id] as const,
   deployments: (id: string) => ["apps", "applications", id, "deployments"] as const,
+  status: ["apps", "github", "status"] as const,
   connection: ["apps", "github", "connection"] as const,
   operation: (id: string) => ["apps", "operations", id] as const,
 };
@@ -25,6 +26,7 @@ const operationOptions = (method: string, key: string, body?: unknown) => ({
   ...(body === undefined ? {} : { body: JSON.stringify(body) }),
 });
 
+export const getGithubStatus = () => apiRequest<GithubStatus>(`${ROOT}/github/status`);
 export const getGithubConnection = () => apiRequest<GithubConnection>(`${ROOT}/github/connection`);
 export const startGithubOAuth = () => apiRequest<{ authorization_url: string }>(`${ROOT}/github/oauth/start`, {
   method: "POST", body: JSON.stringify({ redirect: "/app/apps" }),

@@ -6,13 +6,14 @@ import { Button } from "@systutor/shell/ui/button";
 import { toast } from "@systutor/shell/ui/toast";
 import { useAuthStore } from "../../../../../../apps/web/src/features/auth/store";
 
-import { appsKeys, getGithubConnection, listApplications } from "../api";
+import { appsKeys, listApplications } from "../api";
 import { canPlatformMutate } from "../logic";
 import type { Application, Operation, OperationSummary } from "../types";
 import { ApplicationDetail } from "../components/ApplicationDetail";
 import { CreateApplicationDialog } from "../components/CreateApplicationDialog";
 import { GithubConnectionCard } from "../components/GithubConnectionCard";
 import { OperationTracker } from "../components/OperationTracker";
+import { useGithubStatus } from "../useGithubStatus";
 
 export default function AppsPage() {
   const queryClient = useQueryClient();
@@ -29,13 +30,13 @@ export default function AppsPage() {
   const [tracked, setTracked] = useState<OperationSummary[]>([]);
   const [operations, setOperations] = useState<Operation[]>([]);
   const applications = useQuery({ queryKey: appsKeys.applications, queryFn: listApplications });
-  const github = useQuery({ queryKey: appsKeys.connection, queryFn: getGithubConnection, enabled: canConnect, retry: false });
+  const githubStatus = useGithubStatus(canConnect);
 
   useEffect(() => {
     const result = new URLSearchParams(window.location.search).get("github");
     if (result !== "connected" && result !== "error") return;
     window.history.replaceState({}, "", window.location.pathname + window.location.hash);
-    void queryClient.invalidateQueries({ queryKey: appsKeys.connection });
+    void queryClient.invalidateQueries({ queryKey: appsKeys.status });
     result === "connected" ? toast.success("GitHub conectado") : toast.error("No se pudo conectar GitHub");
   }, [queryClient]);
 
@@ -56,9 +57,9 @@ export default function AppsPage() {
   return <section className="space-y-4">
     <div className="flex flex-wrap items-center justify-between gap-2">
       <div><h1 className="text-lg font-semibold text-foreground">Apps</h1><p className="text-sm text-muted-foreground">Despliegues Compose async desde GitHub</p></div>
-      {canCreate ? <Button disabled={!github.data?.connected} onClick={() => setCreateOpen(true)}>Nueva aplicación</Button> : null}
+      {canCreate ? <Button disabled={!githubStatus.data?.connected} onClick={() => setCreateOpen(true)}>Nueva aplicación</Button> : null}
     </div>
-    <GithubConnectionCard canConnect={canConnect} />
+    <GithubConnectionCard canConnect={canConnect} statusQuery={githubStatus} />
     <Alert title="Modelo de seguridad">La auditoría estática no demuestra seguridad y Docker build ejecuta código no confiable. Los errores bloquean el despliegue sin bypass.</Alert>
 
     {tracked.length ? <div className="space-y-2"><h2 className="text-sm font-semibold">Operaciones activas y recientes</h2>{tracked.map((item) => <OperationTracker key={item.operation_id} operationId={item.operation_id} applicationId={item.application_id} onUpdate={updateOperation} />)}</div> : null}
@@ -73,6 +74,6 @@ export default function AppsPage() {
     {applications.data?.length === 0 ? <p className="rounded border border-border p-4 text-sm text-muted-foreground">No hay aplicaciones.</p> : null}
 
     <CreateApplicationDialog open={createOpen} platform={platform} onClose={() => setCreateOpen(false)} onAccepted={accepted} />
-    <ApplicationDetail application={selected} operations={operations} currentUserId={user?.id ?? ""} connected={Boolean(github.data?.connected)} canCreate={canCreate} canManage={canManage} canDeploy={canDeploy} canDelete={canDelete} onClose={() => setSelected(null)} onAccepted={track} />
+    <ApplicationDetail application={selected} operations={operations} currentUserId={user?.id ?? ""} connected={Boolean(githubStatus.data?.connected)} canCreate={canCreate} canManage={canManage} canDeploy={canDeploy} canDelete={canDelete} onClose={() => setSelected(null)} onAccepted={track} />
   </section>;
 }

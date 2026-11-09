@@ -13,6 +13,7 @@ class AppsSettings:
     github_client_secret_file: Path
     encryption_key_file: Path
     oauth_callback_url: str
+    public_url: str
     redis_url: str
     state_root: Path
     key_version: int = 1
@@ -28,6 +29,7 @@ class AppsSettings:
                 os.environ.get("SPANEL_APPS_ENCRYPTION_KEY_FILE", "/run/secrets/apps_key")
             ),
             oauth_callback_url=os.environ.get("SPANEL_APPS_GITHUB_CALLBACK_URL", ""),
+            public_url=os.environ.get("SPANEL_APPS_PUBLIC_URL", ""),
             redis_url=os.environ.get("SYSTUTOR_REDIS_URL", "redis://redis:6379/0"),
             state_root=Path(os.environ.get("SPANEL_APPS_STATE_ROOT", "/var/lib/spanel/apps")),
             key_version=int(os.environ.get("SPANEL_APPS_KEY_VERSION", "1")),
