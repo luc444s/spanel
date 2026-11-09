@@ -154,6 +154,7 @@ class AppsWorker:
             audit = audit_project(checkout, source[2], non_root=True)
             report = {
                 "compose": audit.compose.relative_to(audit.root).as_posix(),
+                "services": sorted(audit.data["services"]),
                 "findings": [finding.__dict__ for finding in audit.findings],
                 "blocking": bool(audit.errors),
             }
@@ -462,8 +463,13 @@ class AppsWorker:
             operation.finished_at = datetime.now(UTC)
             if operation.application_id is not None:
                 app = db.get(Application, operation.application_id)
-                if app is not None and app.active_operation_id == operation.id:
-                    app.active_operation_id = None
+                if app is not None:
+                    if operation.kind == "inspect":
+                        app.status = "blocked" if result.get("blocking") else "inspected"
+                        if not app.compose_file and result.get("compose"):
+                            app.compose_file = str(result["compose"])
+                    if app.active_operation_id == operation.id:
+                        app.active_operation_id = None
             record_apps_audit(
                 db, f"operation.{operation.kind}.complete", tenant_id=operation.tenant_id,
                 actor=operation.actor_user_id, entity_id=operation.application_id,

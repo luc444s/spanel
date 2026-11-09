@@ -390,7 +390,10 @@ def application_detail(db: Session, tenant_id: str, application_id: str) -> dict
         Operation.status == "succeeded",
     ).order_by(Operation.finished_at.desc()))
     report = (latest_inspect.result or latest_inspect.report or {}) if latest_inspect else {}
-    services = sorted((active.manifest or {}).get("containers", {}).keys()) if active else []
+    services = (
+        sorted((active.manifest or {}).get("containers", {}).keys())
+        if active else sorted(report.get("services", [])) if isinstance(report, dict) else []
+    )
     return {
         "id": app.id, "name": app.name, "slug": app.slug,
         "repository": app.repository, "branch": app.branch,

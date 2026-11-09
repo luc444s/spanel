@@ -210,6 +210,7 @@ def test_detail_survives_reload_with_histories_services_and_candidates(tmp_path:
         kind="inspect", status="succeeded", idempotency_key="k", request_hash="h",
         result={
             "compose_candidates": ["compose.yaml"],
+            "services": ["api", "web"],
             "findings": [{"severity": "warning", "code": "x"}],
         },
     ))
@@ -220,6 +221,9 @@ def test_detail_survives_reload_with_histories_services_and_candidates(tmp_path:
     assert detail["compose_candidates"] == ["compose.yaml"]
     assert detail["findings"][0]["code"] == "x"
     assert detail["deployments"][0]["id"] == "d1"
+    app.active_deployment_id = None
+    db.commit()
+    assert catalog.application_detail(db, "t1", app.id)["services"] == ["api", "web"]
 
 
 def test_repository_views_exclude_tombstones_and_cross_tenant(tmp_path: Path) -> None:

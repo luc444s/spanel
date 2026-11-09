@@ -65,7 +65,9 @@ export function ApplicationDetail({ application, canCreate, canManage,
     return item.kind === "inspect" && Array.isArray(candidate?.findings);
   });
   const report = (auditOperation?.result ?? auditOperation?.report ?? {}) as AuditReport;
-  const findings = (detail.data?.findings ?? report.findings ?? []) as Finding[];
+  const operationFindings = Array.isArray(report.findings) ? report.findings : null;
+  const findings = (operationFindings ?? detail.data?.findings ?? []) as Finding[];
+  const hasAuditReport = Boolean(auditOperation);
   const blocked = Boolean(report.blocking) || hasBlockingFindings(findings);
   const logs = appOperations.find((item) => item.kind === "logs" && item.status === "succeeded");
   const sourceConnected = (current?.source_status ?? "source_reconnect_required") === "connected";
@@ -120,7 +122,9 @@ export function ApplicationDetail({ application, canCreate, canManage,
           </div>
         </div> : null}
 
-        {tab === "audit" ? findings.length ? <FindingsReport findings={findings} /> : <Alert title="Sin informe">Ejecutá una inspección para obtener findings.</Alert> : null}
+        {tab === "audit" ? findings.length ? <FindingsReport findings={findings} />
+          : hasAuditReport ? <Alert title="Inspección aprobada">No se encontraron hallazgos.</Alert>
+            : <Alert title="Sin informe">Ejecutá una inspección para obtener findings.</Alert> : null}
         {tab === "deployments" ? <div className="space-y-2">
           {(detail.data?.deployments ?? []).map((deployment) => <div key={deployment.id} className="rounded border border-border p-3 text-sm"><strong>{deployment.status}</strong> · commit <code>{deployment.commit ?? "—"}</code><br /><span className="text-muted-foreground">Servicios: {deployment.services.join(", ") || "—"}</span>{deployment.public_error ? <p>{deployment.public_error}</p> : null}</div>)}
           {(detail.data?.deployments ?? []).length === 0 ? <p className="text-sm text-muted-foreground">Sin deployments.</p> : null}

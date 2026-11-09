@@ -167,7 +167,7 @@ def test_source_operation_requests_a_single_repository_token(
         root_path = Path(root)
         return SimpleNamespace(
             root=root_path, compose=root_path / "compose.yaml",
-            findings=[], errors=[], data={}, dockerfiles={},
+            findings=[], errors=[], data={"services": {"web": {}}}, dockerfiles={},
         )
 
     monkeypatch.setattr(worker_module, "clone_repo", fake_clone)
@@ -180,6 +180,7 @@ def test_source_operation_requests_a_single_repository_token(
     )
     report = worker._source_operation("op2", "a1", "inspect")
     assert report["blocking"] is False
+    assert report["services"] == ["web"]
     assert captured == {
         "repo": "acme/repo", "branch": "main",
         "token": TOKEN, "prompt": "1",
@@ -189,6 +190,30 @@ def test_source_operation_requests_a_single_repository_token(
         "permissions": {"contents": "read"},
     }]
     _assert_token_absent(db)
+
+
+def test_successful_inspect_updates_application_summary(tmp_path: Path) -> None:
+    db = database(tmp_path)
+    cipher = TokenCipher(b"k" * 32)
+    seed(db, cipher)
+    app = db.get(Application, "a1")
+    app.active_operation_id = "op-inspect"
+    db.add(Operation(
+        id="op-inspect", application_id="a1", tenant_id="t1", actor_user_id="u1",
+        kind="inspect", status="running", idempotency_key="inspect", request_hash="h",
+    ))
+    db.commit()
+    worker = AppsWorker(lambda: Session(db.get_bind()), cipher, github=FakeGithub())
+    worker._finish("op-inspect", {
+        "compose": "docker-compose.yml", "services": ["api", "web"],
+        "findings": [], "blocking": False,
+    })
+    db.expire_all()
+    operation = db.get(Operation, "op-inspect")
+    assert operation.status == "succeeded"
+    assert app.status == "inspected"
+    assert app.compose_file == "docker-compose.yml"
+    assert app.active_operation_id is None
 
 
 def _assert_token_absent(db: Session) -> None:
