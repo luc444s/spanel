@@ -131,11 +131,14 @@ def _override(data: dict[str, Any], project: str, non_root: bool) -> str:
             )
         services[service] = config
     output: dict[str, Any] = {"services": services}
-    for section in ("volumes", "networks"):
-        if data.get(section):
-            output[section] = {
-                name: {"labels": {OWNER_LABEL: project}} for name in data[section]
-            }
+    if data.get("volumes"):
+        output["volumes"] = {
+            name: {"labels": {OWNER_LABEL: project}} for name in data["volumes"]
+        }
+    network_names = {"default", *(data.get("networks") or {})}
+    output["networks"] = {
+        name: {"labels": {OWNER_LABEL: project}} for name in network_names
+    }
     return yaml.safe_dump(output, sort_keys=True)
 
 

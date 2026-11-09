@@ -253,6 +253,18 @@ def test_override_adds_confinement_and_ownership() -> None:
     assert service["security_opt"] == ["no-new-privileges:true"]
     assert service["labels"][app.OWNER_LABEL] == "demo"
     assert rendered["volumes"]["data"]["labels"][app.OWNER_LABEL] == "demo"
+    assert rendered["networks"]["default"]["labels"][app.OWNER_LABEL] == "demo"
+
+
+def test_override_labels_implicit_and_declared_networks() -> None:
+    rendered = yaml_load(app._override(
+        {"services": {"worker": {}}, "networks": {"private": {}}}, "demo", True
+    ))
+    assert set(rendered["networks"]) == {"default", "private"}
+    assert all(
+        config["labels"][app.OWNER_LABEL] == "demo"
+        for config in rendered["networks"].values()
+    )
 
 
 def yaml_load(text: str) -> dict[str, object]:
