@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  canPlatformMutate, groupedFindings, hasBlockingFindings, isTerminalOperation,
+  canPlatformMutate, groupedFindings, hasBlockingFindings, isTerminalOperation, parseDotenv,
 } from "./logic";
 import type { Finding } from "./types";
 
@@ -29,6 +29,24 @@ describe("Apps frontend safety logic", () => {
     expect(groupedFindings(findings).error).toHaveLength(1);
     expect(hasBlockingFindings(findings)).toBe(true);
     expect(hasBlockingFindings([finding("warning")])).toBe(false);
+  });
+
+  it("parses pasted dotenv text without splitting values on equals", () => {
+    expect(parseDotenv(`
+# deployment values
+APP_DB_NAME=editors
+export DATABASE_URL=postgresql://user:p=a=s=s@database/editors
+EMPTY=
+`)).toEqual([
+      { name: "APP_DB_NAME", value: "editors" },
+      { name: "DATABASE_URL", value: "postgresql://user:p=a=s=s@database/editors" },
+      { name: "EMPTY", value: "" },
+    ]);
+  });
+
+  it("rejects invalid and duplicate dotenv names", () => {
+    expect(() => parseDotenv("BAD NAME=value")).toThrow("línea 1");
+    expect(() => parseDotenv("API_KEY=one\nAPI_KEY=two")).toThrow("duplicada: API_KEY");
   });
 
 

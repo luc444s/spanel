@@ -1,4 +1,6 @@
-import type { Application, Finding, GithubStatus, Operation } from "./types";
+import type {
+  Application, EnvironmentEntry, Finding, GithubStatus, Operation,
+} from "./types";
 
 export const GITHUB_CARD_STATES = [
   "loading", "unconfigured", "registering", "pending_installation",
@@ -8,10 +10,37 @@ export const GITHUB_CARD_STATES = [
 export type GithubCardState = (typeof GITHUB_CARD_STATES)[number];
 
 const GITHUB_ORGANIZATION = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
+const ENVIRONMENT_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 export const TERMINAL_STATUSES = new Set(["succeeded", "failed", "interrupted"]);
 export const isTerminalOperation = (operation?: Pick<Operation, "status"> | null) =>
   Boolean(operation && TERMINAL_STATUSES.has(operation.status));
+
+export function parseDotenv(text: string): EnvironmentEntry[] {
+  const entries: EnvironmentEntry[] = [];
+  const names = new Set<string>();
+  for (const [index, raw] of text.split(/\r?\n/).entries()) {
+    const trimmed = raw.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const line = trimmed.startsWith("export ") ? trimmed.slice(7).trimStart() : raw;
+    const separator = line.indexOf("=");
+    const name = separator < 0 ? "" : line.slice(0, separator).trim();
+    if (!ENVIRONMENT_NAME.test(name)) {
+      throw new Error(`Variable .env inválida en la línea ${index + 1}`);
+    }
+    if (names.has(name)) {
+      throw new Error(`Variable .env duplicada: ${name}`);
+    }
+    const value = line.slice(separator + 1);
+    if (value.includes("\0") || value.length > 8192) {
+      throw new Error(`Valor .env inválido para ${name}`);
+    }
+    names.add(name);
+    entries.push({ name, value });
+  }
+  if (entries.length > 100) throw new Error("El deployment admite hasta 100 variables");
+  return entries;
+}
 
 const GITHUB_CARD_LABELS: Record<GithubCardState, string> = {
   loading: "Comprobando estado de GitHub…",
