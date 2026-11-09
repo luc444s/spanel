@@ -105,10 +105,8 @@ def settings(tmp_path: Path) -> AppsSettings:
     key_file = tmp_path / "apps_key"
     key_file.write_text("x" * 32, encoding="utf-8")
     return AppsSettings(
-        github_client_id="", github_client_secret_file=tmp_path / "missing",
-        encryption_key_file=key_file, oauth_callback_url="",
-        public_url="https://panel.example", redis_url="redis://unused",
-        state_root=tmp_path / "state",
+        encryption_key_file=key_file, public_url="https://panel.example",
+        redis_url="redis://unused", state_root=tmp_path / "state",
     )
 
 

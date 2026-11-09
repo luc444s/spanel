@@ -20,7 +20,6 @@ from systutor.kernel.tenants.context import TenantContext
 from . import catalog
 from .manifest_flow import ManifestFlow
 from .models import Application, Deployment, Operation
-from .oauth import OAuthUnavailable
 from .operations import create_operation, dispatch_operation, write_pending_env
 from .schemas import (
     ApplicationCreate,
@@ -28,15 +27,13 @@ from .schemas import (
     DeleteRequest,
     DeployRequest,
     ManifestStartRequest,
-    OAuthStartRequest,
     OperationDetail,
     OperationView,
     ProviderView,
-    ReconnectRequest,
     RepositoryView,
     SourceUpdate,
 )
-from .service import AppsService, audit
+from .service import audit
 from .states import StateUnavailable
 
 router = APIRouter(tags=["apps"])
@@ -47,10 +44,6 @@ def _resources(request: Request):
     if resources is None:
         raise AppError("Apps is unavailable", status_code=503, code="apps.unavailable")
     return resources
-
-
-def _service(request: Request, db: Session) -> AppsService:
-    return AppsService(db, _resources(request).cipher())
 
 
 def _production() -> bool:
@@ -211,71 +204,6 @@ def github_provider_delete(
     return Response(status_code=204)
 
 
-@router.get("/github/connection")
-def github_connection(
-    request: Request, db: Session = Depends(get_db_session),
-    user: User = Depends(require_permission("apps.github.connect")),
-) -> dict:
-    """Legacy alias kept until the OAuth surface is retired in 0053E."""
-
-    status = catalog.status(
-        db, user.tenant_id, _resources(request).settings, production=_production()
-    )
-    return {
-        "connected": status["connected"],
-        "reconnect_required": status["reconnect_required"],
-        "login": status.get("login"),
-        "scopes": [],
-    }
-
-
-@router.post("/github/oauth/start")
-def github_oauth_start(
-    body: OAuthStartRequest, request: Request,
-    user: User = Depends(require_permission("apps.github.connect")),
-) -> dict:
-    try:
-        start = _resources(request).oauth().start(user.id, body.redirect)
-    except OAuthUnavailable as exc:
-        raise AppError(
-            "OAuth state store unavailable", status_code=503, code="apps.oauth_unavailable"
-        ) from exc
-    return {"authorization_url": start.authorization_url}
-
-
-@router.get("/github/oauth/callback", include_in_schema=True)
-def github_oauth_callback(code: str, state: str, request: Request,
-                          db: Session = Depends(get_db_session)) -> RedirectResponse:
-    try:
-        user_id, tokens, identity = _resources(request).oauth().callback(code, state)
-    except OAuthUnavailable as exc:
-        raise AppError(
-            "OAuth state store unavailable", status_code=503, code="apps.oauth_unavailable"
-        ) from exc
-    user = db.get(User, user_id)
-    if user is None or not user.is_active:
-        raise AppError("OAuth user is unavailable", status_code=404, code="apps.oauth_user_invalid")
-    _service(request, db).save_connection(user_id, tokens, identity, user.tenant_id)
-    return RedirectResponse("/app/apps?github=connected", status_code=303)
-
-
-@router.post("/github/disconnect", status_code=204)
-def github_disconnect(
-    request: Request, db: Session = Depends(get_db_session),
-    user: User = Depends(require_permission("apps.github.connect")),
-) -> Response:
-    resources = _resources(request)
-    try:
-        secret = resources.settings.read_secret(resources.settings.github_client_secret_file)
-    except OSError:
-        secret = ""
-    _service(request, db).disconnect(
-        user, resources.github_http, resources.settings.github_client_id,
-        secret,
-    )
-    return Response(status_code=204)
-
-
 @router.post("/applications", response_model=ApplicationView, status_code=201)
 def create_application(
     body: ApplicationCreate, request: Request, db: Session = Depends(get_db_session),
@@ -327,20 +255,6 @@ def list_operations(
         Operation.tenant_id == context.current_tenant_id,
     ).order_by(Operation.created_at.desc())).all()
     return [_operation_dict(row) for row in rows]
-
-
-@router.post("/applications/{application_id}/source/reconnect", status_code=204)
-def reconnect_source(
-    application_id: str, body: ReconnectRequest, request: Request,
-    db: Session = Depends(get_db_session), context: TenantContext = Depends(get_current_tenant_context),
-    user: User = Depends(require_permission("apps.applications.create")),
-) -> Response:
-    service = _service(request, db)
-    service.reconnect(
-        catalog.get_application(db, context.current_tenant_id, application_id),
-        body.source_connection_user_id, user.id,
-    )
-    return Response(status_code=204)
 
 
 @router.post("/applications/{application_id}/inspect", response_model=OperationView, status_code=202)

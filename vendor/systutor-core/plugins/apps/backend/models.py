@@ -27,26 +27,6 @@ def new_id() -> str:
     return str(uuid4())
 
 
-class GithubConnection(Base):
-    __tablename__ = "apps_github_connections"
-
-    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
-    github_user_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    login: Mapped[str] = mapped_column(String(255), nullable=False)
-    avatar_url: Mapped[str | None] = mapped_column(String(1000))
-    scopes: Mapped[list[str]] = mapped_column(JSON, default=list)
-    access_ciphertext: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
-    access_nonce: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
-    refresh_ciphertext: Mapped[bytes | None] = mapped_column(LargeBinary)
-    refresh_nonce: Mapped[bytes | None] = mapped_column(LargeBinary)
-    key_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    access_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    refresh_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    reconnect_required: Mapped[bool] = mapped_column(Boolean, default=False)
-    connected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
-    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-
-
 class GithubProvider(Base):
     __tablename__ = "apps_github_providers"
 

@@ -95,13 +95,6 @@ export function validateGithubOrganization(value: string) {
   return slug;
 }
 
-export function validateGithubAuthorizationUrl(value: string) {
-  const url = new URL(value, window.location.origin);
-  if (url.protocol !== "https:" || url.hostname !== "github.com") {
-    throw new Error("GitHub devolvió una URL de autorización no válida");
-  }
-  return url.href;
-}
 
 export function groupedFindings(findings: Finding[]) {
   return {

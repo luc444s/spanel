@@ -8,10 +8,6 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 
-class OAuthStartRequest(BaseModel):
-    redirect: str = "/app/apps"
-
-
 class ManifestStartRequest(BaseModel):
     owner_type: Literal["personal", "organization"] = "personal"
     organization: str | None = Field(default=None, max_length=39)
@@ -74,10 +70,6 @@ class SourceUpdate(BaseModel):
 
 class DeployRequest(BaseModel):
     environment: list[tuple[str, str]] = Field(default_factory=list, max_length=100)
-
-
-class ReconnectRequest(BaseModel):
-    source_connection_user_id: str
 
 
 class DeleteRequest(BaseModel):

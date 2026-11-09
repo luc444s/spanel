@@ -1,4 +1,8 @@
-"""Destructive opt-in Apps API E2E. Never prints credentials or environment values."""
+"""Opt-in destructive Apps E2E against a real GitHub App installation.
+
+Never prints credentials, tokens, PEMs or environment values. With
+``SPANEL_LIVE_TESTS=0`` the module reports an explicit skip.
+"""
 from __future__ import annotations
 
 import json
@@ -17,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[2]
 PLUGIN_ROOT = ROOT / "vendor" / "systutor-core" / "plugins"
 sys.path.insert(0, str(PLUGIN_ROOT))
 
-from apps.backend.runtime import Runner  # noqa: E402
+from apps.backend.runtime import Runner
 
 LIVE = os.environ.get("SPANEL_LIVE_TESTS") == "1"
 pytestmark = pytest.mark.skipif(
@@ -25,9 +29,12 @@ pytestmark = pytest.mark.skipif(
     reason="live Apps E2E requires SPANEL_LIVE_TESTS=1 and explicit lab configuration",
 )
 
-REPOSITORY = "luc444s/software-de-gestion-para-editores"
-BRANCH = "feature/workflow-diseno"
 TERMINAL = {"succeeded", "failed", "interrupted"}
+SECRET_KEYS = {
+    "token", "access_token", "refresh_token", "private_key", "pem",
+    "ciphertext", "nonce", "client_secret", "webhook_secret", "code", "state",
+    "verifier", "jwt", "installation_token",
+}
 
 
 class Api:
@@ -82,17 +89,14 @@ def environment_from_file() -> list[list[str]]:
     return entries
 
 
-def containers(runner: Runner) -> dict[str, dict]:
-    completed = runner.run(["docker", "ps", "--format", "{{json .}}"])
-    rows = [json.loads(line) for line in completed.stdout.splitlines() if line.strip()]
-    return {row["ID"]: row for row in rows}
-
-
-def target_container_ids(runner: Runner, project: str) -> set[str]:
-    output = runner.run([
-        "docker", "ps", "--filter", f"label=io.spanel.app.owner={project}", "--format", "{{.ID}}",
-    ]).stdout
-    return {line.strip() for line in output.splitlines() if line.strip()}
+def assert_no_secret_keys(value: object, path: str = "") -> None:
+    if isinstance(value, dict):
+        for key, item in value.items():
+            assert key.lower() not in SECRET_KEYS, f"secret field at {path}.{key}"
+            assert_no_secret_keys(item, f"{path}.{key}")
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            assert_no_secret_keys(item, f"{path}[{index}]")
 
 
 def queue(api: Api, application_id: str, suffix: str, body: object | None = None) -> dict:
@@ -104,18 +108,61 @@ def queue(api: Api, application_id: str, suffix: str, body: object | None = None
     return operation
 
 
+def evidence(path_env: str, payload: dict) -> None:
+    target = os.environ.get(path_env, "")
+    if not target:
+        return
+    path = Path(target)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, sort_keys=True, indent=2), encoding="utf-8")
+    path.chmod(0o600)
+
+
+def target_container_ids(runner: Runner, project: str) -> set[str]:
+    output = runner.run([
+        "docker", "ps", "--filter", f"label=io.spanel.app.owner={project}", "--format", "{{.ID}}",
+    ]).stdout
+    return {line.strip() for line in output.splitlines() if line.strip()}
+
+
+def select_source(api: Api) -> tuple[str, str, str]:
+    _, providers = api.request("GET", "/api/v1/plugins/apps/github/providers")
+    _, installations = api.request("GET", "/api/v1/plugins/apps/github/installations")
+    assert_no_secret_keys(providers)
+    assert_no_secret_keys(installations)
+    active = [row for row in installations if row["status"] == "active"]
+    assert active, "no active GitHub installation"
+    installation_id = os.environ.get("SPANEL_APP_LIVE_INSTALLATION_ID") or active[0]["id"]
+    _, repositories = api.request(
+        "GET", f"/api/v1/plugins/apps/github/installations/{installation_id}/repositories"
+    )
+    assert_no_secret_keys(repositories)
+    assert repositories, "installation has no authorized repositories"
+    repository_id = os.environ.get("SPANEL_APP_LIVE_REPOSITORY_ID") or repositories[0]["id"]
+    selected = next(row for row in repositories if row["id"] == repository_id)
+    branch = os.environ.get("SPANEL_APP_LIVE_BRANCH") or selected["default_branch"] or "main"
+    return installation_id, repository_id, branch
+
+
 def test_real_github_worker_ssh_proxy_flow_leaves_application_running() -> None:
     api = Api()
     runner = Runner("ssh")
     project = os.environ.get("SPANEL_APP_LIVE_RUNTIME_PROJECT", "")
     assert project, "SPANEL_APP_LIVE_RUNTIME_PROJECT is required for non-root proof"
-    before = containers(runner)
+    before = {
+        row["ID"]: row for row in (
+            json.loads(line) for line in runner.run(
+                ["docker", "ps", "--format", "{{json .}}"]
+            ).stdout.splitlines() if line.strip()
+        )
+    }
     foreign_before = set(before) - target_container_ids(runner, project)
 
-    status, connection = api.request("GET", "/api/v1/plugins/apps/github/connection")
-    assert status == 200 and connection["connected"] is True
-    # Metadata only: OAuth tokens/codes/state/verifiers must never reach this client.
-    assert not ({"token", "access_token", "refresh_token", "code", "state", "verifier"} & connection.keys())
+    status, readiness = api.request("GET", "/api/v1/plugins/apps/github/status")
+    assert status == 200
+    assert readiness["state"] in {"connected", "syncing"}
+    assert_no_secret_keys(readiness)
+    installation_id, repository_id, branch = select_source(api)
 
     _, applications = api.request("GET", "/api/v1/plugins/apps/applications")
     name = os.environ.get("SPANEL_APP_LIVE_NAME", "Editors live E2E")
@@ -126,12 +173,14 @@ def test_real_github_worker_ssh_proxy_flow_leaves_application_running() -> None:
         port = int(os.environ.get("SPANEL_APP_LIVE_INGRESS_PORT", "80"))
         assert domain, "SPANEL_APP_LIVE_DOMAIN is required"
         status, application = api.request("POST", "/api/v1/plugins/apps/applications", {
-            "name": name, "repository": REPOSITORY, "branch": BRANCH,
+            "name": name, "installation_id": installation_id,
+            "repository_id": repository_id, "branch": branch,
             "compose_file": os.environ.get("SPANEL_APP_LIVE_COMPOSE_FILE") or None,
             "domain": domain, "ingress_service": service, "ingress_port": port,
         })
         assert status == 201
-    assert application["repository"] == REPOSITORY and application["branch"] == BRANCH
+    assert application["source_installation_id"] == installation_id
+    assert application["source_repository_id"] == repository_id
 
     inspect = queue(api, application["id"], "inspect")
     inspected, inspect_phases = poll(api, inspect["operation_id"])
@@ -141,12 +190,18 @@ def test_real_github_worker_ssh_proxy_flow_leaves_application_running() -> None:
     assert report["blocking"] is False
     assert not [item for item in report["findings"] if item["severity"] == "error"]
 
-    deploy = queue(api, application["id"], "deployments", {"environment": environment_from_file()})
-    deployed, _ = poll(api, deploy["operation_id"])
+    first = queue(api, application["id"], "deployments", {"environment": environment_from_file()})
+    deployed, _ = poll(api, first["operation_id"])
     assert deployed["status"] == "succeeded"
+    first_deployment = deployed["result"]["deployment_id"]
 
-    after = containers(runner)
-    # Apps deployment must not remove resources that predated it (including Hosting).
+    after = {
+        row["ID"]: row for row in (
+            json.loads(line) for line in runner.run(
+                ["docker", "ps", "--format", "{{json .}}"]
+            ).stdout.splitlines() if line.strip()
+        )
+    }
     assert foreign_before.issubset(after)
     target_rows = [after[identifier] for identifier in target_container_ids(runner, project)]
     assert len(target_rows) == 3
@@ -167,5 +222,66 @@ def test_real_github_worker_ssh_proxy_flow_leaves_application_running() -> None:
         completed, _ = poll(api, accepted["operation_id"])
         assert completed["status"] == "succeeded"
 
+    # A second deployment is immutable: new deployment id, previous history kept.
+    second = queue(api, application["id"], "deployments", {"environment": environment_from_file()})
+    deployed_second, _ = poll(api, second["operation_id"])
+    assert deployed_second["status"] == "succeeded"
+    second_deployment = deployed_second["result"]["deployment_id"]
+    assert second_deployment != first_deployment
+    _, detail = api.request("GET", f"/api/v1/plugins/apps/applications/{application['id']}")
+    deployment_ids = {row["id"] for row in detail["deployments"]}
+    assert {first_deployment, second_deployment} <= deployment_ids
+    assert detail["active_deployment"]["id"] == second_deployment
+    _, operations = api.request(
+        "GET", f"/api/v1/plugins/apps/applications/{application['id']}/operations"
+    )
+    assert {first["operation_id"], second["operation_id"]} <= {row["id"] for row in operations}
+
     _, final_application = api.request("GET", f"/api/v1/plugins/apps/applications/{application['id']}")
     assert final_application["status"] == "running"
+    evidence("SPANEL_APP_LIVE_EVIDENCE", {
+        "application_id": application["id"],
+        "installation_id": installation_id,
+        "repository_id": repository_id,
+        "deployments": [first_deployment, second_deployment],
+        "operations": [first["operation_id"], second["operation_id"]],
+        "domain": domain,
+        "status": final_application["status"],
+        "services": detail["services"],
+    })
+
+
+@pytest.mark.skipif(
+    not os.environ.get("SPANEL_APP_LIVE_BAD_BRANCH"),
+    reason="unhealthy-release rollback needs SPANEL_APP_LIVE_BAD_BRANCH",
+)
+def test_unhealthy_release_restores_previous_deployment() -> None:
+    api = Api()
+    _, applications = api.request("GET", "/api/v1/plugins/apps/applications")
+    name = os.environ.get("SPANEL_APP_LIVE_NAME", "Editors live E2E")
+    application = next((item for item in applications if item["name"] == name), None)
+    assert application, "run the healthy flow first"
+    _, before = api.request("GET", f"/api/v1/plugins/apps/applications/{application['id']}")
+    active_before = before["active_deployment"]["id"]
+    good_branch = application["branch"]
+    installation_id, repository_id, _ = select_source(api)
+    status, _ = api.request(
+        "PATCH", f"/api/v1/plugins/apps/applications/{application['id']}/source", {
+            "installation_id": installation_id, "repository_id": repository_id,
+            "branch": os.environ["SPANEL_APP_LIVE_BAD_BRANCH"],
+        },
+    )
+    assert status == 200
+    try:
+        deploy = queue(api, application["id"], "deployments", {"environment": environment_from_file()})
+        failed, _ = poll(api, deploy["operation_id"])
+        assert failed["status"] == "failed"
+        _, after = api.request("GET", f"/api/v1/plugins/apps/applications/{application['id']}")
+        assert after["active_deployment"]["id"] == active_before
+    finally:
+        api.request(
+            "PATCH", f"/api/v1/plugins/apps/applications/{application['id']}/source", {
+                "installation_id": installation_id, "repository_id": repository_id,
+                "branch": good_branch,
+            },
+        )

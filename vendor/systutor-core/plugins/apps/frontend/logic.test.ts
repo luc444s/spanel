@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   canPlatformMutate, groupedFindings, hasBlockingFindings, isTerminalOperation,
-  validateGithubAuthorizationUrl,
 } from "./logic";
 import type { Finding } from "./types";
 
@@ -32,12 +31,5 @@ describe("Apps frontend safety logic", () => {
     expect(hasBlockingFindings([finding("warning")])).toBe(false);
   });
 
-  it("accepts only an HTTPS github.com authorization host", () => {
-    vi.stubGlobal("window", { location: { origin: "https://panel.example" } });
-    expect(validateGithubAuthorizationUrl("https://github.com/login/oauth/authorize?client_id=x"))
-      .toContain("https://github.com/");
-    expect(() => validateGithubAuthorizationUrl("https://github.com.evil.test/login")).toThrow();
-    expect(() => validateGithubAuthorizationUrl("http://github.com/login")).toThrow();
-    vi.unstubAllGlobals();
-  });
+
 });

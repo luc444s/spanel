@@ -36,8 +36,7 @@ def settings(
     else:
         key_file.unlink(missing_ok=True)
     return AppsSettings(
-        github_client_id="", github_client_secret_file=tmp_path / "missing",
-        encryption_key_file=key_file, oauth_callback_url="", public_url=public,
+        encryption_key_file=key_file, public_url=public,
         redis_url="redis://unused", state_root=tmp_path / "state",
     )
 

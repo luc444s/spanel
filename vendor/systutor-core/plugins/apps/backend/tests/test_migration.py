@@ -10,13 +10,12 @@ import systutor.kernel.models  # noqa: F401
 from plugins.apps.backend.models import Application, Operation
 from systutor.core.database import Base
 
-MIGRATION = (
-    Path(__file__).resolve().parents[2] / "migrations" / "002_add_github_apps.py"
-)
+MIGRATIONS = Path(__file__).resolve().parents[2] / "migrations"
+MIGRATION = MIGRATIONS / "002_add_github_apps.py"
 
 
-def load():
-    spec = importlib.util.spec_from_file_location("apps_migration_002", MIGRATION)
+def load(path: Path = MIGRATION, name: str = "apps_migration_002"):
+    spec = importlib.util.spec_from_file_location(name, path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -69,3 +68,19 @@ def test_migration_ddl_accepts_both_engine_and_session(tmp_path: Path) -> None:
         migration._execute(db, "CREATE TABLE session_probe (id INTEGER)")
         db.commit()
     assert "session_probe" in inspect(engine).get_table_names()
+
+
+def test_legacy_oauth_table_is_preserved_by_migrations(tmp_path: Path) -> None:
+    engine = create_engine(f"sqlite+pysqlite:///{tmp_path / 'legacy-oauth.db'}")
+    migration_001 = load(MIGRATIONS / "001_create_apps_tables.py", "apps_migration_001")
+    with Session(engine) as db:
+        migration_001.upgrade(db)
+        migration_002 = load()
+        migration_002.upgrade(db)
+        db.commit()
+    tables = set(inspect(engine).get_table_names())
+    assert "apps_github_connections" in tables
+    assert {
+        "apps_github_providers", "apps_github_installations",
+        "apps_github_repositories",
+    } <= tables

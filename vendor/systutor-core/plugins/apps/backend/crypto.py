@@ -33,27 +33,10 @@ class TokenCipher:
         return cls(key, key_version)
 
     @staticmethod
-    def _aad(user_id: str, version: int) -> bytes:
-        return f"github\0{user_id}\0{version}".encode()
-
-    @staticmethod
     def scoped_aad(
         purpose: str, tenant_id: str, provider_id: str, version: int
     ) -> bytes:
         return f"{purpose}\0{tenant_id}\0{provider_id}\0{version}".encode()
-
-    def encrypt(self, user_id: str, plaintext: str) -> EncryptedValue:
-        nonce = os.urandom(12)
-        ciphertext = self._cipher.encrypt(
-            nonce, plaintext.encode(), self._aad(user_id, self.key_version)
-        )
-        return EncryptedValue(ciphertext, nonce, self.key_version)
-
-    def decrypt(self, user_id: str, value: EncryptedValue) -> str:
-        plaintext = self._cipher.decrypt(
-            value.nonce, value.ciphertext, self._aad(user_id, value.key_version)
-        )
-        return plaintext.decode()
 
     def encrypt_scoped(
         self, purpose: str, tenant_id: str, provider_id: str, plaintext: str
