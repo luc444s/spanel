@@ -37,6 +37,7 @@ from .runtime import (
     Runner,
     audit_project,
     clone_repo,
+    compose_candidates,
     deploy,
     lifecycle,
 )
@@ -174,6 +175,10 @@ class AppsWorker:
             audit = audit_project(checkout, source[2], non_root=True)
             report = {
                 "compose": audit.compose.relative_to(audit.root).as_posix(),
+                "compose_candidates": [
+                    path.relative_to(audit.root).as_posix()
+                    for path in compose_candidates(audit.root)
+                ],
                 "services": sorted(audit.data["services"]),
                 "findings": [finding.__dict__ for finding in audit.findings],
                 "blocking": bool(audit.errors),

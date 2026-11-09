@@ -15,7 +15,7 @@ from .deployment import (
 )
 from .docker_audit import _is_root_user
 from .lifecycle import _redact, _redaction_values, lifecycle
-from .source import clone_repo, discover_compose
+from .source import clone_repo, compose_candidates, discover_compose
 from .transport import Runner
 from .types import (
     MANIFEST,
@@ -52,6 +52,7 @@ __all__ = [
     "_verify_containers",
     "audit_project",
     "clone_repo",
+    "compose_candidates",
     "deploy",
     "discover_compose",
     "lifecycle",

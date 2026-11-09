@@ -41,6 +41,9 @@ def test_discovery_zero_one_multiple_and_explicit(tmp_path: Path) -> None:
     assert app.discover_compose(tmp_path) == first
     second = tmp_path / "docker-compose.dokploy.yml"
     second.write_text("services: {}", encoding="utf-8")
+    assert [path.name for path in app.compose_candidates(tmp_path)] == [
+        "compose.yaml", "docker-compose.dokploy.yml",
+    ]
     with pytest.raises(app.AppDeployError, match="multiple.*compose.yaml.*dokploy"):
         app.discover_compose(tmp_path)
     assert app.discover_compose(tmp_path, second.name) == second

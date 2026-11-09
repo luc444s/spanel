@@ -229,6 +229,8 @@ def test_source_operation_requests_a_single_repository_token(
 
     def fake_audit(root, compose, non_root=True):
         root_path = Path(root)
+        root_path.mkdir(parents=True, exist_ok=True)
+        root_path.joinpath("compose.yaml").write_text("services: {web: {}}")
         return SimpleNamespace(
             root=root_path, compose=root_path / "compose.yaml",
             findings=[], errors=[], data={"services": {"web": {}}}, dockerfiles={},
@@ -245,6 +247,7 @@ def test_source_operation_requests_a_single_repository_token(
     report = worker._source_operation("op2", "a1", "inspect")
     assert report["blocking"] is False
     assert report["services"] == ["web"]
+    assert report["compose_candidates"] == ["compose.yaml"]
     assert captured == {
         "repo": "acme/repo", "branch": "main",
         "token": TOKEN, "prompt": "1",

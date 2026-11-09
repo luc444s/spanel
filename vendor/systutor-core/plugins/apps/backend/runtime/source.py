@@ -73,14 +73,9 @@ def clone_repo(
     )
 
 
-def discover_compose(root: Path, selected: str | None = None) -> Path:
+def compose_candidates(root: Path) -> list[Path]:
     root = root.resolve(strict=True)
-    if selected:
-        candidate = _resolve_inside(root / selected, root, "Compose file")
-        if not candidate.is_file():
-            raise AppDeployError("Compose selection is not a regular file")
-        return candidate
-    candidates = sorted(
+    return sorted(
         path
         for path in root.iterdir()
         if path.is_file()
@@ -89,6 +84,16 @@ def discover_compose(root: Path, selected: str | None = None) -> Path:
             or re.fullmatch(r"docker-compose\..+\.ya?ml", path.name)
         )
     )
+
+
+def discover_compose(root: Path, selected: str | None = None) -> Path:
+    root = root.resolve(strict=True)
+    if selected:
+        candidate = _resolve_inside(root / selected, root, "Compose file")
+        if not candidate.is_file():
+            raise AppDeployError("Compose selection is not a regular file")
+        return candidate
+    candidates = compose_candidates(root)
     if not candidates:
         raise AppDeployError("no Compose file found")
     if len(candidates) > 1:
