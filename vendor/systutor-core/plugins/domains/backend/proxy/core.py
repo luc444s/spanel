@@ -6,6 +6,7 @@ import os
 import re
 import tempfile
 from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -109,6 +110,29 @@ def router_rule(domains: Iterable[str]) -> str:
     return " || ".join(f"Host(`{host}`)" for host in hosts)
 
 
+@dataclass(frozen=True)
+class PathRoute:
+    prefix: str
+    container: str
+    port: int
+
+
+def normalize_path_prefix(value: str) -> str:
+    prefix = value.strip()
+    if not prefix.startswith("/") or prefix.startswith("//"):
+        raise ProxyError("el prefijo debe comenzar con una sola /", EXIT_VALIDATION)
+    prefix = prefix.rstrip("/") or "/"
+    if prefix == "/" or any(character in prefix for character in "`\r\n?#"):
+        raise ProxyError("prefijo de ruta inválido", EXIT_VALIDATION)
+    return prefix
+
+
+def path_router_rule(domains: Iterable[str], prefix: str) -> str:
+    host_rule = router_rule(domains)
+    path = normalize_path_prefix(prefix)
+    return f"({host_rule}) && (Path(`{path}`) || PathPrefix(`{path}/`))"
+
+
 def render_site_yaml(
     container: str,
     domains: Sequence[str],
@@ -116,6 +140,7 @@ def render_site_yaml(
     entrypoint_http: str = "web",
     entrypoint_https: str = "websecure",
     port: int = 80,
+    path_routes: Sequence[PathRoute] = (),
 ) -> str:
     if not 1 <= port <= 65535:
         raise ProxyError("puerto inválido", EXIT_VALIDATION)
@@ -152,6 +177,27 @@ def render_site_yaml(
             },
         }
     }
+    routers = doc["http"]["routers"]
+    services = doc["http"]["services"]
+    for index, route in enumerate(path_routes, start=1):
+        if not route.container.strip():
+            raise ProxyError("contenedor de ruta vacío", EXIT_VALIDATION)
+        if not 1 <= route.port <= 65535:
+            raise ProxyError("puerto de ruta inválido", EXIT_VALIDATION)
+        prefix = normalize_path_prefix(route.prefix)
+        route_service = f"{service}-path-{index}"
+        routers[route_service] = {
+            "rule": path_router_rule(domains, prefix),
+            "entryPoints": [entrypoint_https],
+            "service": route_service,
+            "tls": {"certResolver": resolver},
+            "priority": 300 + index,
+        }
+        services[route_service] = {
+            "loadBalancer": {
+                "servers": [{"url": f"http://{route.container}:{route.port}"}]
+            }
+        }
     body = yaml.safe_dump(doc, sort_keys=False, allow_unicode=True, default_flow_style=False)
     return f"{MARKER}\n{body}"
 
@@ -197,6 +243,50 @@ def document_container(data: dict) -> str | None:
     return None
 
 
+def document_port(data: dict) -> int | None:
+    container = document_container(data)
+    if container is None:
+        return None
+    services = (data.get("http") or {}).get("services") or {}
+    for service in services.values():
+        servers = ((service or {}).get("loadBalancer") or {}).get("servers") or []
+        for server in servers:
+            url = (server or {}).get("url") or ""
+            match = re.match(rf"^https?://{re.escape(container)}:(\d+)$", url)
+            if match:
+                return int(match.group(1))
+    return None
+
+
+def document_path_routes(data: dict) -> list[PathRoute]:
+    routes: list[PathRoute] = []
+    routers = (data.get("http") or {}).get("routers") or {}
+    services = (data.get("http") or {}).get("services") or {}
+    for name, router in routers.items():
+        if "-path-" not in str(name) or not isinstance(router, dict):
+            continue
+        rule = str(router.get("rule") or "")
+        prefix_match = re.search(r"Path\(`([^`]+)`\)", rule)
+        service = services.get(router.get("service")) or {}
+        if prefix_match is None:
+            raise ProxyError("router de ruta gestionada inválido", EXIT_VALIDATION)
+        servers = ((service or {}).get("loadBalancer") or {}).get("servers") or []
+        if len(servers) != 1:
+            raise ProxyError("servicio de ruta gestionada inválido", EXIT_VALIDATION)
+        url = (servers[0] or {}).get("url") or ""
+        match = re.match(r"^https?://([^:/]+):(\d+)$", url)
+        if not match:
+            raise ProxyError("backend de ruta gestionada inválido", EXIT_VALIDATION)
+        routes.append(
+            PathRoute(
+                normalize_path_prefix(prefix_match.group(1)),
+                match.group(1),
+                int(match.group(2)),
+            )
+        )
+    return routes
+
+
 def document_resolver(data: dict) -> str | None:
     routers = (data.get("http") or {}).get("routers") or {}
     for router in routers.values():
@@ -233,4 +323,3 @@ def timestamp() -> str:
 def validate_managed_path(path: Path) -> None:
     if not path.name.startswith(FILE_PREFIX) or path.suffix not in (".yml", ".yaml"):
         raise ProxyError(f"nombre de archivo no gestionado: {path.name}", EXIT_VALIDATION)
-

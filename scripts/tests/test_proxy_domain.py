@@ -16,10 +16,13 @@ sys.path.insert(0, str(CORE))
 from plugins.domains.backend.proxy import (
     EXIT_VALIDATION,
     CommandResult,
+    PathRoute,
     ProxyError,
     Settings,
     document_container,
     document_domains,
+    document_path_routes,
+    document_port,
     document_resolver,
     normalize_domain,
     parse_site_document,
@@ -165,6 +168,22 @@ def test_render_and_parse_roundtrip() -> None:
     )
 
 
+def test_render_same_origin_path_route() -> None:
+    text = render_site_yaml(
+        "app-frontend", ["app.spanel"], "internal", port=8080,
+        path_routes=[PathRoute("/api/", "app-backend", 8000)],
+    )
+    data = parse_site_document(text)
+    assert document_port(data) == 8080
+    assert document_path_routes(data) == [PathRoute("/api", "app-backend", 8000)]
+    router = data["http"]["routers"]["spanel-app-frontend-path-1"]
+    assert router["priority"] > data["http"]["routers"]["spanel-app-frontend"]["priority"]
+    assert "Path(`/api`) || PathPrefix(`/api/`)" in router["rule"]
+    assert data["http"]["services"]["spanel-app-frontend-path-1"]["loadBalancer"]["servers"] == [
+        {"url": "http://app-backend:8000"}
+    ]
+
+
 def test_parse_rejects_unmanaged() -> None:
     with pytest.raises(ProxyError):
         parse_site_document("http: {}\n")
@@ -188,6 +207,33 @@ def test_add_is_idempotent_and_writes_dns(tmp_path: Path) -> None:
     assert path.read_text(encoding="utf-8") == first
     hosts_again = (tmp_path / "dns" / "hosts").read_text(encoding="utf-8")
     assert hosts_again.count("lucas.spanel") == 1
+
+
+def test_add_and_remove_preserve_path_route_and_ports(tmp_path: Path) -> None:
+    settings = make_settings(tmp_path)
+    ops = ProxyOperations(settings, FakeRunner())
+    routes = [PathRoute("/api", "app-backend", 8000)]
+    ops.add("app-frontend", "app.spanel", port=8080, path_routes=routes, wait=0)
+    ops.add("app-frontend", "extra.spanel", port=8080, wait=0)
+
+    path = settings.config_dir / "spanel-app-frontend.yml"
+    data = parse_site_document(path.read_text(encoding="utf-8"))
+    assert document_port(data) == 8080
+    assert document_path_routes(data) == routes
+
+    ops.remove("extra.spanel")
+    data = parse_site_document(path.read_text(encoding="utf-8"))
+    assert document_port(data) == 8080
+    assert document_path_routes(data) == routes
+
+
+def test_cli_accepts_complete_path_route() -> None:
+    args = build_parser().parse_args([
+        "add", "--site", "frontend", "--site-port", "8080",
+        "--domain", "app.spanel", "--path-prefix", "/api",
+        "--path-site", "backend", "--path-port", "8000",
+    ])
+    assert (args.path_prefix, args.path_site, args.path_port) == ("/api", "backend", 8000)
 
 
 def test_add_dry_run_does_not_write(tmp_path: Path) -> None:

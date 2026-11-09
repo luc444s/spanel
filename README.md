@@ -363,7 +363,15 @@ operador sigue disponible:
 ```bash
 python3 scripts/proxy_domain.py doctor
 python3 scripts/proxy_domain.py list
+python3 scripts/proxy_domain.py add \
+  --site app-frontend --site-port 80 --domain app.example.com \
+  --path-prefix /api --path-site app-backend --path-port 8000
 ```
+
+La ruta opcional conserva el prefijo: `https://app.example.com/api/...` se
+envía a `app-backend:8000`, mientras el resto del dominio sigue llegando al
+frontend. Los contenedores se conectan a la red del proxy sin publicar sus
+puertos en el host.
 
 ## Desarrollo
 

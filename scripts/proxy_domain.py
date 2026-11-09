@@ -27,8 +27,9 @@ _VENDOR_CORE = Path(__file__).resolve().parents[1] / "vendor" / "systutor-core"
 if str(_VENDOR_CORE) not in sys.path:
     sys.path.insert(0, str(_VENDOR_CORE))
 
-from plugins.domains.backend.proxy import (  # noqa: E402
+from plugins.domains.backend.proxy import (  # pyright: ignore[reportMissingImports]
     PROFILES,
+    PathRoute,
     ProxyError,
     ProxyOperations,
     Settings,
@@ -65,6 +66,10 @@ def build_parser() -> argparse.ArgumentParser:
     add = sub.add_parser("add", parents=[common], help="agrega un dominio a un sitio")
     add.add_argument("--site", required=True, help="contenedor del sitio (ej. spanel-lucas-wp)")
     add.add_argument("--domain", required=True, help="FQDN a agregar (ej. lucas.spanel)")
+    add.add_argument("--site-port", type=int, help="puerto interno del sitio (default 80)")
+    add.add_argument("--path-prefix", help="prefijo same-origin (ej. /api)")
+    add.add_argument("--path-site", help="contenedor que atiende el prefijo")
+    add.add_argument("--path-port", type=int, help="puerto interno del contenedor de ruta")
     add.add_argument("--www", action="store_true", help="agregar también www.<dominio>")
     add.add_argument("--dry-run", action="store_true", help="imprime el YAML sin escribir")
     add.add_argument(
@@ -115,6 +120,16 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "list":
             return operations.list_domains()
         if args.command == "add":
+            route_values = (args.path_prefix, args.path_site, args.path_port)
+            if any(value is not None for value in route_values) and not all(
+                value is not None for value in route_values
+            ):
+                parser.error("--path-prefix, --path-site y --path-port deben usarse juntos")
+            routes = (
+                [PathRoute(args.path_prefix, args.path_site, args.path_port)]
+                if all(value is not None for value in route_values)
+                else None
+            )
             return operations.add(
                 args.site,
                 args.domain,
@@ -123,6 +138,8 @@ def main(argv: list[str] | None = None) -> int:
                 set_wordpress_url=args.set_wordpress_url,
                 open_browser=args.open,
                 wait=args.wait,
+                port=args.site_port,
+                path_routes=routes,
             )
         if args.command == "status":
             return operations.status(args.domain)

@@ -19,9 +19,12 @@ from .core import (
     EXIT_OK,
     EXIT_TRANSPORT,
     EXIT_VALIDATION,
+    PathRoute,
     ProxyError,
     document_container,
     document_domains,
+    document_path_routes,
+    document_port,
     document_resolver,
     is_managed_document,
     normalize_domain,
@@ -286,7 +289,8 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
         set_wordpress_url: bool = False,
         open_browser: bool = False,
         wait: int | None = None,
-        port: int = 80,
+        port: int | None = None,
+        path_routes: list[PathRoute] | None = None,
     ) -> int:
         domain = normalize_domain(domain, self.profile)
         new_domains = [domain]
@@ -302,10 +306,15 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
         path = self.files.config_dir / site_file_name(slug)
         existing_text = self._read_text(path)
         existing_domains: list[str] = []
+        existing_routes: list[PathRoute] = []
+        existing_port: int | None = None
         if existing_text:
             if not is_managed_document(existing_text):
                 raise ProxyError(f"{path} existe y no está gestionado por spanel", EXIT_VALIDATION)
-            existing_domains = document_domains(parse_site_document(existing_text))
+            existing_data = parse_site_document(existing_text)
+            existing_domains = document_domains(existing_data)
+            existing_routes = document_path_routes(existing_data)
+            existing_port = document_port(existing_data)
 
         owner = self._find_owner(domain)
         if owner is not None and owner != path:
@@ -314,13 +323,26 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
             )
 
         domains = list(dict.fromkeys([*existing_domains, *new_domains]))
+        effective_routes = existing_routes if path_routes is None else path_routes
+        effective_port = port if port is not None else existing_port or 80
+        for route in effective_routes:
+            if not self.container_exists(route.container):
+                raise ProxyError(
+                    f"el sitio de ruta '{route.container}' no existe como contenedor",
+                    EXIT_TRANSPORT,
+                )
+            if not self.container_running(route.container):
+                raise ProxyError(
+                    f"el sitio de ruta '{route.container}' no está running", EXIT_TRANSPORT
+                )
         content = render_site_yaml(
             site,
             domains,
             self.resolver,
             self.settings.entrypoint_http,
             self.settings.entrypoint_https,
-            port,
+            effective_port,
+            effective_routes,
         )
 
         connect_commands = []
@@ -328,6 +350,11 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
             connect_commands.append(
                 f"docker network connect {self.settings.network} {site}"
             )
+        for route in effective_routes:
+            if self.settings.network not in self.container_networks(route.container):
+                connect_commands.append(
+                    f"docker network connect {self.settings.network} {route.container}"
+                )
         dns_commands = self._dns_plan(new_domains)
 
         if dry_run:
@@ -571,6 +598,8 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
         remaining = [item for item in domains if item not in (domain, f"www.{domain}")]
         site = document_container(data) or ""
         resolver = document_resolver(data) or self.resolver
+        port = document_port(data) or 80
+        path_routes = document_path_routes(data)
 
         if dry_run:
             self.say(f"# dry-run: {owner}")
@@ -587,6 +616,8 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
                 resolver,
                 self.settings.entrypoint_http,
                 self.settings.entrypoint_https,
+                port,
+                path_routes,
             )
             self._write_text(owner, content)
             action = f"updated ({', '.join(remaining)})"
