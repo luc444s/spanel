@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import os
 import secrets
@@ -97,10 +98,17 @@ def _api_error(content: bytes) -> str | None:
 
 def validate_base_url(value: str) -> str:
     parsed = urlsplit(value.strip())
-    if parsed.scheme != "https" or not parsed.hostname:
-        raise E2EError("base URL must be an absolute HTTPS origin")
+    if not parsed.hostname or parsed.scheme not in {"http", "https"}:
+        raise E2EError("base URL must be an absolute HTTP(S) origin")
     if parsed.username or parsed.password or parsed.query or parsed.fragment:
         raise E2EError("base URL must not contain credentials, query, or fragment")
+    loopback = parsed.hostname == "localhost"
+    try:
+        loopback = loopback or ipaddress.ip_address(parsed.hostname).is_loopback
+    except ValueError:
+        pass
+    if parsed.scheme != "https" and not loopback:
+        raise E2EError("base URL must use HTTPS unless it is loopback")
     return value.strip().rstrip("/")
 
 

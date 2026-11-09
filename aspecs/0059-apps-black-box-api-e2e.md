@@ -20,7 +20,8 @@ necesita una prueba externa que sólo conozca su API pública.
 - Eliminación final por API con purga de datos, incluso tras un fallo anterior.
 - Contraseña sólo mediante archivo regular `0600`; token, contraseña y secretos
   generados nunca se imprimen ni se escriben en reportes.
-- HTTPS obligatorio. No se accede directamente a PostgreSQL, Redis o Docker.
+- HTTPS obligatorio salvo loopback para un lab local. No se accede directamente
+  a PostgreSQL, Redis o Docker.
 
 ## VALIDATION
 
