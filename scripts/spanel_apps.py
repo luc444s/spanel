@@ -24,6 +24,7 @@ from uuid import uuid4
 
 TERMINAL = {"succeeded", "failed", "interrupted"}
 ROOT = "/api/v1/plugins/apps"
+MANAGED_ENVIRONMENT_NAMES = {"APP_DB_NAME", "APP_DB_USER", "APP_DB_PASSWORD"}
 
 
 class CliError(RuntimeError):
@@ -113,6 +114,34 @@ def read_token() -> str:
     return value.strip()
 
 
+def parse_env_text(text: str) -> list[list[str]]:
+    entries: list[list[str]] = []
+    names: set[str] = set()
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[7:].strip()
+        if "=" not in line:
+            raise CliError("environment contains an invalid line")
+        name, value = line.split("=", 1)
+        name = name.strip()
+        if not name or not name.replace("_", "A").isalnum() or name[0].isdigit():
+            raise CliError("environment contains an invalid variable name")
+        if name in names:
+            raise CliError("environment contains a duplicate variable")
+        if name in MANAGED_ENVIRONMENT_NAMES:
+            raise CliError(f"Apps manages environment variable {name}")
+        if len(value) > 8192 or any(character in value for character in "\x00\r\n"):
+            raise CliError("environment contains an invalid value")
+        names.add(name)
+        entries.append([name, value])
+    if len(entries) > 100:
+        raise CliError("environment contains more than 100 variables")
+    return entries
+
+
 def read_env_file(path: Path, *, checkout: Path | None = None) -> list[list[str]]:
     try:
         info = path.lstat()
@@ -129,26 +158,21 @@ def read_env_file(path: Path, *, checkout: Path | None = None) -> list[list[str]
             pass
         else:
             raise CliError("environment file must be outside the checkout")
-    entries: list[list[str]] = []
     try:
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeError) as exc:
         raise CliError("environment file is unreadable") from exc
-    for line in text.splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if line.startswith("export "):
-            line = line[7:].strip()
-        if "=" not in line:
-            raise CliError("environment file contains an invalid line")
-        name, value = line.split("=", 1)
-        name = name.strip()
-        if not name or not name.replace("_", "A").isalnum() or name[0].isdigit():
-            raise CliError("environment file contains an invalid variable name")
-        if len(value) > 8192 or any(character in value for character in "\x00\r\n"):
-            raise CliError("environment file contains an invalid value")
-        entries.append([name, value])
+    return parse_env_text(text)
+
+
+def deployment_environment(path: Path | None, inline: str | None) -> list[list[str]]:
+    entries = read_env_file(path) if path is not None else []
+    entries.extend(parse_env_text(inline or ""))
+    names = [name for name, _value in entries]
+    if len(names) != len(set(names)):
+        raise CliError("environment contains a duplicate variable")
+    if len(entries) > 100:
+        raise CliError("environment contains more than 100 variables")
     return entries
 
 
@@ -207,7 +231,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     deploy = sub.add_parser("deploy")
     deploy.add_argument("application")
-    deploy.add_argument("--env-file", type=Path, required=True)
+    deploy.add_argument("--env-file", type=Path)
+    deploy.add_argument(
+        "--env",
+        help="bloque dotenv plano multilínea (visible en argv; preferí --env-file para secretos)",
+    )
     deploy.add_argument("--wait", action="store_true")
 
     status = sub.add_parser("status")
@@ -253,7 +281,7 @@ def run(args: argparse.Namespace, client: Client) -> Any:
         if args.command == "inspect":
             body = {}
         else:
-            body = {"environment": read_env_file(args.env_file)}
+            body = {"environment": deployment_environment(args.env_file, args.env)}
         operation = client.request(
             "POST", f"/applications/{args.application}/{args.command if args.command == 'inspect' else 'deployments'}",
             body, idempotency_key=_idempotency_key(),

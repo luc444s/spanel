@@ -90,6 +90,56 @@ def test_deploy_and_delete_keep_the_platform_double_gate(tmp_path: Path) -> None
     assert delete.value.status_code == 403
 
 
+def test_deploy_prepends_stable_managed_database_environment(tmp_path: Path) -> None:
+    db = database(tmp_path)
+    user = db.get(User, "u1")
+
+    class Dispatcher:
+        def enqueue(self, _operation_id: str) -> str:
+            return "message"
+
+    resources = SimpleNamespace(
+        settings=SimpleNamespace(state_root=tmp_path / "state"),
+        cipher=lambda: TokenCipher(b"k" * 32),
+        dispatcher=Dispatcher(),
+    )
+    request = SimpleNamespace(
+        headers={}, app=SimpleNamespace(state=SimpleNamespace(apps_resources=resources))
+    )
+    operation = router_module.deploy_application(
+        "a1",
+        DeployRequest(environment=[("DATABASE_URL", "scheme://${APP_DB_USER}@database")]),
+        request,
+        "managed-key",
+        db,
+        context(platform=True),
+        user,
+    )
+    pending = resources.settings.state_root / "pending" / f"{operation.operation_id}.env"
+    lines = pending.read_text(encoding="utf-8").splitlines()
+    assert [line.split("=", 1)[0] for line in lines] == [
+        "APP_DB_NAME", "APP_DB_USER", "APP_DB_PASSWORD", "DATABASE_URL",
+    ]
+    assert lines[-1] == "DATABASE_URL=scheme://${APP_DB_USER}@database"
+    app = db.get(Application, "a1")
+    assert app.managed_env_ciphertext is not None
+
+
+def test_deploy_rejects_managed_database_override(tmp_path: Path) -> None:
+    db = database(tmp_path)
+    user = db.get(User, "u1")
+    resources = SimpleNamespace(cipher=lambda: TokenCipher(b"k" * 32))
+    request = SimpleNamespace(
+        headers={}, app=SimpleNamespace(state=SimpleNamespace(apps_resources=resources))
+    )
+    with pytest.raises(AppError) as error:
+        router_module.deploy_application(
+            "a1", DeployRequest(environment=[("APP_DB_NAME", "manual")]),
+            request, "managed-override", db, context(platform=True), user,
+        )
+    assert error.value.code == "apps.environment_managed"
+
+
 def test_cross_tenant_application_access_is_not_found(tmp_path: Path) -> None:
     db = database(tmp_path)
     with pytest.raises(AppError) as error:

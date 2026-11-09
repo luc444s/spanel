@@ -120,6 +120,31 @@ def test_deploy_env_file_must_be_private_and_values_never_echo(
     assert "top-secret" not in capsys.readouterr().out
 
 
+def test_deploy_accepts_one_plain_multiline_env_block() -> None:
+    transport = FakeTransport([{"operation_id": "op-inline"}])
+    args = apps.build_parser().parse_args([
+        "deploy", "a1", "--env", "SMTP_HOST=mail\nAPI_URL=https://api.example?a=b",
+    ])
+    apps.run(args, client(transport))
+    assert transport.calls[0]["payload"] == {
+        "environment": [
+            ["SMTP_HOST", "mail"],
+            ["API_URL", "https://api.example?a=b"],
+        ]
+    }
+
+
+def test_deploy_rejects_duplicate_inline_and_file_values(tmp_path: Path) -> None:
+    env = tmp_path / "app.env"
+    env.write_text("API_KEY=file\n", encoding="utf-8")
+    env.chmod(0o600)
+    args = apps.build_parser().parse_args([
+        "deploy", "a1", "--env-file", str(env), "--env", "API_KEY=inline",
+    ])
+    with pytest.raises(apps.CliError, match="duplicate"):
+        apps.run(args, client(FakeTransport()))
+
+
 def test_delete_confirms_the_server_side_slug() -> None:
     transport = FakeTransport([{"slug": "demo"}, {"operation_id": "op1"}])
     apps.run(

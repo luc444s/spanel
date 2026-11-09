@@ -11,6 +11,9 @@ export type GithubCardState = (typeof GITHUB_CARD_STATES)[number];
 
 const GITHUB_ORGANIZATION = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
 const ENVIRONMENT_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const MANAGED_ENVIRONMENT_NAMES = new Set([
+  "APP_DB_NAME", "APP_DB_USER", "APP_DB_PASSWORD",
+]);
 
 export const TERMINAL_STATUSES = new Set(["succeeded", "failed", "interrupted"]);
 export const isTerminalOperation = (operation?: Pick<Operation, "status"> | null) =>
@@ -30,6 +33,9 @@ export function parseDotenv(text: string): EnvironmentEntry[] {
     }
     if (names.has(name)) {
       throw new Error(`Variable .env duplicada: ${name}`);
+    }
+    if (MANAGED_ENVIRONMENT_NAMES.has(name)) {
+      throw new Error(`Apps administra automáticamente ${name}`);
     }
     const value = line.slice(separator + 1);
     if (value.includes("\0") || value.length > 8192) {

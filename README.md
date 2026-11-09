@@ -540,6 +540,21 @@ python3 scripts/configure_apps.py \
   --restart
 ```
 
+En deployments Compose, Apps genera una vez por aplicación `APP_DB_NAME`,
+`APP_DB_USER` y `APP_DB_PASSWORD`, los cifra en reposo y los antepone al entorno
+temporal. Son nombres neutrales: cada repositorio decide cómo mapearlos a su
+motor. El CLI acepta un archivo privado o un único bloque dotenv plano:
+
+```bash
+python3 scripts/spanel_apps.py deploy APP_ID --env-file ~/app.env --wait
+python3 scripts/spanel_apps.py deploy APP_ID --env 'SETTING=value
+OTHER=value' --wait
+```
+
+El bloque `--env` queda visible en argv/historial; para secretos se recomienda
+el archivo `0600`. Ningún cliente puede sobrescribir las tres variables
+administradas.
+
 ## Troubleshooting
 
 ### El plugin de correo no carga

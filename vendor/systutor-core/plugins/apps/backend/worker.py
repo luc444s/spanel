@@ -20,6 +20,7 @@ from .catalog import audit as record_catalog_audit
 from .catalog import mark_installation_suspended, require_source
 from .crypto import EncryptedValue, TokenCipher
 from .github import GithubClient, UrllibGithubClient, app_jwt_for
+from .managed_environment import clear_managed_environment
 from .models import (
     Application,
     Deployment,
@@ -465,6 +466,8 @@ class AppsWorker:
                 if app is not None:
                     app.deleted_at = datetime.now(UTC)
                     app.status = "deleted"
+                    if purge_data:
+                        clear_managed_environment(app)
                     db.commit()
         return {
             "application_id": application_id, "operation_id": operation_id,

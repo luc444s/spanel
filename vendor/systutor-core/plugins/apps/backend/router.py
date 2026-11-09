@@ -18,6 +18,7 @@ from systutor.kernel.auth.models import User
 from systutor.kernel.tenants.context import TenantContext
 
 from . import catalog
+from .managed_environment import merge_managed_environment
 from .manifest_flow import ManifestFlow
 from .models import Application, Deployment, Operation
 from .operations import create_operation, dispatch_operation, write_pending_env
@@ -277,8 +278,11 @@ def deploy_application(
     if not context.is_platform:
         raise AppError("Platform permission required", status_code=403, code="apps.platform_required")
     app = catalog.get_application(db, context.current_tenant_id, application_id)
+    environment = merge_managed_environment(
+        db, app, _resources(request).cipher(), body.environment
+    )
     return _queue(request, db, app, user, "deploy", idempotency_key,
-                  {"environment": body.environment}, body.environment)
+                  {"environment": body.environment}, environment)
 
 
 @router.get("/applications/{application_id}/deployments")

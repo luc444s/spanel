@@ -80,12 +80,19 @@ scripts/spanel_apps.py repositories --installation <id>
 scripts/spanel_apps.py add --installation <id> --repository <id> --name demo
 scripts/spanel_apps.py inspect <app-id> --wait
 scripts/spanel_apps.py deploy <app-id> --env-file ~/app.env --wait
+scripts/spanel_apps.py deploy <app-id> --env 'SETTING=value
+OTHER=value' --wait
 scripts/spanel_apps.py status <operation-id>
 scripts/spanel_apps.py logs|start|stop|restart|down <app-id>
 ```
 
 `--env-file` must be a regular non-symlink file with mode `0600`. The CLI sends
 `Idempotency-Key` on mutations and bounds every wait with `--timeout`.
+`--env` accepts one multiline dotenv block for automation, but its plaintext is
+visible in the process arguments and shell history; use `--env-file` for secrets.
+Apps prepends encrypted, stable `APP_DB_NAME`, `APP_DB_USER` and
+`APP_DB_PASSWORD` values and rejects client overrides. Compose maps these neutral
+names to whichever database engine the repository uses.
 
 ## Production checklist
 

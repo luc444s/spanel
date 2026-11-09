@@ -77,6 +77,11 @@ def test_legacy_oauth_table_is_preserved_by_migrations(tmp_path: Path) -> None:
         migration_001.upgrade(db)
         migration_002 = load()
         migration_002.upgrade(db)
+        migration_003 = load(
+            MIGRATIONS / "003_add_managed_environment.py", "apps_migration_003"
+        )
+        migration_003.upgrade(db)
+        migration_003.upgrade(db)
         db.commit()
     tables = set(inspect(engine).get_table_names())
     assert "apps_github_connections" in tables
@@ -84,3 +89,9 @@ def test_legacy_oauth_table_is_preserved_by_migrations(tmp_path: Path) -> None:
         "apps_github_providers", "apps_github_installations",
         "apps_github_repositories",
     } <= tables
+    application_columns = {
+        column["name"] for column in inspect(engine).get_columns("apps_applications")
+    }
+    assert {
+        "managed_env_ciphertext", "managed_env_nonce", "managed_env_key_version",
+    } <= application_columns

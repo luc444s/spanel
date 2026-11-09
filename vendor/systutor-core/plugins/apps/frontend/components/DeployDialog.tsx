@@ -67,13 +67,16 @@ export function DeployDialog({ application, open, blocked, onClose, onAccepted }
             className="min-h-48 font-mono text-xs"
             value={dotenv}
             onChange={(event) => { setDotenv(event.target.value); setIntent(null); setError(null); }}
-            placeholder={"APP_DB_NAME=editors\nAPP_DB_USER=editors\nVITE_API_BASE_URL=/api"}
+            placeholder={"DATABASE_URL=protocol://${APP_DB_USER}:${APP_DB_PASSWORD}@database:1234/${APP_DB_NAME}\nVITE_API_BASE_URL=https://api.example"}
             autoComplete="off"
             spellCheck={false}
           />
         </label>
         <p className="text-xs text-muted-foreground">
           Podés pegar un archivo .env completo. Los valores sólo viven en este diálogo y se eliminan al aceptar el deployment.
+        </p>
+        <p className="text-xs text-muted-foreground">
+          Apps genera y conserva cifrados APP_DB_NAME, APP_DB_USER y APP_DB_PASSWORD. No los incluyas aquí; el Compose puede referenciarlos desde cualquier motor.
         </p>
       </div>
       <label className="block space-y-1 text-sm"><span>Escribí <code>{application.slug}</code> para confirmar</span><Input value={confirmation} onChange={(e) => setConfirmation(e.target.value)} /></label>
