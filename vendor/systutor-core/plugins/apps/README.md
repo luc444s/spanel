@@ -99,6 +99,15 @@ before image build. Successful deployments expose one service card per effective
 container with image, creation time and declared environment names; secret values
 are never returned by the API or stored in the deployment manifest.
 
+## Real Docker E2E
+
+The host image includes `scripts/e2e_apps_software_editores.py`. Run it inside
+`apps-worker` to clone the real repository, execute the same Apps audit/deploy
+runtime, probe the three services, and remove all isolated test resources. It
+writes only redacted command logs and a safe JSON report under the Apps state
+volume. The flow also exercises refresh/status, logs, restart, and post-restart
+health verification so ownership regressions are detected by a real lifecycle.
+
 ## Production checklist
 
 - Provide an HTTPS `SPANEL_APPS_PUBLIC_URL` and a 32-byte encryption key file
