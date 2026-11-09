@@ -88,7 +88,6 @@ class ManifestFlow:
         manifest = {
             "name": f"spanel-apps-{provider_id[:8]}",
             "url": origin,
-            "hook_attributes": {"active": False},
             "redirect_url": f"{origin}/api/v1/plugins/apps/github/manifest/callback",
             "setup_url": (
                 f"{origin}/api/v1/plugins/apps/github/install/callback"

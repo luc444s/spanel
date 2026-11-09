@@ -154,6 +154,10 @@ def test_manifest_start_binds_public_url_and_two_independent_states(tmp_path: Pa
     response = instance.start(user, ManifestStartRequest(owner_type="personal"))
     assert response["action_url"] == "https://github.com/settings/apps/new"
     manifest = response["manifest"]
+    assert manifest["url"] == "https://panel.example"
+    # GitHub requires hook_attributes.url whenever the object is present,
+    # including when active=false. Apps does not subscribe to webhooks.
+    assert "hook_attributes" not in manifest
     assert manifest["redirect_url"] == (
         "https://panel.example/api/v1/plugins/apps/github/manifest/callback"
     )
