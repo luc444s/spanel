@@ -71,6 +71,22 @@ export function validateGithubManifestUrl(value: string, organization: string | 
   }
 }
 
+export function validateGithubInstallUrl(value: string) {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" || url.hostname !== "github.com" || url.port) {
+      throw new Error("invalid");
+    }
+    if (url.username || url.password || url.search || url.hash) throw new Error("invalid");
+    if (!/^\/apps\/[A-Za-z0-9-_]+\/installations\/new$/.test(url.pathname)) {
+      throw new Error("invalid");
+    }
+    return url.href;
+  } catch {
+    throw new Error("GitHub devolvió una URL de instalación no válida");
+  }
+}
+
 export function validateGithubOrganization(value: string) {
   const slug = value.trim();
   if (!GITHUB_ORGANIZATION.test(slug)) {

@@ -1,8 +1,9 @@
 import { apiRequest } from "@systutor/shell/api/client";
 
 import type {
-  AppAction, Application, ApplicationCreate, Deployment, EnvironmentEntry,
-  GithubConnection, GithubStatus, Operation, OperationSummary,
+  AppAction, Application, ApplicationCreate, ApplicationDetail, DeploymentDetail,
+  EnvironmentEntry, GithubInstallation, GithubManifestStart, GithubProvider,
+  GithubRepository, GithubStatus, Operation, OperationSummary,
 } from "./types";
 
 const ROOT = "/api/v1/plugins/apps";
@@ -10,9 +11,13 @@ const ROOT = "/api/v1/plugins/apps";
 export const appsKeys = {
   applications: ["apps", "applications"] as const,
   application: (id: string) => ["apps", "applications", id] as const,
+  detail: (id: string) => ["apps", "applications", id, "detail"] as const,
+  operations: (id: string) => ["apps", "applications", id, "operations"] as const,
   deployments: (id: string) => ["apps", "applications", id, "deployments"] as const,
   status: ["apps", "github", "status"] as const,
-  connection: ["apps", "github", "connection"] as const,
+  providers: ["apps", "github", "providers"] as const,
+  installations: ["apps", "github", "installations"] as const,
+  repositories: (id: string) => ["apps", "github", "installations", id, "repositories"] as const,
   operation: (id: string) => ["apps", "operations", id] as const,
 };
 
@@ -27,22 +32,39 @@ const operationOptions = (method: string, key: string, body?: unknown) => ({
 });
 
 export const getGithubStatus = () => apiRequest<GithubStatus>(`${ROOT}/github/status`);
-export const getGithubConnection = () => apiRequest<GithubConnection>(`${ROOT}/github/connection`);
-export const startGithubOAuth = () => apiRequest<{ authorization_url: string }>(`${ROOT}/github/oauth/start`, {
-  method: "POST", body: JSON.stringify({ redirect: "/app/apps" }),
-});
-export const disconnectGithub = () => apiRequest<void>(`${ROOT}/github/disconnect`, { method: "POST" });
+export const startGithubManifest = (ownerType: "personal" | "organization", organization: string | null) =>
+  apiRequest<GithubManifestStart>(`${ROOT}/github/manifest/start`, {
+    method: "POST",
+    body: JSON.stringify({ owner_type: ownerType, organization }),
+  });
+export const listProviders = () => apiRequest<GithubProvider[]>(`${ROOT}/github/providers`);
+export const deleteProvider = (id: string) =>
+  apiRequest<void>(`${ROOT}/github/providers/${encodeURIComponent(id)}`, { method: "DELETE" });
+export const listInstallations = () => apiRequest<GithubInstallation[]>(`${ROOT}/github/installations`);
+export const syncInstallation = (id: string, key: string) => apiRequest<OperationSummary>(
+  `${ROOT}/github/installations/${encodeURIComponent(id)}/sync`, operationOptions("POST", key, {}),
+);
+export const listInstallationRepositories = (installationId: string) => apiRequest<GithubRepository[]>(
+  `${ROOT}/github/installations/${encodeURIComponent(installationId)}/repositories`,
+);
 
 export const listApplications = () => apiRequest<Application[]>(`${ROOT}/applications`);
-export const getApplication = (id: string) => apiRequest<Application>(`${ROOT}/applications/${encodeURIComponent(id)}`);
+export const getApplication = (id: string) =>
+  apiRequest<ApplicationDetail>(`${ROOT}/applications/${encodeURIComponent(id)}`);
 export const createApplication = (body: ApplicationCreate) => apiRequest<Application>(`${ROOT}/applications`, {
   method: "POST", body: JSON.stringify(body),
 });
-export const reconnectSource = (id: string, sourceConnectionUserId: string) => apiRequest<void>(
-  `${ROOT}/applications/${encodeURIComponent(id)}/source/reconnect`, {
-    method: "POST", body: JSON.stringify({ source_connection_user_id: sourceConnectionUserId }),
-  },
-);
+export const updateApplicationSource = (
+  id: string,
+  installationId: string,
+  repositoryId: string,
+  branch: string | null,
+) => apiRequest<Application>(`${ROOT}/applications/${encodeURIComponent(id)}/source`, {
+  method: "PATCH",
+  body: JSON.stringify({
+    installation_id: installationId, repository_id: repositoryId, branch,
+  }),
+});
 export const inspectApplication = (id: string, key: string) => apiRequest<OperationSummary>(
   `${ROOT}/applications/${encodeURIComponent(id)}/inspect`, operationOptions("POST", key),
 );
@@ -55,7 +77,10 @@ export const runApplicationAction = (id: string, action: AppAction, key: string)
 export const deleteApplication = (id: string, confirm: string, purgeData: boolean, key: string) =>
   apiRequest<OperationSummary>(`${ROOT}/applications/${encodeURIComponent(id)}`,
     operationOptions("DELETE", key, { confirm, purge_data: purgeData }));
-export const listDeployments = (id: string) => apiRequest<Deployment[]>(
+export const listDeployments = (id: string) => apiRequest<DeploymentDetail[]>(
   `${ROOT}/applications/${encodeURIComponent(id)}/deployments`,
+);
+export const listOperations = (id: string) => apiRequest<Operation[]>(
+  `${ROOT}/applications/${encodeURIComponent(id)}/operations`,
 );
 export const getOperation = (id: string) => apiRequest<Operation>(`${ROOT}/operations/${encodeURIComponent(id)}`);

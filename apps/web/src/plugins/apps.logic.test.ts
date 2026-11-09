@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   githubCardContent,
   githubCardState,
+  validateGithubInstallUrl,
   validateGithubManifestUrl,
   validateGithubOrganization,
 } from "../../../../vendor/systutor-core/plugins/apps/frontend/logic";
@@ -70,6 +71,19 @@ describe("GitHub manifest navigation guard", () => {
     expect(() => validateGithubManifestUrl(
       "https://github.com/organizations/other/settings/apps/new", "acme",
     )).toThrow();
+  });
+
+  it("accepts only exact GitHub installation URLs", () => {
+    expect(validateGithubInstallUrl("https://github.com/apps/spanel-apps-1/installations/new"))
+      .toBe("https://github.com/apps/spanel-apps-1/installations/new");
+    for (const value of [
+      "https://github.com.evil.test/apps/x/installations/new",
+      "http://github.com/apps/x/installations/new",
+      "https://github.com/apps/x/installations/new?next=evil",
+      "https://github.com/apps/x/installations/other",
+    ]) {
+      expect(() => validateGithubInstallUrl(value)).toThrow();
+    }
   });
 
   it("validates organization slugs", () => {

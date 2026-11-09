@@ -7,15 +7,52 @@ export type GithubStatus = {
   provider_count?: number;
   installation_count?: number;
   syncing?: boolean;
+  install_url?: string | null;
 };
 
-export type GithubConnection = {
-  connected: boolean;
-  reconnect_required: boolean;
-  github_user_id?: string;
-  login?: string;
-  avatar_url?: string | null;
-  scopes?: string[];
+export type GithubProvider = {
+  id: string;
+  github_app_id: number;
+  app_slug: string;
+  name: string;
+  owner_login: string | null;
+  owner_type: string | null;
+  status: string;
+  created_at: string | null;
+  last_used_at: string | null;
+  revoked_at: string | null;
+};
+
+export type GithubInstallation = {
+  id: string;
+  provider_id: string;
+  github_installation_id: number;
+  account_login: string;
+  account_type: string | null;
+  repository_selection: string;
+  permissions: Record<string, string>;
+  status: string;
+  repository_count: number;
+  installed_at: string | null;
+  last_synced_at: string | null;
+};
+
+export type GithubRepository = {
+  id: string;
+  github_repository_id: number;
+  full_name: string;
+  private: boolean;
+  default_branch: string | null;
+  archived: boolean;
+  disabled: boolean;
+  observed_at: string | null;
+  removed_at: string | null;
+};
+
+export type GithubManifestStart = {
+  action_url: string;
+  state: string;
+  manifest: Record<string, unknown>;
 };
 
 export type Application = {
@@ -29,22 +66,34 @@ export type Application = {
   ingress_service: string | null;
   ingress_port: number | null;
   status: string;
-  source_connection_user_id: string;
+  source_installation_id: string | null;
+  source_repository_id: string | null;
+  source_status: string;
 };
 
 export type ApplicationCreate = {
   name: string;
-  repository: string;
-  branch: string;
+  installation_id: string;
+  repository_id: string;
+  branch?: string | null;
   compose_file: string | null;
   domain: string | null;
   ingress_service: string | null;
   ingress_port: number | null;
 };
 
+export type ApplicationDetail = Application & {
+  runtime_project: string;
+  active_deployment: DeploymentDetail | null;
+  services: string[];
+  compose_candidates: string[];
+  findings: Finding[];
+  deployments: DeploymentDetail[];
+};
+
 export type OperationSummary = {
   operation_id: string;
-  application_id: string;
+  application_id: string | null;
   kind: string;
   status: string;
   poll_url: string;
@@ -69,7 +118,9 @@ export type AuditReport = {
 
 export type Operation = {
   id: string;
-  application_id: string;
+  application_id: string | null;
+  subject_type: string | null;
+  subject_id: string | null;
   kind: string;
   status: string;
   phase: string;
@@ -77,6 +128,9 @@ export type Operation = {
   result: Record<string, unknown> | null;
   error_code: string | null;
   public_error: string | null;
+  created_at?: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
 };
 
 export type Deployment = {
@@ -85,6 +139,16 @@ export type Deployment = {
   commit: string | null;
   tree_hash: string | null;
   public_error: string | null;
+};
+
+export type DeploymentDetail = Deployment & {
+  compose_file: string | null;
+  ingress_service: string | null;
+  ingress_port: number | null;
+  release: string | null;
+  services: string[];
+  created_at: string | null;
+  finished_at: string | null;
 };
 
 export type EnvironmentEntry = { name: string; value: string };

@@ -18,7 +18,6 @@ import { useGithubStatus } from "../useGithubStatus";
 export default function AppsPage() {
   const queryClient = useQueryClient();
   const permissions = useAuthStore((state) => state.permissions);
-  const user = useAuthStore((state) => state.user);
   const canConnect = permissions.includes("apps.github.connect");
   const canCreate = permissions.includes("apps.applications.create");
   const canManage = permissions.includes("apps.applications.manage");
@@ -34,10 +33,15 @@ export default function AppsPage() {
 
   useEffect(() => {
     const result = new URLSearchParams(window.location.search).get("github");
-    if (result !== "connected" && result !== "error") return;
+    if (result !== "installed" && result !== "connected" && result !== "error") return;
     window.history.replaceState({}, "", window.location.pathname + window.location.hash);
     void queryClient.invalidateQueries({ queryKey: appsKeys.status });
-    result === "connected" ? toast.success("GitHub conectado") : toast.error("No se pudo conectar GitHub");
+    void queryClient.invalidateQueries({ queryKey: appsKeys.installations });
+    if (result === "error") {
+      toast.error("No se pudo completar la conexión con GitHub");
+    } else {
+      toast.success(result === "installed" ? "GitHub App instalada; sincronizando repositorios" : "GitHub conectado");
+    }
   }, [queryClient]);
 
   const updateOperation = useCallback((operation: Operation) => {
@@ -74,6 +78,6 @@ export default function AppsPage() {
     {applications.data?.length === 0 ? <p className="rounded border border-border p-4 text-sm text-muted-foreground">No hay aplicaciones.</p> : null}
 
     <CreateApplicationDialog open={createOpen} platform={platform} onClose={() => setCreateOpen(false)} onAccepted={accepted} />
-    <ApplicationDetail application={selected} operations={operations} currentUserId={user?.id ?? ""} connected={Boolean(githubStatus.data?.connected)} canCreate={canCreate} canManage={canManage} canDeploy={canDeploy} canDelete={canDelete} onClose={() => setSelected(null)} onAccepted={track} />
+    <ApplicationDetail application={selected} operations={operations} canCreate={canCreate} canManage={canManage} canDeploy={canDeploy} canDelete={canDelete} onClose={() => setSelected(null)} onAccepted={track} />
   </section>;
 }

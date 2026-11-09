@@ -304,7 +304,7 @@ def repository_views(db: Session, tenant_id: str, installation_id: str) -> list[
 
 
 def status(db: Session, tenant_id: str, settings: AppsSettings, production: bool) -> dict:
-    from .public_url import PublicUrlError, parse_public_url
+    from .public_url import PublicUrlError, install_url, parse_public_url
     from .readiness import secret_available
 
     try:
@@ -354,6 +354,15 @@ def status(db: Session, tenant_id: str, settings: AppsSettings, production: bool
     else:
         state = "unconfigured"
     account = active[0].account_login if active else None
+    pending_provider = next(
+        (row for row in providers if row.status == "pending_installation"), None
+    )
+    pending_install_url = None
+    if pending_provider is not None:
+        try:
+            pending_install_url = install_url(pending_provider.app_slug)
+        except PublicUrlError:
+            pending_install_url = None
     return {
         "state": state,
         "configured": configured,
@@ -365,6 +374,7 @@ def status(db: Session, tenant_id: str, settings: AppsSettings, production: bool
         "provider_count": len(providers),
         "installation_count": len(installations),
         "syncing": syncing,
+        "install_url": pending_install_url,
     }
 
 
