@@ -38,7 +38,7 @@ from apps.backend.runtime import (
 )
 from apps.backend.runtime.deployment import _compose_command
 
-DEFAULT_REPO = "https://github.com/luc444s/software-de-gestion-para-editores.git"
+DEFAULT_REPO = "luc444s/software-de-gestion-para-editores"
 DEFAULT_BRANCH = "feature/workflow-diseno"
 DEFAULT_COMPOSE = "docker-compose.dokploy.yml"
 EXPECTED_SERVICES = {"backend", "database", "frontend"}

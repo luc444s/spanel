@@ -108,6 +108,12 @@ writes only redacted command logs and a safe JSON report under the Apps state
 volume. The flow also exercises refresh/status, logs, restart, and post-restart
 health verification so ownership regressions are detected by a real lifecycle.
 
+For a complete external test, `scripts/e2e_apps_api.py` performs an HTTPS login
+against the deployed panel and uses only public APIs to resolve GitHub, create a
+temporary application, inspect, deploy, run lifecycle actions, and delete it with
+data purge. This black-box run does not import Apps code or mock API, worker, or
+Docker behavior. Credentials are accepted only through a private password file.
+
 ## Production checklist
 
 - Provide an HTTPS `SPANEL_APPS_PUBLIC_URL` and a 32-byte encryption key file
