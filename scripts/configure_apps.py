@@ -239,7 +239,9 @@ def compose_commands(
     build: bool,
 ) -> list[list[str]]:
     base = ["docker", "compose", "--env-file", str(env_file), "-f", str(compose_file)]
-    commands = [base + ["config"]]
+    # Plain `docker compose config` expands and prints every environment value,
+    # including secrets. Validation must never emit the normalized document.
+    commands = [base + ["config", "--quiet"]]
     if restart:
         options = ["up", "-d"] + (["--build"] if build else [])
         options += ["--force-recreate", "--no-deps"]

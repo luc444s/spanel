@@ -130,7 +130,8 @@ def test_compose_command_sequence_never_uses_down(tmp_path: Path) -> None:
         tmp_path / ".env.docker", tmp_path / "docker-compose.yml",
         restart=True, build=True,
     )
-    assert [command[-1] for command in commands] == ["config", "app", "apps-worker"]
+    assert commands[0][-2:] == ["config", "--quiet"]
+    assert [command[-1] for command in commands[1:]] == ["app", "apps-worker"]
     assert "--build" in commands[1]
     assert all("down" not in command for command in commands)
 
@@ -143,7 +144,7 @@ def test_configure_orders_app_health_then_worker(tmp_path: Path) -> None:
     events: list[str] = []
 
     def runner(command: list[str]) -> None:
-        events.append(command[-1])
+        events.append("config" if "config" in command else command[-1])
 
     configure(
         env_file=env, compose_file=compose, key_path=tmp_path / "secrets/apps_key",
