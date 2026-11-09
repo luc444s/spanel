@@ -19,6 +19,7 @@ from plugins.apps.backend.models import (
     Operation,
 )
 from plugins.apps.backend.operations import create_operation, reconcile
+from plugins.apps.backend.runtime.deployment import _state_root
 from plugins.apps.backend.schemas import DeleteRequest, DeployRequest
 from plugins.apps.backend.worker import AppsWorker
 from systutor.core.database import Base
@@ -72,6 +73,16 @@ def context(tenant_id: str = "t1", platform: bool = False) -> TenantContext:
         current_tenant_id=tenant_id, current_branch_id=None, current_user_id="u1",
         current_permissions=permissions, current_warehouse_ids=None,
     )
+
+
+def test_local_runtime_uses_shared_apps_state_root() -> None:
+    assert _state_root("local", {
+        "SPANEL_APPS_STATE_ROOT": "/var/lib/spanel/apps",
+        "SPANEL_APP_STATE_ROOT": "/legacy/path",
+    }) == Path("/var/lib/spanel/apps")
+    assert _state_root("local", {
+        "SPANEL_APP_STATE_ROOT": "/legacy/path",
+    }) == Path("/legacy/path")
 
 
 def test_deploy_and_delete_keep_the_platform_double_gate(tmp_path: Path) -> None:

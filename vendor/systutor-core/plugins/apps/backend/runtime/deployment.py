@@ -178,7 +178,10 @@ def _state_root(transport: str, environ: dict[str, str]) -> Path:
         ):
             raise AppDeployError("SSH requires a safe absolute SPANEL_APP_REMOTE_ROOT")
         return Path(value)
-    value = environ.get("SPANEL_APP_STATE_ROOT", "").strip()
+    value = (
+        environ.get("SPANEL_APPS_STATE_ROOT", "").strip()
+        or environ.get("SPANEL_APP_STATE_ROOT", "").strip()
+    )
     return (
         Path(value).expanduser() if value else Path.home() / ".local/state/spanel/apps"
     )
