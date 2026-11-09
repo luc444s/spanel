@@ -270,9 +270,10 @@ def _compose_command(
 
 
 def _ensure_owned(runner: Runner, project: str) -> None:
-    for kind, listing in (
+    for kind, label_source, listing in (
         (
             "container",
+            ".Config.Labels",
             [
                 "docker",
                 "ps",
@@ -283,6 +284,7 @@ def _ensure_owned(runner: Runner, project: str) -> None:
         ),
         (
             "network",
+            ".Labels",
             [
                 "docker",
                 "network",
@@ -294,6 +296,7 @@ def _ensure_owned(runner: Runner, project: str) -> None:
         ),
         (
             "volume",
+            ".Labels",
             [
                 "docker",
                 "volume",
@@ -312,7 +315,7 @@ def _ensure_owned(runner: Runner, project: str) -> None:
                     kind,
                     "inspect",
                     "-f",
-                    f'{{{{index .Labels "{OWNER_LABEL}"}}}}',
+                    f'{{{{index {label_source} "{OWNER_LABEL}"}}}}',
                     resource,
                 ],
                 check=False,

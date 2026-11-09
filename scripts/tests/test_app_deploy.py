@@ -334,7 +334,31 @@ def test_ownership_collision_fails_before_build(tmp_path: Path) -> None:
     )
     with pytest.raises(app.AppDeployError, match="unowned container"):
         app._ensure_owned(runner, "demo")
+    assert runner.calls[1][4] == f'{{{{index .Config.Labels "{app.OWNER_LABEL}"}}}}'
     assert not any("build" in call for call in runner.calls)
+
+
+def test_ownership_uses_resource_specific_docker_label_paths(tmp_path: Path) -> None:
+    runner = SpyRunner(
+        [
+            app.Completed(0, "container-id\n"),
+            app.Completed(0, "demo\n"),
+            app.Completed(0, "network-id\n"),
+            app.Completed(0, "demo\n"),
+            app.Completed(0, "volume-id\n"),
+            app.Completed(0, "demo\n"),
+        ],
+        tmp_path / "state",
+    )
+    app._ensure_owned(runner, "demo")
+    inspect_templates = [
+        call[4] for call in runner.calls if len(call) > 4 and call[2] == "inspect"
+    ]
+    assert inspect_templates == [
+        f'{{{{index .Config.Labels "{app.OWNER_LABEL}"}}}}',
+        f'{{{{index .Labels "{app.OWNER_LABEL}"}}}}',
+        f'{{{{index .Labels "{app.OWNER_LABEL}"}}}}',
+    ]
 
 
 @pytest.mark.parametrize("value", ["", "root", "0", "0:55", "root:55"])
