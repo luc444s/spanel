@@ -286,6 +286,7 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
         set_wordpress_url: bool = False,
         open_browser: bool = False,
         wait: int | None = None,
+        port: int = 80,
     ) -> int:
         domain = normalize_domain(domain, self.profile)
         new_domains = [domain]
@@ -319,6 +320,7 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
             self.resolver,
             self.settings.entrypoint_http,
             self.settings.entrypoint_https,
+            port,
         )
 
         connect_commands = []
@@ -600,4 +602,3 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
         self.say(f"archivo:  {owner} -> {action}")
         self.say("estado:   eliminado")
         return EXIT_OK
-

@@ -6,7 +6,7 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
-from .deployment import _compose_command, _ensure_owned, _state_root, _write_manifest
+from .deployment import _compose_command, _ensure_owned, _env_path, _state_root, _write_manifest
 from .transport import Runner
 from .types import (
     MANIFEST,
@@ -18,10 +18,12 @@ from .types import (
 )
 
 
-def _read_manifest(runner: Runner, root: Path, project: str) -> dict[str, Any]:
+def _read_manifest(
+    runner: Runner, root: Path, project: str, release: Path | None = None
+) -> dict[str, Any]:
     if not PROJECT_RE.fullmatch(project):
         raise AppDeployError("invalid project")
-    path = root / project / MANIFEST
+    path = (release or root / project) / MANIFEST
     if runner.transport == "ssh":
         result = runner.run(["cat", str(path)])
         text = result.stdout
@@ -36,14 +38,14 @@ def _read_manifest(runner: Runner, root: Path, project: str) -> dict[str, Any]:
         raise AppDeployError("owned project manifest is invalid") from exc
     if data.get("project") != project or data.get("owner_label") != OWNER_LABEL:
         raise AppDeployError("manifest does not prove runner ownership")
-    expected = root / project
+    expected = release or root / project
     if data.get("release") != str(expected):
         raise AppDeployError("manifest release path is inconsistent")
     return data
 
 
 def _redaction_values(runner: Runner, release: Path) -> list[str]:
-    path = release / "app.env"
+    path = _env_path(release)
     if runner.transport == "ssh":
         content = runner.run(["cat", str(path)]).stdout
     else:
@@ -75,9 +77,9 @@ def _redact(text: str, values: Iterable[str]) -> str:
 
 def lifecycle(options: LifecycleOptions, runner: Runner) -> LifecycleResult:
     root = _state_root(options.transport, runner.environ)
-    manifest = _read_manifest(runner, root, options.project)
+    manifest = _read_manifest(runner, root, options.project, options.release)
     _ensure_owned(runner, options.project)
-    release = root / options.project
+    release = options.release or root / options.project
     command = _compose_command(
         release, manifest["compose"], options.project, bool(manifest.get("has_env"))
     )
@@ -90,6 +92,13 @@ def lifecycle(options: LifecycleOptions, runner: Runner) -> LifecycleResult:
         )
         output = _redact(result.stdout, _redaction_values(runner, release))
         return LifecycleResult(result.returncode, output)
+    if options.command in {"start", "stop", "restart"}:
+        runner.run([*command, options.command])
+        manifest["status"] = "running" if options.command != "stop" else "stopped"
+        _write_manifest(runner, release, manifest)
+        return LifecycleResult(0)
+    if options.command not in {"down", "delete"}:
+        raise AppDeployError("unsupported lifecycle command")
     tail = ["down", "--remove-orphans"]
     if options.purge_data:
         if options.confirm_purge != options.project:

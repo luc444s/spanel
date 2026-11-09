@@ -9,6 +9,9 @@ services:
       WORKERS: ${WORKERS:-1}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - apps_state:/var/lib/spanel/apps
+      - ${SPANEL_APPS_GITHUB_CLIENT_SECRET_PATH:-./secrets/apps_github}:/run/secrets/apps_github:ro
+      - ${SPANEL_APPS_ENCRYPTION_KEY_PATH:-./secrets/apps_key}:/run/secrets/apps_key:ro
       - hosting_backups:/var/lib/spanel/hosting-backups
       # Estado del agente de certificados de correo (A.SPEC 0035/0036).
       # La app solo lee state/jobs y escribe requests; nunca claves privadas.
@@ -24,6 +27,23 @@ services:
       - "traefik.http.routers.spanel.entrypoints=websecure"
       - "traefik.http.routers.spanel.rule=Host(`spanel.systutor.com`)"
       - "traefik.http.routers.spanel.tls=true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  apps-worker:
+    build: .
+    command: ["dramatiq", "plugins.apps.backend.tasks", "--processes", "1", "--threads", "1", "--queues", "apps"]
+    env_file:
+      - .env.docker
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - apps_state:/var/lib/spanel/apps
+      - ${SPANEL_APPS_GITHUB_CLIENT_SECRET_PATH:-./secrets/apps_github}:/run/secrets/apps_github:ro
+      - ${SPANEL_APPS_ENCRYPTION_KEY_PATH:-./secrets/apps_key}:/run/secrets/apps_key:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -58,6 +78,7 @@ services:
 volumes:
   pgdata:
   hosting_backups:
+  apps_state:
 
 networks:
   proxy:

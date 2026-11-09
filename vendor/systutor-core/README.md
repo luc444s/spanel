@@ -205,3 +205,9 @@ breaking for host applications and must be versioned as dependencies.
 ## License
 
 MIT. See `LICENSE`.
+# Apps worker
+
+The optional `apps` plugin queues every GitHub/Compose runtime operation to a
+dedicated Dramatiq process. Its OAuth client secret and AES-256-GCM key must be
+mounted as separate read-only files; see `.env.docker.example` in the host
+project. Run exactly one process and one thread on the `apps` queue.

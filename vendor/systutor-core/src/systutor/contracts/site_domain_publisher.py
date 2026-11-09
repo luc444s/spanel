@@ -18,7 +18,7 @@ from fastapi import FastAPI
 
 @runtime_checkable
 class SiteDomainPublisher(Protocol):
-    def publish(self, container: str, domain: str) -> None:
+    def publish(self, container: str, domain: str, port: int = 80) -> None:
         """Create the route that points ``domain`` at ``container``."""
         ...
 

@@ -1,0 +1,10 @@
+{
+  "permissions": [
+    {"name": "apps.github.connect", "description": "Connect the current user's GitHub account"},
+    {"name": "apps.applications.read", "description": "Read tenant applications and operations"},
+    {"name": "apps.applications.manage", "description": "Run lifecycle operations for tenant applications"},
+    {"name": "apps.applications.create", "description": "Register, reconnect and inspect tenant applications"},
+    {"name": "apps.deployments.create", "description": "Deploy applications (platform only)"},
+    {"name": "apps.applications.delete", "description": "Delete applications (platform only)"}
+  ]
+}

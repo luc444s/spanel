@@ -115,7 +115,10 @@ def render_site_yaml(
     resolver: str,
     entrypoint_http: str = "web",
     entrypoint_https: str = "websecure",
+    port: int = 80,
 ) -> str:
+    if not 1 <= port <= 65535:
+        raise ProxyError("puerto inválido", EXIT_VALIDATION)
     slug = slug_for(container)
     rule = router_rule(domains)
     service = f"{FILE_PREFIX}{slug}"
@@ -144,7 +147,7 @@ def render_site_yaml(
             },
             "services": {
                 service: {
-                    "loadBalancer": {"servers": [{"url": f"http://{container}:80"}]}
+                    "loadBalancer": {"servers": [{"url": f"http://{container}:{port}"}]}
                 }
             },
         }
@@ -230,5 +233,4 @@ def timestamp() -> str:
 def validate_managed_path(path: Path) -> None:
     if not path.name.startswith(FILE_PREFIX) or path.suffix not in (".yml", ".yaml"):
         raise ProxyError(f"nombre de archivo no gestionado: {path.name}", EXIT_VALIDATION)
-
 

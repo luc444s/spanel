@@ -194,12 +194,24 @@ def _stage_release(
 ) -> None:
     payload = _tar_release(root, compose_rel, override, env_file)
     if runner.transport == "ssh":
-        command = (
-            f"umask 077; mkdir -p {shlex.quote(str(release))}; "
-            f"tar -xzf - -C {shlex.quote(str(release))}; "
-            f"chmod 600 {shlex.quote(str(release / 'override.yaml'))}"
-        )
-        command += f" {shlex.quote(str(release / 'app.env'))}"
+        if release.parent.name == "releases":
+            private = release.parent.parent / "private" / release.name
+            command = (
+                f"umask 077; mkdir -p {shlex.quote(str(release))} "
+                f"{shlex.quote(str(private))}; "
+                f"tar -xzf - -C {shlex.quote(str(release))}; "
+                f"mv {shlex.quote(str(release / 'app.env'))} "
+                f"{shlex.quote(str(private / 'app.env'))}; "
+                f"chmod 600 {shlex.quote(str(release / 'override.yaml'))} "
+                f"{shlex.quote(str(private / 'app.env'))}"
+            )
+        else:
+            command = (
+                f"umask 077; mkdir -p {shlex.quote(str(release))}; "
+                f"tar -xzf - -C {shlex.quote(str(release))}; "
+                f"chmod 600 {shlex.quote(str(release / 'override.yaml'))} "
+                f"{shlex.quote(str(release / 'app.env'))}"
+            )
         argv, env = runner._ssh_argv(command)
         try:
             result = subprocess.run(
@@ -218,6 +230,18 @@ def _stage_release(
         release.mkdir(parents=True, exist_ok=False)
         with tarfile.open(fileobj=io.BytesIO(payload), mode="r:gz") as archive:
             archive.extractall(release, filter="data")
+        if release.parent.name == "releases":
+            private = release.parent.parent / "private" / release.name
+            private.mkdir(parents=True, mode=0o700)
+            private.chmod(0o700)
+            os.replace(release / "app.env", private / "app.env")
+            (private / "app.env").chmod(0o600)
+
+
+def _env_path(release: Path) -> Path:
+    if release.parent.name == "releases":
+        return release.parent.parent / "private" / release.name / "app.env"
+    return release / "app.env"
 
 
 def _compose_command(
@@ -234,7 +258,7 @@ def _compose_command(
         str(release / "source" / compose_rel),
     ]
     if env:
-        args.extend(["--env-file", str(release / "app.env")])
+        args.extend(["--env-file", str(_env_path(release))])
     args.extend(["-f", str(release / "override.yaml"), *tail])
     return args
 
@@ -478,6 +502,26 @@ def _write_manifest(runner: Runner, release: Path, manifest: dict[str, Any]) -> 
         path.chmod(0o600)
 
 
+def _publish_release_state(runner: Runner, release: Path, manifest: dict[str, Any]) -> None:
+    if release.parent.name != "releases":
+        return
+    project_root = release.parent.parent
+    content = (json.dumps(manifest, sort_keys=True, indent=2) + "\n").encode()
+    targets = [project_root / "manifests" / f"{release.name}.json", project_root / "current.json"]
+    if runner.transport == "ssh":
+        for target in targets:
+            runner.run(
+                ["sh", "-c", 'umask 077; mkdir -p "$(dirname "$1")"; cat > "$1"',
+                 "app-deploy", str(target)],
+                stdin=content,
+            )
+    else:
+        for target in targets:
+            target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            target.write_bytes(content)
+            target.chmod(0o600)
+
+
 def deploy(
     options: DeployOptions, result: AuditResult, runner: Runner
 ) -> dict[str, Any] | None:
@@ -494,7 +538,11 @@ def deploy(
             "project must match lowercase [a-z0-9_-] and be at most 63 characters"
         )
     state_root = _state_root(options.transport, runner.environ)
-    release = state_root / project
+    release = (
+        state_root / project / "releases" / options.release_id
+        if options.release_id
+        else state_root / project
+    )
     if runner.transport == "local" and release.exists():
         raise AppDeployError(
             "project release already exists; use lifecycle commands or a new project"
@@ -545,6 +593,8 @@ def deploy(
         manifest["status"] = "running"
         manifest["containers"] = containers
         _write_manifest(runner, release, manifest)
+        if options.publish_state:
+            _publish_release_state(runner, release, manifest)
         return manifest
     except AppDeployError:
         manifest["status"] = "failed"

@@ -70,6 +70,8 @@ class DeployOptions:
     non_root: bool = False
     timeout: int = 1800
     wait: int = 180
+    release_id: str | None = None
+    publish_state: bool = True
 
 
 @dataclass(frozen=True)
@@ -80,6 +82,7 @@ class LifecycleOptions:
     tail: int = 200
     purge_data: bool = False
     confirm_purge: str | None = None
+    release: Path | None = None
 
 
 @dataclass(frozen=True)

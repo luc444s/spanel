@@ -1,0 +1,116 @@
+"""Tenant-aware persistence for the Apps plugin."""
+
+from __future__ import annotations
+
+from datetime import datetime
+from uuid import uuid4
+
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Integer,
+    LargeBinary,
+    String,
+    Text,
+    UniqueConstraint,
+)
+from sqlalchemy.orm import Mapped, mapped_column
+
+from systutor.core.database import Base
+from systutor.kernel.auth.models import utc_now
+
+
+def new_id() -> str:
+    return str(uuid4())
+
+
+class GithubConnection(Base):
+    __tablename__ = "apps_github_connections"
+
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    github_user_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    login: Mapped[str] = mapped_column(String(255), nullable=False)
+    avatar_url: Mapped[str | None] = mapped_column(String(1000))
+    scopes: Mapped[list[str]] = mapped_column(JSON, default=list)
+    access_ciphertext: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    access_nonce: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    refresh_ciphertext: Mapped[bytes | None] = mapped_column(LargeBinary)
+    refresh_nonce: Mapped[bytes | None] = mapped_column(LargeBinary)
+    key_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    access_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    refresh_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reconnect_required: Mapped[bool] = mapped_column(Boolean, default=False)
+    connected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Application(Base):
+    __tablename__ = "apps_applications"
+    __table_args__ = (UniqueConstraint("tenant_id", "slug"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    name: Mapped[str] = mapped_column(String(255))
+    slug: Mapped[str] = mapped_column(String(100))
+    repository: Mapped[str] = mapped_column(String(510))
+    branch: Mapped[str] = mapped_column(String(255), default="main")
+    compose_file: Mapped[str | None] = mapped_column(String(510))
+    source_connection_user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    runtime_project: Mapped[str] = mapped_column(String(63), unique=True)
+    domain: Mapped[str | None] = mapped_column(String(255), unique=True)
+    ingress_service: Mapped[str | None] = mapped_column(String(255))
+    ingress_port: Mapped[int | None] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(32), default="draft")
+    active_deployment_id: Mapped[str | None] = mapped_column(String(36))
+    active_operation_id: Mapped[str | None] = mapped_column(String(36), index=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class Deployment(Base):
+    __tablename__ = "apps_deployments"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    application_id: Mapped[str] = mapped_column(ForeignKey("apps_applications.id"), index=True)
+    operation_id: Mapped[str] = mapped_column(String(36), unique=True)
+    repository: Mapped[str] = mapped_column(String(510))
+    branch: Mapped[str] = mapped_column(String(255))
+    commit: Mapped[str | None] = mapped_column(String(64))
+    tree_hash: Mapped[str | None] = mapped_column(String(64))
+    compose_file: Mapped[str | None] = mapped_column(String(510))
+    ingress_service: Mapped[str | None] = mapped_column(String(255))
+    ingress_port: Mapped[int | None] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(32), default="building")
+    release: Mapped[str | None] = mapped_column(String(1000))
+    manifest: Mapped[dict | None] = mapped_column(JSON)
+    public_error: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Operation(Base):
+    __tablename__ = "apps_operations"
+    __table_args__ = (UniqueConstraint("actor_user_id", "idempotency_key"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    application_id: Mapped[str] = mapped_column(ForeignKey("apps_applications.id"), index=True)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    actor_user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    kind: Mapped[str] = mapped_column(String(32))
+    status: Mapped[str] = mapped_column(String(32), default="queued")
+    phase: Mapped[str] = mapped_column(String(64), default="queued")
+    correlation_id: Mapped[str | None] = mapped_column(String(100))
+    idempotency_key: Mapped[str] = mapped_column(String(255))
+    request_hash: Mapped[str] = mapped_column(String(64))
+    message_id: Mapped[str | None] = mapped_column(String(255))
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    attempt: Mapped[int] = mapped_column(Integer, default=0)
+    report: Mapped[dict | None] = mapped_column(JSON)
+    result: Mapped[dict | None] = mapped_column(JSON)
+    error_code: Mapped[str | None] = mapped_column(String(100))
+    public_error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

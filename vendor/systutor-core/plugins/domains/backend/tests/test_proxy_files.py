@@ -92,6 +92,12 @@ def managed(container: str = "spanel-lucas-wp", domain: str = "lucas.spanel") ->
     return render_site_yaml(container, [domain], "letsencrypt")
 
 
+def test_render_site_yaml_uses_requested_backend_port() -> None:
+    assert "http://spanel-app:8080" in render_site_yaml(
+        "spanel-app", ["app.spanel"], "letsencrypt", port=8080
+    )
+
+
 # ---- listar / leer / existe ------------------------------------------------
 
 

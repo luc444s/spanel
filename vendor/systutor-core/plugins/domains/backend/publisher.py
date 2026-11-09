@@ -10,11 +10,10 @@ from __future__ import annotations
 
 import logging
 
-from systutor.contracts.site_domain_publisher import SiteDomainPublisher
-from systutor.sdk.context import PluginContext
-
 from plugins.domains.backend.proxy import ProxyError, ProxyOperations, build_runner
 from plugins.domains.backend.settings import get_domains_settings
+from systutor.contracts.site_domain_publisher import SiteDomainPublisher
+from systutor.sdk.context import PluginContext
 
 logger = logging.getLogger(__name__)
 
@@ -32,10 +31,13 @@ class ProxySitePublisher:
             self._operations = ProxyOperations(settings, build_runner(settings))
         return self._operations
 
-    def publish(self, container: str, domain: str) -> None:
+    def publish(self, container: str, domain: str, port: int = 80) -> None:
+        if not 1 <= port <= 65535:
+            raise ValueError("port must be between 1 and 65535")
         self.operations.add(
             container,
             domain,
+            port=port,
             wait=0,
             set_wordpress_url=False,
         )

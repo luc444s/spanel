@@ -1,0 +1,29 @@
+{
+  "id": "apps",
+  "name": "Applications",
+  "version": "0.1.0",
+  "api_version": "1",
+  "requires": [],
+  "backend_entrypoint": "backend.register:register",
+  "frontend_entrypoint": "frontend/register.ts",
+  "permissions": [
+    "apps.github.connect",
+    "apps.applications.read",
+    "apps.applications.manage",
+    "apps.applications.create",
+    "apps.deployments.create",
+    "apps.applications.delete"
+  ],
+  "tenant_admin_permissions": [
+    "apps.github.connect",
+    "apps.applications.read",
+    "apps.applications.manage",
+    "apps.applications.create"
+  ],
+  "platform_permissions": [
+    "apps.deployments.create",
+    "apps.applications.delete"
+  ],
+  "events": [],
+  "description": "Tenant-aware asynchronous Compose application deployments"
+}

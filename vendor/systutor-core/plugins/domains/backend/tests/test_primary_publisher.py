@@ -38,9 +38,18 @@ def test_publish_writes_route_without_wait_or_wordpress_rewrite() -> None:
         (
             "spanel-pagina-web",
             "pagina.spanel",
-            {"wait": 0, "set_wordpress_url": False},
+            {"port": 80, "wait": 0, "set_wordpress_url": False},
         )
     ]
+
+
+def test_publish_forwards_validated_application_port() -> None:
+    operations = FakeOperations()
+    publisher = ProxySitePublisher(operations)  # type: ignore[arg-type]
+    publisher.publish("spanel-app", "app.spanel", port=8080)
+    assert operations.added[0][2]["port"] == 8080
+    with pytest.raises(ValueError, match="port"):
+        publisher.publish("spanel-app", "app.spanel", port=0)
 
 
 def test_unpublish_removes_route() -> None:
@@ -70,7 +79,7 @@ def test_registration_is_idempotent_and_duplicate_type_conflicts() -> None:
     assert get_site_domain_publisher(app) is first
 
     class OtherPublisher(FakeOperations):
-        def publish(self, container: str, domain: str) -> None:
+        def publish(self, container: str, domain: str, port: int = 80) -> None:
             pass
 
         def unpublish(self, domain: str) -> None:
