@@ -385,9 +385,10 @@ def _validate_compose_environment(
         ),
         check=False,
     )
+    compose_stderr = configured.stderr.replace(r'\"', '"')
     missing = sorted(set(re.findall(
         r'The "([A-Za-z_][A-Za-z0-9_]*)" variable is not set',
-        configured.stderr,
+        compose_stderr,
     )))
     if missing:
         raise AppDeployError(

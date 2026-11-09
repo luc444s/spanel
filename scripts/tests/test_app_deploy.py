@@ -365,7 +365,9 @@ def test_compose_environment_preflight_lists_missing_names(tmp_path: Path) -> No
             0,
             '{"services": {}}',
             'The "DATABASE_URL" variable is not set. Defaulting to a blank string.\n'
-            'The "API_KEY" variable is not set. Defaulting to a blank string.\n',
+            'time="2026-11-09T22:58:11Z" level=warning '
+            'msg="The \\"API_KEY\\" variable is not set. '
+            'Defaulting to a blank string."\n',
         )
     ], tmp_path)
     with pytest.raises(
