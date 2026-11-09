@@ -8,17 +8,25 @@ import shutil
 import tempfile
 import threading
 from collections.abc import Callable
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from systutor.kernel.auth.models import User
-
+from .catalog import audit as record_catalog_audit
+from .catalog import mark_installation_suspended, require_source
 from .crypto import EncryptedValue, TokenCipher
-from .models import Application, Deployment, GithubConnection, Operation
-from .oauth import OAuthFlow
+from .github import GithubClient, UrllibGithubClient, app_jwt_for
+from .models import (
+    Application,
+    Deployment,
+    GithubInstallation,
+    GithubProvider,
+    GithubRepository,
+    Operation,
+)
 from .operations import claim_operation
 from .runtime import (
     DeployOptions,
@@ -43,13 +51,13 @@ class AppsWorker:
         *,
         runner_factory: Callable[..., Runner] = Runner,
         publisher: Any = None,
-        oauth_flow: OAuthFlow | None = None,
+        github: GithubClient | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.cipher = cipher
         self.runner_factory = runner_factory
         self.publisher = publisher
-        self.oauth_flow = oauth_flow
+        self.github = github or UrllibGithubClient()
 
     def run(self, operation_id: str) -> None:
         with self.session_factory() as db:
@@ -58,15 +66,23 @@ class AppsWorker:
                 return
             application_id = operation.application_id
             kind = operation.kind
+            subject_type = operation.subject_type
+            subject_id = operation.subject_id
         stopped = threading.Event()
         heartbeat = threading.Thread(
             target=self._heartbeat, args=(operation_id, stopped), daemon=True
         )
         heartbeat.start()
         try:
-            if kind in {"inspect", "deploy"}:
+            if kind == "github_sync":
+                result = self._sync_operation(operation_id, subject_type, subject_id)
+            elif kind in {"inspect", "deploy"}:
+                if application_id is None:
+                    raise RuntimeError("Application not found")
                 result = self._source_operation(operation_id, application_id, kind)
             else:
+                if application_id is None:
+                    raise RuntimeError("Application not found")
                 result = self._lifecycle_operation(operation_id, application_id, kind)
             self._finish(operation_id, result)
         except Exception as exc:
@@ -95,83 +111,41 @@ class AppsWorker:
         return value if value in {"local", "ssh"} else "local"
 
     def _source_operation(self, operation_id: str, application_id: str, kind: str) -> dict:
+        from systutor.core.errors import AppError
+
         with self.session_factory() as db:
             app = db.get(Application, application_id)
             if app is None:
                 raise RuntimeError("Application not found")
-            connection = db.get(GithubConnection, app.source_connection_user_id)
-            owner = db.get(User, app.source_connection_user_id)
-            if (
-                connection is None or connection.reconnect_required or owner is None
-                or not owner.is_active or owner.tenant_id != app.tenant_id
-            ):
-                raise RuntimeError("GitHub reconnect required")
-            encrypted = EncryptedValue(
-                connection.access_ciphertext, connection.access_nonce, connection.key_version
-            )
-            refresh_value = (
-                EncryptedValue(
-                    connection.refresh_ciphertext, connection.refresh_nonce,
-                    connection.key_version,
-                )
-                if connection.refresh_ciphertext is not None
-                and connection.refresh_nonce is not None else None
-            )
-            expires_at = connection.access_expires_at
-            if expires_at is not None and expires_at.tzinfo is None:
-                expires_at = expires_at.replace(tzinfo=UTC)
-            expired = expires_at is not None and expires_at <= datetime.now(UTC)
             try:
-                token = self.cipher.decrypt(connection.user_id, encrypted) if not expired else ""
-            except Exception:
-                connection.reconnect_required = True
-                db.commit()
+                installation, repository, provider = require_source(db, app)
+            except AppError:
+                self._mark_reconnect(application_id)
                 raise RuntimeError("GitHub reconnect required") from None
+            try:
+                pem = self.cipher.decrypt_scoped(
+                    "github-app-private-key", provider.tenant_id, provider.id,
+                    EncryptedValue(
+                        provider.private_key_ciphertext, provider.private_key_nonce,
+                        provider.key_version,
+                    ),
+                )
+                jwt = app_jwt_for(pem, provider.github_app_id)
+                token_value = self.github.installation_token(
+                    jwt, installation.github_installation_id,
+                    repository_id=repository.github_repository_id,
+                    permissions={"contents": "read"},
+                )
+            except Exception:
+                self._mark_reconnect(application_id)
+                raise RuntimeError("GitHub reconnect required") from None
+            provider.last_used_at = datetime.now(UTC)
+            db.commit()
+            token = token_value.token
             source = (
-                app.repository, app.branch, app.compose_file, app.runtime_project,
+                repository.full_name, app.branch, app.compose_file, app.runtime_project,
                 app.ingress_service, app.ingress_port, app.domain,
             )
-            connection_user_id = connection.user_id
-            if not expired:
-                connection.last_used_at = datetime.now(UTC)
-                db.commit()
-        if expired:
-            if refresh_value is None or self.oauth_flow is None:
-                self._require_reconnect(connection_user_id)
-                raise RuntimeError("GitHub reconnect required")
-            try:
-                refresh_token = self.cipher.decrypt(connection_user_id, refresh_value)
-                refreshed = self.oauth_flow.refresh(refresh_token)
-                token = refreshed.access_token
-                access_encrypted = self.cipher.encrypt(connection_user_id, token)
-                refresh_encrypted = self.cipher.encrypt(
-                    connection_user_id, refreshed.refresh_token or refresh_token
-                )
-                with self.session_factory() as db:
-                    locked = db.get(GithubConnection, connection_user_id, with_for_update=True)
-                    if locked is None:
-                        raise RuntimeError("GitHub reconnect required")
-                    locked.access_ciphertext = access_encrypted.ciphertext
-                    locked.access_nonce = access_encrypted.nonce
-                    locked.refresh_ciphertext = refresh_encrypted.ciphertext
-                    locked.refresh_nonce = refresh_encrypted.nonce
-                    locked.key_version = access_encrypted.key_version
-                    locked.scopes = list(refreshed.scope)
-                    now = datetime.now(UTC)
-                    locked.access_expires_at = (
-                        now + timedelta(seconds=refreshed.expires_in)
-                        if refreshed.expires_in else None
-                    )
-                    locked.refresh_expires_at = (
-                        now + timedelta(seconds=refreshed.refresh_token_expires_in)
-                        if refreshed.refresh_token_expires_in else None
-                    )
-                    locked.last_used_at = now
-                    locked.reconnect_required = False
-                    db.commit()
-            except Exception:
-                self._require_reconnect(connection_user_id)
-                raise RuntimeError("GitHub reconnect required") from None
         with tempfile.TemporaryDirectory(prefix="spanel-app-worker-") as temporary:
             checkout = Path(temporary) / "checkout"
             clone_env = dict(os.environ, GH_TOKEN=token, GH_PROMPT_DISABLED="1")
@@ -304,12 +278,125 @@ class AppsWorker:
                 db.commit()
             return {"deployment_id": deployment.id, "status": "running"}
 
-    def _require_reconnect(self, user_id: str) -> None:
+    def _mark_reconnect(self, application_id: str) -> None:
         with self.session_factory() as db:
-            connection = db.get(GithubConnection, user_id)
-            if connection is not None:
-                connection.reconnect_required = True
+            app = db.get(Application, application_id)
+            if app is not None:
+                app.source_status = "source_reconnect_required"
                 db.commit()
+
+    def _sync_operation(
+        self, operation_id: str, subject_type: str | None, subject_id: str | None
+    ) -> dict:
+        if subject_type != "installation" or not subject_id:
+            raise RuntimeError("GitHub sync subject is invalid")
+        with self.session_factory() as db:
+            operation = db.get(Operation, operation_id)
+            installation = db.get(GithubInstallation, subject_id)
+            if operation is None or installation is None:
+                raise RuntimeError("GitHub sync installation not found")
+            if installation.tenant_id != operation.tenant_id:
+                raise RuntimeError("GitHub sync installation not found")
+            provider = db.get(GithubProvider, installation.provider_id)
+            if provider is None or provider.tenant_id != installation.tenant_id:
+                raise RuntimeError("GitHub provider not found")
+            if installation.status != "active" or provider.status != "active":
+                mark_installation_suspended(db, installation, installation.status)
+                db.commit()
+                raise RuntimeError("GitHub installation is not active")
+            try:
+                pem = self.cipher.decrypt_scoped(
+                    "github-app-private-key", provider.tenant_id, provider.id,
+                    EncryptedValue(
+                        provider.private_key_ciphertext, provider.private_key_nonce,
+                        provider.key_version,
+                    ),
+                )
+                jwt = app_jwt_for(pem, provider.github_app_id)
+                token_value = self.github.installation_token(
+                    jwt, installation.github_installation_id,
+                    permissions={"metadata": "read"},
+                )
+            except Exception:
+                raise RuntimeError("GitHub sync authentication failed") from None
+            token = token_value.token
+            provider.last_used_at = datetime.now(UTC)
+            github_id = installation.github_installation_id
+            tenant_id = installation.tenant_id
+            installation_id = installation.id
+        observed: dict[int, dict] = {}
+        page = 1
+        try:
+            while page <= 100:
+                data = self.github.installation_repositories(token, page)
+                rows = data.get("repositories")
+                if not isinstance(rows, list):
+                    raise RuntimeError("GitHub repositories response is invalid")
+                if not rows:
+                    break
+                for row in rows:
+                    repository = _repository_row(row)
+                    observed[repository["github_repository_id"]] = repository
+                page += 1
+        finally:
+            token = ""
+        if page > 100:
+            raise RuntimeError("GitHub repositories pagination exceeded the limit")
+        now = datetime.now(UTC)
+        with self.session_factory() as db:
+            installation = db.get(GithubInstallation, installation_id)
+            if installation is None:
+                raise RuntimeError("GitHub installation disappeared")
+            provider = db.get(GithubProvider, installation.provider_id)
+            existing = {
+                row.github_repository_id: row
+                for row in db.scalars(select(GithubRepository).where(
+                    GithubRepository.installation_id == installation_id
+                )).all()
+            }
+            seen: set[int] = set()
+            for github_repository_id, values in observed.items():
+                seen.add(github_repository_id)
+                row = existing.get(github_repository_id)
+                if row is None:
+                    row = GithubRepository(
+                        installation_id=installation_id, tenant_id=tenant_id,
+                        github_repository_id=github_repository_id,
+                        full_name=values["full_name"],
+                    )
+                    db.add(row)
+                row.full_name = values["full_name"]
+                row.private = values["private"]
+                row.default_branch = values["default_branch"]
+                row.archived = values["archived"]
+                row.disabled = values["disabled"]
+                row.observed_at = now
+                row.removed_at = None
+            for github_repository_id, row in existing.items():
+                if github_repository_id not in seen and row.removed_at is None:
+                    row.removed_at = now
+                    apps = db.scalars(select(Application).where(
+                        Application.tenant_id == tenant_id,
+                        Application.source_repository_id == row.id,
+                        Application.deleted_at.is_(None),
+                    )).all()
+                    for app in apps:
+                        app.source_status = "source_reconnect_required"
+            installation.last_synced_at = now
+            installation.status = "active"
+            if provider is not None:
+                provider.last_used_at = now
+            record_catalog_audit(
+                db, "github.sync.completed", tenant_id=tenant_id,
+                actor=None, entity_id=installation_id,
+                details={"github_installation_id": github_id, "repositories": len(seen)},
+            )
+            db.commit()
+        return {
+            "installation_id": installation_id,
+            "github_installation_id": github_id,
+            "repositories": len(seen),
+        }
 
     def _lifecycle_operation(self, operation_id: str, application_id: str, kind: str) -> dict:
         with self.session_factory() as db:
@@ -373,9 +460,10 @@ class AppsWorker:
             operation.phase = "complete"
             operation.result = result
             operation.finished_at = datetime.now(UTC)
-            app = db.get(Application, operation.application_id)
-            if app is not None and app.active_operation_id == operation.id:
-                app.active_operation_id = None
+            if operation.application_id is not None:
+                app = db.get(Application, operation.application_id)
+                if app is not None and app.active_operation_id == operation.id:
+                    app.active_operation_id = None
             record_apps_audit(
                 db, f"operation.{operation.kind}.complete", tenant_id=operation.tenant_id,
                 actor=operation.actor_user_id, entity_id=operation.application_id,
@@ -393,9 +481,10 @@ class AppsWorker:
             operation.error_code = "apps_operation_failed"
             operation.public_error = "Application operation failed"
             operation.finished_at = datetime.now(UTC)
-            app = db.get(Application, operation.application_id)
-            if app is not None and app.active_operation_id == operation.id:
-                app.active_operation_id = None
+            if operation.application_id is not None:
+                app = db.get(Application, operation.application_id)
+                if app is not None and app.active_operation_id == operation.id:
+                    app.active_operation_id = None
             record_apps_audit(
                 db, f"operation.{operation.kind}.failed", tenant_id=operation.tenant_id,
                 actor=operation.actor_user_id, entity_id=operation.application_id,
@@ -410,3 +499,25 @@ def build_actor(handler: Callable[[str], None]):
     return dramatiq.actor(
         actor_name="apps_operation", queue_name="apps", max_retries=0
     )(handler)
+
+
+def _repository_row(value: object) -> dict:
+    if not isinstance(value, dict):
+        raise RuntimeError("GitHub repository metadata is invalid")
+    repository_id = value.get("id")
+    full_name = value.get("full_name")
+    if (
+        isinstance(repository_id, bool) or not isinstance(repository_id, int)
+        or repository_id <= 0 or not isinstance(full_name, str)
+        or not full_name or len(full_name) > 510
+    ):
+        raise RuntimeError("GitHub repository metadata is invalid")
+    default_branch = value.get("default_branch")
+    return {
+        "github_repository_id": repository_id,
+        "full_name": full_name,
+        "private": bool(value.get("private")),
+        "default_branch": default_branch if isinstance(default_branch, str) else None,
+        "archived": bool(value.get("archived")),
+        "disabled": bool(value.get("disabled")),
+    }

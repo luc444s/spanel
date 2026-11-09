@@ -34,16 +34,30 @@ def request_hash(payload: object) -> str:
 def create_operation(
     db: Session,
     *,
-    application: Application,
+    application: Application | None = None,
     actor_user_id: str,
     kind: str,
     idempotency_key: str,
     payload: object,
     correlation_id: str | None = None,
+    tenant_id: str | None = None,
+    subject_type: str | None = None,
+    subject_id: str | None = None,
 ) -> tuple[Operation, bool]:
     if not idempotency_key or len(idempotency_key) > 255:
         raise AppError("Idempotency-Key is required", status_code=422, code="apps.idempotency_required")
-    digest = request_hash({"application_id": application.id, "kind": kind, "body": payload})
+    if application is not None:
+        tenant_id = application.tenant_id
+        subject_type = "application"
+        subject_id = application.id
+    if not tenant_id or not subject_type or not subject_id:
+        raise AppError(
+            "Operation subject is required", status_code=422, code="apps.subject_required"
+        )
+    digest = request_hash({
+        "subject_type": subject_type, "subject_id": subject_id,
+        "kind": kind, "body": payload,
+    })
     existing = db.scalar(
         select(Operation).where(
             Operation.actor_user_id == actor_user_id,
@@ -54,13 +68,27 @@ def create_operation(
         if existing.request_hash != digest:
             raise AppError("Idempotency-Key body conflict", status_code=409, code="apps.idempotency_conflict")
         return existing, False
-    db.refresh(application, with_for_update=True)
-    if application.active_operation_id is not None:
-        raise AppError("Application already has an active operation", status_code=409, code="apps.operation_active")
+    if application is not None:
+        db.refresh(application, with_for_update=True)
+        if application.active_operation_id is not None:
+            raise AppError("Application already has an active operation", status_code=409, code="apps.operation_active")
+    else:
+        active = db.scalar(select(Operation.id).where(
+            Operation.subject_type == subject_type,
+            Operation.subject_id == subject_id,
+            Operation.status.in_(ACTIVE),
+        ))
+        if active is not None:
+            raise AppError(
+                "Subject already has an active operation", status_code=409,
+                code="apps.operation_active",
+            )
     operation = Operation(
-        application_id=application.id,
-        tenant_id=application.tenant_id,
+        application_id=application.id if application is not None else None,
+        tenant_id=tenant_id,
         actor_user_id=actor_user_id,
+        subject_type=subject_type,
+        subject_id=subject_id,
         kind=kind,
         idempotency_key=idempotency_key,
         request_hash=digest,
@@ -81,18 +109,19 @@ def create_operation(
             "Idempotency-Key body conflict", status_code=409,
             code="apps.idempotency_conflict",
         ) from None
-    acquired = db.execute(
-        update(Application)
-        .where(Application.id == application.id, Application.active_operation_id.is_(None))
-        .values(active_operation_id=operation.id)
-        .execution_options(synchronize_session=False)
-    )
-    if acquired.rowcount != 1:
-        db.rollback()
-        raise AppError(
-            "Application already has an active operation", status_code=409,
-            code="apps.operation_active",
+    if application is not None:
+        acquired = db.execute(
+            update(Application)
+            .where(Application.id == application.id, Application.active_operation_id.is_(None))
+            .values(active_operation_id=operation.id)
+            .execution_options(synchronize_session=False)
         )
+        if acquired.rowcount != 1:
+            db.rollback()
+            raise AppError(
+                "Application already has an active operation", status_code=409,
+                code="apps.operation_active",
+            )
     db.commit()
     return operation, True
 
@@ -123,7 +152,8 @@ def claim_operation(db: Session, operation_id: str) -> Operation | None:
     operation.status = "running"
     operation.phase = "claim"
     operation.attempt += 1
-    operation.heartbeat_at = datetime.now(UTC)
+    operation.started_at = datetime.now(UTC)
+    operation.heartbeat_at = operation.started_at
     db.commit()
     return operation
 
@@ -141,9 +171,10 @@ def reconcile(db: Session, dispatcher: Dispatcher, stale_after: int = 300) -> tu
             operation.status = "interrupted"
             operation.error_code = "apps_worker_interrupted"
             operation.finished_at = datetime.now(UTC)
-            app = db.get(Application, operation.application_id)
-            if app is not None and app.active_operation_id == operation.id:
-                app.active_operation_id = None
+            if operation.application_id is not None:
+                app = db.get(Application, operation.application_id)
+                if app is not None and app.active_operation_id == operation.id:
+                    app.active_operation_id = None
             interrupted += 1
     db.commit()
     return requeued, interrupted

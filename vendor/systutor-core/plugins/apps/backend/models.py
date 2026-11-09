@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from sqlalchemy import (
     JSON,
+    BigInteger,
     Boolean,
     DateTime,
     ForeignKey,
@@ -46,6 +47,70 @@ class GithubConnection(Base):
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class GithubProvider(Base):
+    __tablename__ = "apps_github_providers"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    created_by_user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    github_app_id: Mapped[int] = mapped_column(BigInteger, unique=True, nullable=False)
+    app_slug: Mapped[str] = mapped_column(String(100), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    owner_login: Mapped[str | None] = mapped_column(String(255))
+    owner_type: Mapped[str | None] = mapped_column(String(32))
+    private_key_ciphertext: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    private_key_nonce: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    key_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    status: Mapped[str] = mapped_column(String(32), default="pending_installation")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class GithubInstallation(Base):
+    __tablename__ = "apps_github_installations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    provider_id: Mapped[str] = mapped_column(
+        ForeignKey("apps_github_providers.id"), index=True
+    )
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    github_installation_id: Mapped[int] = mapped_column(
+        BigInteger, unique=True, nullable=False
+    )
+    account_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    account_login: Mapped[str] = mapped_column(String(255), nullable=False)
+    account_type: Mapped[str | None] = mapped_column(String(32))
+    repository_selection: Mapped[str] = mapped_column(String(32), default="selected")
+    permissions: Mapped[dict] = mapped_column(JSON, default=dict)
+    status: Mapped[str] = mapped_column(String(32), default="active")
+    installed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    suspended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class GithubRepository(Base):
+    __tablename__ = "apps_github_repositories"
+    __table_args__ = (
+        UniqueConstraint("installation_id", "github_repository_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    installation_id: Mapped[str] = mapped_column(
+        ForeignKey("apps_github_installations.id"), index=True
+    )
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    github_repository_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    full_name: Mapped[str] = mapped_column(String(510), nullable=False)
+    private: Mapped[bool] = mapped_column(Boolean, default=False)
+    default_branch: Mapped[str | None] = mapped_column(String(255))
+    archived: Mapped[bool] = mapped_column(Boolean, default=False)
+    disabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    removed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class Application(Base):
     __tablename__ = "apps_applications"
     __table_args__ = (UniqueConstraint("tenant_id", "slug"),)
@@ -57,7 +122,15 @@ class Application(Base):
     repository: Mapped[str] = mapped_column(String(510))
     branch: Mapped[str] = mapped_column(String(255), default="main")
     compose_file: Mapped[str | None] = mapped_column(String(510))
+    # Legacy creator identity, retained for audit and for pre-0053 applications.
     source_connection_user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    source_installation_id: Mapped[str | None] = mapped_column(
+        ForeignKey("apps_github_installations.id")
+    )
+    source_repository_id: Mapped[str | None] = mapped_column(
+        ForeignKey("apps_github_repositories.id")
+    )
+    source_status: Mapped[str] = mapped_column(String(32), default="connected")
     runtime_project: Mapped[str] = mapped_column(String(63), unique=True)
     domain: Mapped[str | None] = mapped_column(String(255), unique=True)
     ingress_service: Mapped[str | None] = mapped_column(String(255))
@@ -96,9 +169,13 @@ class Operation(Base):
     __table_args__ = (UniqueConstraint("actor_user_id", "idempotency_key"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    application_id: Mapped[str] = mapped_column(ForeignKey("apps_applications.id"), index=True)
+    application_id: Mapped[str | None] = mapped_column(
+        ForeignKey("apps_applications.id"), index=True
+    )
     tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
     actor_user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    subject_type: Mapped[str | None] = mapped_column(String(32))
+    subject_id: Mapped[str | None] = mapped_column(String(36), index=True)
     kind: Mapped[str] = mapped_column(String(32))
     status: Mapped[str] = mapped_column(String(32), default="queued")
     phase: Mapped[str] = mapped_column(String(64), default="queued")
@@ -107,6 +184,7 @@ class Operation(Base):
     request_hash: Mapped[str] = mapped_column(String(64))
     message_id: Mapped[str | None] = mapped_column(String(255))
     heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     attempt: Mapped[int] = mapped_column(Integer, default=0)
     report: Mapped[dict | None] = mapped_column(JSON)
     result: Mapped[dict | None] = mapped_column(JSON)

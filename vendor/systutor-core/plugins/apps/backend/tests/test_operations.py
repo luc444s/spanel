@@ -94,3 +94,34 @@ def test_pending_environment_is_private_and_rejects_injection(tmp_path: Path) ->
     assert names == ["API_KEY"] and len(fingerprint) == 64
     with pytest.raises(ValueError):
         write_pending_env(tmp_path, "other", [("BAD", "line\nbreak")])
+
+
+def test_control_operation_is_installation_scoped_and_dispatches_only_operation_id(
+    db: Session,
+) -> None:
+    operation, created = create_operation(
+        db, application=None, actor_user_id="u1", kind="github_sync",
+        idempotency_key="sync", payload={}, tenant_id="t1",
+        subject_type="installation", subject_id="i1",
+    )
+    assert created and operation.application_id is None
+    assert operation.subject_type == "installation"
+
+    class Broker:
+        def __init__(self):
+            self.args = []
+
+        def enqueue(self, operation_id):
+            self.args.append(operation_id)
+            return "message"
+
+    broker = Broker()
+    dispatch_operation(db, operation, broker)
+    assert broker.args == [operation.id]
+    with pytest.raises(AppError) as active:
+        create_operation(
+            db, application=None, actor_user_id="u1", kind="github_sync",
+            idempotency_key="other", payload={}, tenant_id="t1",
+            subject_type="installation", subject_id="i1",
+        )
+    assert active.value.status_code == 409

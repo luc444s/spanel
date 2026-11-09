@@ -11,10 +11,13 @@ from sqlalchemy.orm import Session
 
 from plugins.apps.backend.crypto import TokenCipher
 from plugins.apps.backend.dispatcher import DramatiqDispatcher
+from plugins.apps.backend.github import GithubClient, UrllibGithubClient
 from plugins.apps.backend.models import Application, Deployment
 from plugins.apps.backend.oauth import GithubHttp, OAuthFlow, RedisStateStore, UrllibGithubHttp
+from plugins.apps.backend.public_url import PublicUrlError, parse_public_url
 from plugins.apps.backend.router import router
 from plugins.apps.backend.settings import AppsSettings
+from plugins.apps.backend.states import OneTimeStates
 from systutor.contracts.domain_ownership import OwnedSite, register_site_provider
 from systutor.sdk.context import PluginContext
 
@@ -24,7 +27,9 @@ class AppsResources:
     settings: AppsSettings
     dispatcher: object
     github_http: GithubHttp
+    github: GithubClient
     _cipher: TokenCipher | None = None
+    _states: OneTimeStates | None = None
 
     def cipher(self) -> TokenCipher:
         if self._cipher is None:
@@ -40,6 +45,13 @@ class AppsResources:
             RedisStateStore(redis.Redis.from_url(self.settings.redis_url)), self.github_http,
             self.settings.github_client_id, secret, self.settings.oauth_callback_url,
         )
+
+    def states(self) -> OneTimeStates:
+        if self._states is None:
+            import redis
+
+            self._states = OneTimeStates(redis.Redis.from_url(self.settings.redis_url))
+        return self._states
 
 
 def resolve_apps_sites(db: Session, tenant_id: str | None) -> list[OwnedSite]:
@@ -60,13 +72,19 @@ def resolve_apps_sites(db: Session, tenant_id: str | None) -> list[OwnedSite]:
 
 def register(context: PluginContext) -> None:
     settings = AppsSettings.from_env()
-    if os.environ.get("SYSTUTOR_ENV") == "production":
+    production = os.environ.get("SYSTUTOR_ENV") == "production"
+    if production:
         if not settings.oauth_callback_url.startswith("https://") or "*" in settings.oauth_callback_url:
             raise RuntimeError("Apps production OAuth callback must be an exact HTTPS URL")
+        if settings.public_url:
+            try:
+                parse_public_url(settings.public_url, production=True)
+            except PublicUrlError as exc:
+                raise RuntimeError(str(exc)) from exc
     context.register_router(router)
     app = context.router_registry
     if app is not None:
         app.state.apps_resources = AppsResources(
-            settings, DramatiqDispatcher(), UrllibGithubHttp()
+            settings, DramatiqDispatcher(), UrllibGithubHttp(), UrllibGithubClient()
         )
         register_site_provider(app, "apps", resolve_apps_sites)

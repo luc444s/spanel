@@ -83,3 +83,30 @@ def test_redis_failure_is_public_unavailable() -> None:
     flow = OAuthFlow(Broken(), Github(), "client", "secret", "https://panel/callback")
     with pytest.raises(OAuthUnavailable):
         flow.start("u1")
+
+
+def test_scoped_cipher_is_purpose_tenant_provider_and_version_bound() -> None:
+    cipher = TokenCipher(b"x" * 32)
+    encrypted = cipher.encrypt_scoped("github-app-private-key", "t1", "p1", "pem-canary")
+    assert b"pem-canary" not in encrypted.ciphertext
+    assert cipher.decrypt_scoped("github-app-private-key", "t1", "p1", encrypted) == "pem-canary"
+    for args in [
+        ("other-purpose", "t1", "p1"),
+        ("github-app-private-key", "t2", "p1"),
+        ("github-app-private-key", "t1", "p2"),
+    ]:
+        with pytest.raises(InvalidTag):
+            cipher.decrypt_scoped(*args, encrypted)
+    with pytest.raises(InvalidTag):
+        cipher.decrypt_scoped(
+            "github-app-private-key", "t1", "p1",
+            EncryptedValue(encrypted.ciphertext, encrypted.nonce, 2),
+        )
+
+
+def test_scoped_cipher_rejects_key_version_tampering() -> None:
+    cipher = TokenCipher(b"x" * 32, key_version=1)
+    encrypted = cipher.encrypt_scoped("github-app-private-key", "t1", "p1", "pem")
+    tampered = EncryptedValue(encrypted.ciphertext[:-1] + b"x", encrypted.nonce, 1)
+    with pytest.raises(InvalidTag):
+        cipher.decrypt_scoped("github-app-private-key", "t1", "p1", tampered)

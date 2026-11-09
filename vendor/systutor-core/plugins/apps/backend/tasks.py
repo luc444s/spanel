@@ -11,6 +11,7 @@ from systutor.kernel.tasks.broker import configure_dramatiq_broker
 
 from .crypto import TokenCipher
 from .dispatcher import DramatiqDispatcher
+from .github import UrllibGithubClient
 from .models import Operation
 from .operations import reconcile
 from .settings import AppsSettings
@@ -27,11 +28,11 @@ try:
     from app.main import app
 
     publisher = get_site_domain_publisher(app)
-    oauth_flow = app.state.apps_resources.oauth()
 except Exception:
     publisher = None
-    oauth_flow = None
-worker = AppsWorker(session_factory, cipher, publisher=publisher, oauth_flow=oauth_flow)
+worker = AppsWorker(
+    session_factory, cipher, publisher=publisher, github=UrllibGithubClient()
+)
 
 
 def _recover() -> None:

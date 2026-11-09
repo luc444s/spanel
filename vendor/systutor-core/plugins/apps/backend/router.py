@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from fastapi import APIRouter, Body, Depends, Header, Request, Response
@@ -16,21 +17,27 @@ from systutor.kernel.auth.dependencies import get_current_tenant_context, requir
 from systutor.kernel.auth.models import User
 from systutor.kernel.tenants.context import TenantContext
 
+from . import catalog
+from .manifest_flow import ManifestFlow
 from .models import Application, Deployment, Operation
 from .oauth import OAuthUnavailable
 from .operations import create_operation, dispatch_operation, write_pending_env
-from .readiness import github_status as read_github_status
 from .schemas import (
     ApplicationCreate,
     ApplicationView,
     DeleteRequest,
     DeployRequest,
+    ManifestStartRequest,
     OAuthStartRequest,
     OperationDetail,
     OperationView,
+    ProviderView,
     ReconnectRequest,
+    RepositoryView,
+    SourceUpdate,
 )
 from .service import AppsService, audit
+from .states import StateUnavailable
 
 router = APIRouter(tags=["apps"])
 
@@ -44,6 +51,19 @@ def _resources(request: Request):
 
 def _service(request: Request, db: Session) -> AppsService:
     return AppsService(db, _resources(request).cipher())
+
+
+def _production() -> bool:
+    return os.environ.get("SYSTUTOR_ENV", "").strip().lower() == "production"
+
+
+def _flow(request: Request, db: Session) -> ManifestFlow:
+    resources = _resources(request)
+    return ManifestFlow(
+        db, settings=resources.settings, states=resources.states(),
+        github=resources.github, cipher=resources.cipher(),
+        dispatcher=resources.dispatcher, production=_production(),
+    )
 
 
 def _queued(operation: Operation) -> OperationView:
@@ -92,14 +112,103 @@ def github_status(
     request: Request, db: Session = Depends(get_db_session),
     user: User = Depends(require_permission("apps.github.connect")),
 ) -> dict:
-    """Readiness is DB-only and never requires the encryption key."""
+    """Readiness is DB-only and never requires decrypting or reading a secret."""
 
-    return read_github_status(
-        db,
-        tenant_id=user.tenant_id,
-        user_id=user.id,
-        settings=_resources(request).settings,
+    return catalog.status(
+        db, user.tenant_id, _resources(request).settings, production=_production()
     )
+
+
+@router.post("/github/manifest/start")
+def github_manifest_start(
+    body: ManifestStartRequest, request: Request,
+    db: Session = Depends(get_db_session),
+    user: User = Depends(require_permission("apps.github.connect")),
+) -> dict:
+    try:
+        return _flow(request, db).start(user, body)
+    except StateUnavailable as exc:
+        raise AppError(
+            "GitHub state store unavailable", status_code=503,
+            code="apps.state_unavailable",
+        ) from exc
+
+
+@router.get("/github/manifest/callback")
+def github_manifest_callback(
+    code: str, state: str, request: Request,
+    db: Session = Depends(get_db_session),
+) -> RedirectResponse:
+    target = _flow(request, db).conversion(code, state)
+    return RedirectResponse(target, status_code=303)
+
+
+@router.get("/github/install/callback")
+def github_install_callback(
+    state: str, request: Request, installation_id: str | None = None,
+    setup_action: str | None = None, db: Session = Depends(get_db_session),
+) -> RedirectResponse:
+    if not installation_id:
+        return RedirectResponse("/app/apps?github=error", status_code=303)
+    target = _flow(request, db).installation(installation_id, state, setup_action)
+    return RedirectResponse(target, status_code=303)
+
+
+@router.get("/github/providers", response_model=list[ProviderView])
+def github_providers(
+    db: Session = Depends(get_db_session),
+    user: User = Depends(require_permission("apps.github.connect")),
+) -> list[dict]:
+    return catalog.provider_views(db, user.tenant_id)
+
+
+@router.get("/github/installations")
+def github_installations(
+    db: Session = Depends(get_db_session),
+    user: User = Depends(require_permission("apps.github.connect")),
+) -> list[dict]:
+    return catalog.installation_views(db, user.tenant_id)
+
+
+@router.get("/github/installations/{installation_id}/repositories", response_model=list[RepositoryView])
+def github_repositories(
+    installation_id: str, db: Session = Depends(get_db_session),
+    user: User = Depends(require_permission("apps.github.connect")),
+) -> list[dict]:
+    return catalog.repository_views(db, user.tenant_id, installation_id)
+
+
+@router.post("/github/installations/{installation_id}/sync", response_model=OperationView, status_code=202)
+def github_sync(
+    installation_id: str, request: Request,
+    idempotency_key: str | None = Header(None),
+    db: Session = Depends(get_db_session),
+    user: User = Depends(require_permission("apps.github.connect")),
+) -> OperationView:
+    installation = catalog.get_installation(db, user.tenant_id, installation_id)
+    operation, created = create_operation(
+        db, application=None, actor_user_id=user.id, kind="github_sync",
+        idempotency_key=idempotency_key or "", payload={},
+        correlation_id=request.headers.get("X-Request-ID"),
+        tenant_id=user.tenant_id, subject_type="installation",
+        subject_id=installation.id,
+    )
+    if not created:
+        return _queued(operation)
+    audit(db, "github.sync.queued", tenant_id=user.tenant_id, actor=user.id,
+          entity_id=installation.id, details={"operation_id": operation.id})
+    db.commit()
+    dispatch_operation(db, operation, _resources(request).dispatcher)
+    return _queued(operation)
+
+
+@router.delete("/github/providers/{provider_id}", status_code=204)
+def github_provider_delete(
+    provider_id: str, db: Session = Depends(get_db_session),
+    user: User = Depends(require_permission("apps.github.connect")),
+) -> Response:
+    catalog.revoke_provider(db, user.tenant_id, provider_id, user.id)
+    return Response(status_code=204)
 
 
 @router.get("/github/connection")
@@ -109,19 +218,14 @@ def github_connection(
 ) -> dict:
     """Legacy alias kept until the OAuth surface is retired in 0053E."""
 
-    status = read_github_status(
-        db,
-        tenant_id=user.tenant_id,
-        user_id=user.id,
-        settings=_resources(request).settings,
+    status = catalog.status(
+        db, user.tenant_id, _resources(request).settings, production=_production()
     )
     return {
         "connected": status["connected"],
         "reconnect_required": status["reconnect_required"],
-        "github_user_id": status.get("github_user_id"),
         "login": status.get("login"),
-        "avatar_url": status.get("avatar_url"),
-        "scopes": status.get("scopes", []),
+        "scopes": [],
     }
 
 
@@ -178,7 +282,7 @@ def create_application(
     context: TenantContext = Depends(get_current_tenant_context),
     user: User = Depends(require_permission("apps.applications.create")),
 ) -> Application:
-    return _service(request, db).create_application(context, user, body)
+    return catalog.create_application(db, context, user, body)
 
 
 @router.get("/applications", response_model=list[ApplicationView])
@@ -192,13 +296,37 @@ def list_applications(
     )).all())
 
 
-@router.get("/applications/{application_id}", response_model=ApplicationView)
+@router.get("/applications/{application_id}")
 def get_application(
-    application_id: str, request: Request, db: Session = Depends(get_db_session),
+    application_id: str, db: Session = Depends(get_db_session),
     context: TenantContext = Depends(get_current_tenant_context),
     _user: User = Depends(require_permission("apps.applications.read")),
+) -> dict:
+    return catalog.application_detail(db, context.current_tenant_id, application_id)
+
+
+@router.patch("/applications/{application_id}/source", response_model=ApplicationView)
+def update_application_source(
+    application_id: str, body: SourceUpdate, db: Session = Depends(get_db_session),
+    context: TenantContext = Depends(get_current_tenant_context),
+    user: User = Depends(require_permission("apps.applications.create")),
 ) -> Application:
-    return _service(request, db).get_application(context.current_tenant_id, application_id)
+    app = catalog.get_application(db, context.current_tenant_id, application_id)
+    return catalog.update_source(db, app, body, user.id)
+
+
+@router.get("/applications/{application_id}/operations")
+def list_operations(
+    application_id: str, db: Session = Depends(get_db_session),
+    context: TenantContext = Depends(get_current_tenant_context),
+    _user: User = Depends(require_permission("apps.applications.read")),
+) -> list[dict]:
+    app = catalog.get_application(db, context.current_tenant_id, application_id)
+    rows = db.scalars(select(Operation).where(
+        Operation.application_id == app.id,
+        Operation.tenant_id == context.current_tenant_id,
+    ).order_by(Operation.created_at.desc())).all()
+    return [_operation_dict(row) for row in rows]
 
 
 @router.post("/applications/{application_id}/source/reconnect", status_code=204)
@@ -208,8 +336,10 @@ def reconnect_source(
     user: User = Depends(require_permission("apps.applications.create")),
 ) -> Response:
     service = _service(request, db)
-    service.reconnect(service.get_application(context.current_tenant_id, application_id),
-                      body.source_connection_user_id, user.id)
+    service.reconnect(
+        catalog.get_application(db, context.current_tenant_id, application_id),
+        body.source_connection_user_id, user.id,
+    )
     return Response(status_code=204)
 
 
@@ -219,7 +349,7 @@ def inspect_application(
     db: Session = Depends(get_db_session), context: TenantContext = Depends(get_current_tenant_context),
     user: User = Depends(require_permission("apps.applications.create")),
 ) -> OperationView:
-    app = _service(request, db).get_application(context.current_tenant_id, application_id)
+    app = catalog.get_application(db, context.current_tenant_id, application_id)
     return _queue(request, db, app, user, "inspect", idempotency_key, {})
 
 
@@ -232,7 +362,7 @@ def deploy_application(
 ) -> OperationView:
     if not context.is_platform:
         raise AppError("Platform permission required", status_code=403, code="apps.platform_required")
-    app = _service(request, db).get_application(context.current_tenant_id, application_id)
+    app = catalog.get_application(db, context.current_tenant_id, application_id)
     return _queue(request, db, app, user, "deploy", idempotency_key,
                   {"environment": body.environment}, body.environment)
 
@@ -243,10 +373,11 @@ def list_deployments(
     context: TenantContext = Depends(get_current_tenant_context),
     _user: User = Depends(require_permission("apps.applications.read")),
 ) -> list[dict]:
-    app = _service(request, db).get_application(context.current_tenant_id, application_id)
-    rows = db.scalars(select(Deployment).where(Deployment.application_id == app.id)).all()
-    return [{"id": row.id, "status": row.status, "commit": row.commit,
-             "tree_hash": row.tree_hash, "public_error": row.public_error} for row in rows]
+    app = catalog.get_application(db, context.current_tenant_id, application_id)
+    rows = db.scalars(select(Deployment).where(
+        Deployment.application_id == app.id,
+    ).order_by(Deployment.created_at.desc())).all()
+    return [catalog._deployment_view(row) for row in rows]
 
 
 @router.post("/applications/{application_id}/actions/{action}", response_model=OperationView, status_code=202)
@@ -258,7 +389,7 @@ def application_action(
 ) -> OperationView:
     if action not in {"refresh", "logs", "start", "stop", "restart", "down"}:
         raise AppError("Unknown action", status_code=404, code="apps.action_not_found")
-    app = _service(request, db).get_application(context.current_tenant_id, application_id)
+    app = catalog.get_application(db, context.current_tenant_id, application_id)
     return _queue(request, db, app, user, action, idempotency_key, {})
 
 
@@ -271,11 +402,23 @@ def delete_application(
 ) -> OperationView:
     if not context.is_platform:
         raise AppError("Platform permission required", status_code=403, code="apps.platform_required")
-    app = _service(request, db).get_application(context.current_tenant_id, application_id)
+    app = catalog.get_application(db, context.current_tenant_id, application_id)
     if body.confirm != app.slug:
         raise AppError("Confirmation does not match", status_code=422, code="apps.confirmation_invalid")
     return _queue(request, db, app, user, "delete", idempotency_key,
                   {"confirm": body.confirm, "purge_data": body.purge_data})
+
+
+def _operation_dict(row: Operation) -> dict:
+    return {
+        "id": row.id, "application_id": row.application_id,
+        "subject_type": row.subject_type, "subject_id": row.subject_id,
+        "kind": row.kind, "status": row.status, "phase": row.phase,
+        "report": row.report, "result": row.result,
+        "error_code": row.error_code, "public_error": row.public_error,
+        "created_at": row.created_at, "started_at": row.started_at,
+        "finished_at": row.finished_at,
+    }
 
 
 @router.get("/operations/{operation_id}", response_model=OperationDetail)

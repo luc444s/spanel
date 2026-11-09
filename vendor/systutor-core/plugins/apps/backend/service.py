@@ -6,7 +6,6 @@ from __future__ import annotations
 import re
 import threading
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -14,12 +13,10 @@ from sqlalchemy.orm import Session
 from systutor.core.errors import AppError
 from systutor.kernel.audit.service import record_audit
 from systutor.kernel.auth.models import User
-from systutor.kernel.tenants.context import TenantContext
 
 from .crypto import EncryptedValue, TokenCipher
 from .models import Application, GithubConnection
 from .oauth import GithubHttp, OAuthFlow, OAuthTokens
-from .schemas import ApplicationCreate
 
 _REFRESH_LOCKS: dict[str, threading.Lock] = {}
 _REFRESH_LOCKS_GUARD = threading.Lock()
@@ -134,31 +131,6 @@ class AppsService:
             row.last_used_at = now
             self.db.commit()
             return row
-
-    def create_application(
-        self, context: TenantContext, user: User, body: ApplicationCreate
-    ) -> Application:
-        connection = self.db.get(GithubConnection, user.id)
-        if connection is None or connection.reconnect_required:
-            raise AppError("GitHub connection required", status_code=409, code="apps.github_required")
-        slug = _slug(body.name)
-        if self.db.scalar(select(Application.id).where(
-            Application.tenant_id == context.current_tenant_id, Application.slug == slug,
-        )):
-            raise AppError("Application slug already exists", status_code=409, code="apps.slug_conflict")
-        app = Application(
-            tenant_id=context.current_tenant_id, name=body.name, slug=slug,
-            repository=body.repository, branch=body.branch, compose_file=body.compose_file,
-            source_connection_user_id=user.id,
-            runtime_project=f"app-{uuid4().hex[:24]}", domain=body.domain,
-            ingress_service=body.ingress_service, ingress_port=body.ingress_port,
-        )
-        self.db.add(app)
-        self.db.flush()
-        audit(self.db, "application.create", tenant_id=app.tenant_id, actor=user.id, entity_id=app.id)
-        self.db.commit()
-        self.db.refresh(app)
-        return app
 
     def get_application(self, tenant_id: str, application_id: str) -> Application:
         row = self.db.scalar(select(Application).where(
