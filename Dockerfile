@@ -15,10 +15,18 @@ RUN npm run build
 # ── Stage 2: Python backend + static frontend ──
 FROM python:3.12-slim
 
+ARG DOCKER_COMPOSE_VERSION=2.32.4
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     openssh-client sshpass libpq-dev gcc curl git gh \
     && curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-27.5.1.tgz \
     | tar xz --strip-components=1 -C /usr/local/bin docker/docker \
+    && mkdir -p /usr/local/lib/docker/cli-plugins \
+    && curl -fsSL \
+    "https://github.com/docker/compose/releases/download/v${DOCKER_COMPOSE_VERSION}/docker-compose-linux-x86_64" \
+    -o /usr/local/lib/docker/cli-plugins/docker-compose \
+    && chmod 755 /usr/local/lib/docker/cli-plugins/docker-compose \
+    && docker compose version \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
