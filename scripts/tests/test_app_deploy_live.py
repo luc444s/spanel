@@ -53,7 +53,7 @@ def test_target_application_stays_running_healthy_and_non_root() -> None:
         ]
     )
     runner = app.Runner("ssh")
-    manifest = app.deploy(args, result, runner)
+    manifest = app.deploy(app._deploy_options(args), result, runner)
     assert manifest is not None
     assert manifest["status"] == "running"
     assert set(manifest["services"]) == {"frontend", "backend", "database"}

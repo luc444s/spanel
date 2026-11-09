@@ -3,7 +3,6 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
-from argparse import Namespace
 from pathlib import Path
 
 import pytest
@@ -269,7 +268,7 @@ class NoCallRunner:
         raise AssertionError("dry-run must execute zero commands")
 
 
-def deploy_args(**updates: object) -> Namespace:
+def deploy_args(**updates: object) -> app.DeployOptions:
     values = {
         "repo": None,
         "branch": "main",
@@ -282,7 +281,7 @@ def deploy_args(**updates: object) -> Namespace:
         "wait": 2,
     }
     values.update(updates)
-    return Namespace(**values)
+    return app.DeployOptions(**values)
 
 
 def test_dry_run_has_zero_runner_calls_and_zero_state_writes(tmp_path: Path) -> None:
@@ -444,7 +443,7 @@ def test_project_validation_and_purge_confirmation(tmp_path: Path) -> None:
         json.dumps(manifest), encoding="utf-8"
     )
     runner = SpyRunner([], tmp_path)
-    args = Namespace(
+    args = app.LifecycleOptions(
         command="down",
         project="demo",
         transport="local",
