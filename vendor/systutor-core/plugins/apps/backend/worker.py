@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import logging
 import os
 import shutil
 import tempfile
@@ -40,6 +41,7 @@ from .runtime import (
 from .runtime.deployment import _publish_release_state
 from .service import audit as record_apps_audit
 
+logger = logging.getLogger(__name__)
 _DEPLOY_LOCK = threading.Lock()
 
 
@@ -86,6 +88,20 @@ class AppsWorker:
                 result = self._lifecycle_operation(operation_id, application_id, kind)
             self._finish(operation_id, result)
         except Exception as exc:
+            logger.exception(
+                "apps_operation_failed operation_id=%s application_id=%s "
+                "operation_kind=%s error_type=%s",
+                operation_id,
+                application_id,
+                kind,
+                type(exc).__name__,
+                extra={
+                    "operation_id": operation_id,
+                    "application_id": application_id,
+                    "operation_kind": kind,
+                    "error_type": type(exc).__name__,
+                },
+            )
             self._fail(operation_id, exc)
         finally:
             stopped.set()

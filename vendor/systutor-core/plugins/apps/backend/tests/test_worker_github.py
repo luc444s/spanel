@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -112,6 +113,41 @@ def seed(db: Session, cipher: TokenCipher) -> None:
         source_repository_id="r2", source_status="connected", runtime_project="app-removed",
     ))
     db.commit()
+
+
+def test_run_logs_internal_failure_with_operation_context(
+    tmp_path: Path, monkeypatch, caplog
+) -> None:
+    db = database(tmp_path)
+    cipher = TokenCipher(b"k" * 32)
+    seed(db, cipher)
+    db.add(Operation(
+        id="op-failed", application_id="a1", tenant_id="t1", actor_user_id="u1",
+        kind="deploy", status="queued", idempotency_key="failed", request_hash="h",
+    ))
+    db.commit()
+    worker = AppsWorker(lambda: Session(db.get_bind()), cipher, github=FakeGithub())
+
+    def fail_source(*_args, **_kwargs):
+        raise RuntimeError("build exploded")
+
+    monkeypatch.setattr(worker, "_source_operation", fail_source)
+    with caplog.at_level(logging.ERROR, logger=worker_module.__name__):
+        worker.run("op-failed")
+
+    record = next(
+        item for item in caplog.records if item.message.startswith("apps_operation_failed")
+    )
+    assert "operation_id=op-failed" in record.getMessage()
+    assert record.operation_id == "op-failed"
+    assert record.application_id == "a1"
+    assert record.operation_kind == "deploy"
+    assert record.error_type == "RuntimeError"
+    assert "build exploded" in caplog.text
+    db.expire_all()
+    operation = db.get(Operation, "op-failed")
+    assert operation.status == "failed"
+    assert operation.public_error == "Application operation failed"
 
 
 def test_sync_paginates_tombstones_and_never_persists_the_token(tmp_path: Path) -> None:
