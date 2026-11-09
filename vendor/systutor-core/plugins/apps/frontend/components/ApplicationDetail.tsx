@@ -11,7 +11,7 @@ import {
   runApplicationAction,
 } from "../api";
 import { actionAllowed, hasBlockingFindings } from "../logic";
-import type { AppAction, Application, AuditReport, Finding, Operation, OperationSummary } from "../types";
+import type { AppAction, Application, AuditReport, Finding, OperationSummary } from "../types";
 import { DeleteDialog } from "./DeleteDialog";
 import { DeployDialog } from "./DeployDialog";
 import { FindingsReport } from "./FindingsReport";
@@ -23,10 +23,9 @@ const ACTIONS: Array<[AppAction, string]> = [
   ["stop", "Detener"], ["restart", "Reiniciar"], ["down", "Down"],
 ];
 
-export function ApplicationDetail({ application, operations, canCreate, canManage,
+export function ApplicationDetail({ application, canCreate, canManage,
   canDeploy, canDelete, onClose, onAccepted }: {
   application: Application | null;
-  operations: Operation[];
   canCreate: boolean;
   canManage: boolean;
   canDeploy: boolean;
@@ -56,15 +55,9 @@ export function ApplicationDetail({ application, operations, canCreate, canManag
     refetchInterval: 3_000,
   });
   const appOperations = useMemo(() => {
-    if (!application) return [];
-    const merged = new Map<string, Operation>();
-    for (const item of operationsQuery.data ?? []) merged.set(item.id, item);
-    for (const item of operations) {
-      if (item.application_id === application.id) merged.set(item.id, item);
-    }
-    return [...merged.values()].sort((left, right) =>
+    return [...(operationsQuery.data ?? [])].sort((left, right) =>
       String(right.created_at ?? "").localeCompare(String(left.created_at ?? "")));
-  }, [application, operations, operationsQuery.data]);
+  }, [operationsQuery.data]);
   const current = detail.data ? { ...detail.data } : application;
   const busy = appOperations.some((item) => !["succeeded", "failed", "interrupted"].includes(item.status));
   const auditOperation = appOperations.find((item) => {
