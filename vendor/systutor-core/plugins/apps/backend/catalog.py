@@ -416,12 +416,25 @@ def application_detail(db: Session, tenant_id: str, application_id: str) -> dict
 
 def _deployment_view(row: Deployment) -> dict:
     manifest = row.manifest or {}
+    services = sorted(manifest.get("containers", {}).keys())
+    images = manifest.get("images", {})
+    environments = manifest.get("service_environment", {})
     return {
         "id": row.id, "status": row.status, "commit": row.commit,
         "tree_hash": row.tree_hash, "compose_file": row.compose_file,
         "ingress_service": row.ingress_service, "ingress_port": row.ingress_port,
         "release": row.release, "public_error": row.public_error,
-        "services": sorted(manifest.get("containers", {}).keys()),
+        "services": services,
+        "service_details": [
+            {
+                "name": service,
+                "image": images.get(service),
+                "status": row.status,
+                "environment_names": environments.get(service, []),
+                "created_at": row.created_at,
+            }
+            for service in services
+        ],
         "created_at": row.created_at, "finished_at": row.finished_at,
     }
 

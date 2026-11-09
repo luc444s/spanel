@@ -147,6 +147,13 @@ export type DeploymentDetail = Deployment & {
   ingress_port: number | null;
   release: string | null;
   services: string[];
+  service_details: Array<{
+    name: string;
+    image: string | null;
+    status: string;
+    environment_names: string[];
+    created_at: string | null;
+  }>;
   created_at: string | null;
   finished_at: string | null;
 };

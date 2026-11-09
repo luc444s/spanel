@@ -218,6 +218,9 @@ def test_detail_survives_reload_with_histories_services_and_candidates(tmp_path:
     detail = catalog.application_detail(db, "t1", app.id)
     assert detail["active_deployment"]["commit"] == "a" * 40
     assert detail["services"] == ["db", "web"]
+    assert [
+        service["name"] for service in detail["active_deployment"]["service_details"]
+    ] == ["db", "web"]
     assert detail["compose_candidates"] == ["compose.yaml"]
     assert detail["findings"][0]["code"] == "x"
     assert detail["deployments"][0]["id"] == "d1"

@@ -353,6 +353,44 @@ def _image_users(
     return images
 
 
+def _service_environment_names(data: dict[str, Any]) -> dict[str, list[str]]:
+    result: dict[str, list[str]] = {}
+    for service, config in data["services"].items():
+        environment = config.get("environment", {}) if isinstance(config, dict) else {}
+        if isinstance(environment, dict):
+            names = [str(name) for name in environment]
+        elif isinstance(environment, list):
+            names = [str(item).split("=", 1)[0] for item in environment]
+        else:
+            names = []
+        result[str(service)] = sorted({name for name in names if name})
+    return result
+
+
+def _validate_compose_environment(
+    runner: Runner,
+    release: Path,
+    compose_rel: str,
+    project: str,
+) -> None:
+    configured = runner.run(
+        _compose_command(
+            release, compose_rel, project, True, "config", "--format", "json"
+        ),
+        check=False,
+    )
+    missing = sorted(set(re.findall(
+        r'The "([A-Za-z_][A-Za-z0-9_]*)" variable is not set',
+        configured.stderr,
+    )))
+    if missing:
+        raise AppDeployError(
+            f"missing required Compose environment variables: {', '.join(missing)}"
+        )
+    if configured.returncode:
+        raise AppDeployError("Compose configuration is invalid")
+
+
 def _containers(
     runner: Runner,
     release: Path,
@@ -472,6 +510,7 @@ def _manifest_data(
         "tree_hash": _tree_hash(result.root),
         "compose": result.compose.relative_to(result.root).as_posix(),
         "services": sorted(result.data["services"]),
+        "service_environment": _service_environment_names(result.data),
         "images": images,
         "host": host,
         "created_at": datetime.now(UTC).isoformat(),
@@ -558,8 +597,11 @@ def deploy(
     override = _override(result.data, project, options.non_root)
     _stage_release(runner, result.root, release, compose_rel, override, env_file)
     services = sorted(result.data["services"])
+    _validate_compose_environment(runner, release, compose_rel, project)
     command = _compose_command(release, compose_rel, project, True, "build")
-    runner.run(command, timeout=options.timeout)
+    built = runner.run(command, timeout=options.timeout, check=False)
+    if built.returncode:
+        raise AppDeployError(f"Compose image build failed (exit {built.returncode})")
     images: dict[str, str] = {}
     if options.non_root:
         images = _image_users(runner, release, compose_rel, project, True, services)
@@ -583,11 +625,16 @@ def deploy(
     _write_manifest(runner, release, manifest)
     up_started = False
     try:
-        runner.run(
+        started = runner.run(
             _compose_command(release, compose_rel, project, True, "up", "-d"),
             timeout=options.timeout,
+            check=False,
         )
         up_started = True
+        if started.returncode:
+            raise AppDeployError(
+                f"Compose services failed to start (exit {started.returncode})"
+            )
         containers = _containers(runner, release, compose_rel, project, True, services)
         _verify_containers(runner, containers, project, options.non_root, options.wait)
         manifest["status"] = "running"

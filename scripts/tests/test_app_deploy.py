@@ -344,6 +344,42 @@ def test_post_build_root_image_aborts(tmp_path: Path) -> None:
     assert not any("up" in call for call in runner.calls)
 
 
+def test_compose_environment_preflight_lists_missing_names(tmp_path: Path) -> None:
+    runner = SpyRunner([
+        app.Completed(
+            0,
+            '{"services": {}}',
+            'The "DATABASE_URL" variable is not set. Defaulting to a blank string.\n'
+            'The "API_KEY" variable is not set. Defaulting to a blank string.\n',
+        )
+    ], tmp_path)
+    with pytest.raises(
+        app.AppDeployError,
+        match="missing required Compose environment variables: API_KEY, DATABASE_URL",
+    ):
+        app._validate_compose_environment(
+            runner, tmp_path / "release", "compose.yaml", "demo"
+        )
+    assert not any("build" in call for call in runner.calls)
+
+
+def test_service_environment_inventory_contains_names_not_values() -> None:
+    canary = "top-secret-canary"
+    inventory = app._service_environment_names({
+        "services": {
+            "backend": {"environment": {"API_KEY": canary, "EMPTY": None}},
+            "database": {"environment": ["DB_NAME=demo", f"DB_PASSWORD={canary}"]},
+            "frontend": {},
+        }
+    })
+    assert inventory == {
+        "backend": ["API_KEY", "EMPTY"],
+        "database": ["DB_NAME", "DB_PASSWORD"],
+        "frontend": [],
+    }
+    assert canary not in json.dumps(inventory)
+
+
 @pytest.mark.parametrize(
     "top", ["PID UID\n22 0\n", "PID UID\n22 root\n", "PID UID\n"]
 )
@@ -410,6 +446,7 @@ def test_manifest_excludes_env_values(tmp_path: Path) -> None:
         "tree_hash",
         "compose",
         "services",
+        "service_environment",
         "images",
         "host",
         "status",

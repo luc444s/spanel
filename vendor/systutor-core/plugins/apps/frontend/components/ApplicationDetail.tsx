@@ -118,9 +118,35 @@ export function ApplicationDetail({ application, canCreate, canManage,
             <div><dt className="text-muted-foreground">Ingress</dt><dd>{current.ingress_service ? `${current.ingress_service}:${current.ingress_port}` : "—"}</dd></div>
             <div><dt className="text-muted-foreground">Deployment activo</dt><dd>{activeDeployment?.id ?? "—"}</dd></div>
             <div><dt className="text-muted-foreground">Commit activo</dt><dd><code>{activeDeployment?.commit ?? "—"}</code></dd></div>
-            <div><dt className="text-muted-foreground">Servicios</dt><dd>{(detail.data?.services ?? activeDeployment?.services ?? []).join(", ") || "—"}</dd></div>
             <div><dt className="text-muted-foreground">Source status</dt><dd>{current.source_status}</dd></div>
           </dl>
+          <div className="space-y-2">
+            <h3 className="text-sm font-medium">Contenedores</h3>
+            <div className="grid gap-2 sm:grid-cols-3">
+              {(activeDeployment?.service_details ?? []).map((service) => (
+                <article key={service.name} className="rounded border border-border p-3 text-sm">
+                  <div className="flex items-center justify-between gap-2">
+                    <strong className="capitalize">{service.name}</strong>
+                    <span className="text-xs text-muted-foreground">{service.status}</span>
+                  </div>
+                  <p className="mt-1 truncate text-xs text-muted-foreground" title={service.image ?? undefined}>
+                    {service.image ?? "Imagen no registrada"}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Creado {service.created_at ? new Date(service.created_at).toLocaleString() : "—"}
+                  </p>
+                  <details className="mt-2 text-xs">
+                    <summary className="cursor-pointer">Variables ({service.environment_names.length})</summary>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {service.environment_names.map((name) => <code key={name} className="rounded bg-muted px-1 py-0.5">{name}</code>)}
+                      {service.environment_names.length === 0 ? <span className="text-muted-foreground">Sin variables declaradas</span> : null}
+                    </div>
+                  </details>
+                </article>
+              ))}
+            </div>
+            {(activeDeployment?.service_details ?? []).length === 0 ? <p className="text-sm text-muted-foreground">Sin contenedores activos.</p> : null}
+          </div>
           <div className="flex flex-wrap gap-2">
             {canCreate ? <Button variant="secondary" disabled={pending || busy || !sourceConnected} onClick={() => {
               const id = `apps-inspect-${application.id}`;

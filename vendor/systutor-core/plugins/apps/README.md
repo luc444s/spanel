@@ -94,6 +94,11 @@ Apps prepends encrypted, stable `APP_DB_NAME`, `APP_DB_USER` and
 `APP_DB_PASSWORD` values and rejects client overrides. Compose maps these neutral
 names to whichever database engine the repository uses.
 
+Deployment preflight reports missing Compose interpolation variables by name
+before image build. Successful deployments expose one service card per effective
+container with image, creation time and declared environment names; secret values
+are never returned by the API or stored in the deployment manifest.
+
 ## Production checklist
 
 - Provide an HTTPS `SPANEL_APPS_PUBLIC_URL` and a 32-byte encryption key file
