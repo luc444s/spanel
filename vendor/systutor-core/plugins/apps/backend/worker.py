@@ -30,6 +30,7 @@ from .models import (
 )
 from .operations import claim_operation
 from .runtime import (
+    AppDeployError,
     DeployOptions,
     LifecycleOptions,
     Runner,
@@ -88,13 +89,15 @@ class AppsWorker:
                 result = self._lifecycle_operation(operation_id, application_id, kind)
             self._finish(operation_id, result)
         except Exception as exc:
+            safe_error = str(exc) if isinstance(exc, AppDeployError) else "internal error"
             logger.exception(
                 "apps_operation_failed operation_id=%s application_id=%s "
-                "operation_kind=%s error_type=%s",
+                "operation_kind=%s error_type=%s error=%s",
                 operation_id,
                 application_id,
                 kind,
                 type(exc).__name__,
+                safe_error,
                 extra={
                     "operation_id": operation_id,
                     "application_id": application_id,
@@ -501,7 +504,11 @@ class AppsWorker:
             operation.status = "failed"
             operation.phase = "failed"
             operation.error_code = "apps_operation_failed"
-            operation.public_error = "Application operation failed"
+            operation.public_error = (
+                str(exc)
+                if isinstance(exc, AppDeployError)
+                else "Application operation failed"
+            )
             operation.finished_at = datetime.now(UTC)
             if operation.application_id is not None:
                 app = db.get(Application, operation.application_id)

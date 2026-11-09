@@ -23,6 +23,7 @@ from plugins.apps.backend.models import (
     GithubRepository,
     Operation,
 )
+from plugins.apps.backend.runtime import AppDeployError
 from plugins.apps.backend.worker import AppsWorker
 from systutor.core.database import Base
 from systutor.kernel.auth.models import User
@@ -148,6 +149,33 @@ def test_run_logs_internal_failure_with_operation_context(
     operation = db.get(Operation, "op-failed")
     assert operation.status == "failed"
     assert operation.public_error == "Application operation failed"
+
+
+def test_run_exposes_expected_deploy_error_without_hiding_it(
+    tmp_path: Path, monkeypatch, caplog
+) -> None:
+    db = database(tmp_path)
+    cipher = TokenCipher(b"k" * 32)
+    seed(db, cipher)
+    db.add(Operation(
+        id="op-expected", application_id="a1", tenant_id="t1", actor_user_id="u1",
+        kind="deploy", status="queued", idempotency_key="expected", request_hash="h",
+    ))
+    db.commit()
+    worker = AppsWorker(lambda: Session(db.get_bind()), cipher, github=FakeGithub())
+
+    def fail_source(*_args, **_kwargs):
+        raise AppDeployError("services did not become healthy")
+
+    monkeypatch.setattr(worker, "_source_operation", fail_source)
+    with caplog.at_level(logging.ERROR, logger=worker_module.__name__):
+        worker.run("op-expected")
+
+    assert "error=services did not become healthy" in caplog.text
+    db.expire_all()
+    operation = db.get(Operation, "op-expected")
+    assert operation.status == "failed"
+    assert operation.public_error == "services did not become healthy"
 
 
 def test_sync_paginates_tombstones_and_never_persists_the_token(tmp_path: Path) -> None:
