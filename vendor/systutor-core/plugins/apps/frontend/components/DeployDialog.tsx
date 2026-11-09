@@ -4,6 +4,7 @@ import { Alert } from "@systutor/shell/ui/alert";
 import { Button } from "@systutor/shell/ui/button";
 import { Dialog } from "@systutor/shell/ui/dialog";
 import { Input, Textarea } from "@systutor/shell/ui/input";
+import { toast } from "@systutor/shell/ui/toast";
 
 import { deployApplication, newIdempotencyKey } from "../api";
 import { parseDotenv } from "../logic";
@@ -35,14 +36,19 @@ export function DeployDialog({ application, open, blocked, onClose, onAccepted }
     }
     setIntent(request);
     setPending(true); setError(null);
+    const toastId = `apps-deploy-${application.id}`;
+    toast.loading("Enviando deployment…", { id: toastId });
     try {
       const operation = await deployApplication(application.id, request.body, request.key);
       // Secrets are destroyed immediately after the server accepts the job.
       setDotenv(""); setConfirmation(""); setIntent(null);
+      toast.success("Deployment aceptado; seguí el progreso en Operaciones", { id: toastId });
       onAccepted(operation);
     } catch (reason) {
       // Keep the same in-memory key/body only for an explicit retry of this uncertain request.
-      setError(reason instanceof Error ? reason.message : "No se pudo aceptar el despliegue");
+      const message = reason instanceof Error ? reason.message : "No se pudo aceptar el despliegue";
+      setError(message);
+      toast.error(message, { id: toastId });
     } finally {
       setPending(false);
     }

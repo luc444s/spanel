@@ -75,15 +75,22 @@ export function ApplicationDetail({ application, canCreate, canManage,
 
   if (!application || !current) return null;
 
-  async function accept(task: () => Promise<OperationSummary>) {
+  async function accept(
+    task: () => Promise<OperationSummary>,
+    feedback?: { id: string; accepted: string },
+  ) {
     setPending(true);
     try {
       const operation = await task();
+      if (feedback) toast.success(feedback.accepted, { id: feedback.id });
       onAccepted(operation);
       await queryClient.invalidateQueries({ queryKey: appsKeys.operations(application!.id) });
       await queryClient.invalidateQueries({ queryKey: appsKeys.detail(application!.id) });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "No se pudo aceptar la operación");
+      toast.error(
+        error instanceof Error ? error.message : "No se pudo aceptar la operación",
+        feedback ? { id: feedback.id } : undefined,
+      );
     } finally {
       setPending(false);
     }
@@ -115,7 +122,14 @@ export function ApplicationDetail({ application, canCreate, canManage,
             <div><dt className="text-muted-foreground">Source status</dt><dd>{current.source_status}</dd></div>
           </dl>
           <div className="flex flex-wrap gap-2">
-            {canCreate ? <Button variant="secondary" disabled={pending || busy || !sourceConnected} onClick={() => void accept(() => inspectApplication(application.id, newIdempotencyKey()))}>Inspeccionar</Button> : null}
+            {canCreate ? <Button variant="secondary" disabled={pending || busy || !sourceConnected} onClick={() => {
+              const id = `apps-inspect-${application.id}`;
+              toast.loading("Enviando inspección…", { id });
+              void accept(
+                () => inspectApplication(application.id, newIdempotencyKey()),
+                { id, accepted: "Inspección aceptada; podés seguir trabajando" },
+              );
+            }}>Inspeccionar</Button> : null}
             {canDeploy ? <Button disabled={busy || blocked || !sourceConnected} onClick={() => setDeployOpen(true)}>Desplegar</Button> : null}
             {canManage ? ACTIONS.map(([action, label]) => <Button key={action} variant="secondary" disabled={pending || !actionAllowed(current, action, busy)} onClick={() => void accept(() => runApplicationAction(application.id, action, newIdempotencyKey()))}>{label}</Button>) : null}
             {canDelete ? <Button variant="secondary" disabled={busy} className="text-destructive" onClick={() => setDeleteOpen(true)}>Eliminar</Button> : null}
