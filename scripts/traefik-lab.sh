@@ -454,6 +454,7 @@ point_dns_at_traefik() {
     /^[[:space:]]*#/ || NF == 0 { print; next }
     { $1 = ip; print }
   ' "$LAB_DNS_HOSTS" > "$tmp"
+  chmod 0644 "$tmp"
   mv "$tmp" "$LAB_DNS_HOSTS"
   reload_dns
 }
