@@ -329,7 +329,11 @@ def wait_service_health(
         details = active.get("service_details") if isinstance(active, dict) else None
         for item in (details if isinstance(details, list) else []):
             if isinstance(item, dict) and item.get("name") == service_name:
-                if str(item.get("health")).lower() == "healthy":
+                health = str(item.get("health")).lower()
+                running = str(item.get("status")).lower() == "running"
+                # Compose sin healthcheck reporta "unknown"/"none"; el
+                # servicio está sano si Docker lo mantiene running.
+                if health == "healthy" or (running and health in {"unknown", "none", ""}):
                     return detail
                 break
         time.sleep(2)

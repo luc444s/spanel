@@ -38,6 +38,17 @@ def test_select_http_service_uses_detected_ports_and_health() -> None:
     assert picked["name"] == "edge"
 
 
+def test_wait_service_health_accepts_running_without_healthcheck() -> None:
+    payload = detail({**service("api", [8000], "unknown"), "status": "running"})
+
+    class Client:
+        def request(self, method: str, path: str) -> dict:
+            assert (method, path) == ("GET", "/target")
+            return payload
+
+    assert e2e.wait_service_health(Client(), "/target", "api", 1) == payload
+
+
 def test_select_http_service_requires_http_port() -> None:
     with pytest.raises(e2e.E2EError, match="HTTP port"):
         e2e.select_http_service(detail(service("data", [5432])))
