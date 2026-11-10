@@ -16,6 +16,7 @@ import stat
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -24,6 +25,7 @@ from uuid import uuid4
 
 TERMINAL = {"succeeded", "failed", "interrupted"}
 ROOT = "/api/v1/plugins/apps"
+DOMAINS_ROOT = "/api/v1/plugins/domains"
 MANAGED_ENVIRONMENT_NAMES = {"APP_DB_NAME", "APP_DB_USER", "APP_DB_PASSWORD"}
 
 
@@ -77,6 +79,20 @@ class Client:
         self.timeout = timeout
         self.poll_interval = poll_interval
 
+    def _request_at(
+        self,
+        root: str,
+        method: str,
+        path: str,
+        payload: object | None = None,
+        *,
+        idempotency_key: str | None = None,
+    ) -> Any:
+        return self.transport(
+            method, f"{self.base_url}{root}{path}", token=self.token,
+            payload=payload, idempotency_key=idempotency_key, timeout=self.timeout,
+        )
+
     def request(
         self,
         method: str,
@@ -85,9 +101,18 @@ class Client:
         *,
         idempotency_key: str | None = None,
     ) -> Any:
-        return self.transport(
-            method, f"{self.base_url}{ROOT}{path}", token=self.token,
-            payload=payload, idempotency_key=idempotency_key, timeout=self.timeout,
+        return self._request_at(ROOT, method, path, payload, idempotency_key=idempotency_key)
+
+    def domains_request(
+        self,
+        method: str,
+        path: str,
+        payload: object | None = None,
+        *,
+        idempotency_key: str | None = None,
+    ) -> Any:
+        return self._request_at(
+            DOMAINS_ROOT, method, path, payload, idempotency_key=idempotency_key
         )
 
     def poll(self, operation_id: str, timeout: int = 900) -> Any:
@@ -188,21 +213,79 @@ def _print(value: Any, as_json: bool) -> None:
         for item in value:
             print(_human(item))
         return
+    if isinstance(value, dict) and {"available", "routes"} <= set(value):
+        for item in value["available"]:
+            domain = item.get("domain", "") if isinstance(item, dict) else item
+            published = item.get("published") if isinstance(item, dict) else None
+            print(f"available={domain} published={published}")
+        for item in value["routes"]:
+            print(_human(item))
+        return
     print(_human(value))
 
 
 def _human(value: Any) -> str:
     if not isinstance(value, dict):
         return str(value)
+    if {"name", "status", "ports"} <= set(value):
+        ports = value.get("ports") or []
+        return (
+            f"name={value['name']} status={value['status']} "
+            f"health={value.get('health', 'unknown')} "
+            f"ports={','.join(str(port) for port in ports)}"
+        )
+    if "route_id" in value:
+        return (
+            f"route_id={value['route_id']} domain={value.get('domain', '')} "
+            f"path={value.get('path', '')} "
+            f"http_status={value.get('http_status')}"
+        )
     columns = []
     for key in (
-        "id", "operation_id", "kind", "status", "phase", "name", "slug",
+        "id", "route_id", "operation_id", "kind", "status", "phase", "name", "slug",
         "repository", "branch", "account_login", "full_name", "app_slug",
-        "public_error",
+        "domain", "path", "internal_path", "site_id", "https", "public_error",
     ):
         if key in value:
             columns.append(f"{key}={value[key]}")
     return " ".join(columns) or json.dumps(value, sort_keys=True)
+
+
+def _application_detail(client: Client, application: str) -> dict:
+    value = client.request("GET", f"/applications/{application}")
+    if not isinstance(value, dict):
+        raise CliError("Apps API returned an invalid application")
+    return value
+
+
+def _active_service(client: Client, application: str, service: str) -> dict:
+    detail = _application_detail(client, application)
+    active = detail.get("active_deployment")
+    details = active.get("service_details") if isinstance(active, dict) else None
+    if not isinstance(details, list):
+        raise CliError("Application has no active deployment")
+    match = next(
+        (item for item in details if isinstance(item, dict) and item.get("name") == service),
+        None,
+    )
+    if match is None:
+        raise CliError("Service does not belong to the active deployment")
+    return match
+
+
+def _site_id(application: str, service: str) -> str:
+    return f"{application}:{service}"
+
+
+def _route_port(service_detail: dict, requested: int | None) -> int:
+    ports = service_detail.get("ports") or []
+    if requested is not None:
+        if ports and requested not in ports:
+            raise CliError("Port is not exposed by the selected service")
+        return requested
+    if len(ports) == 1 and isinstance(ports[0], int):
+        return ports[0]
+    raise CliError("--port is required unless the service exposes exactly one port")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -221,9 +304,6 @@ def build_parser() -> argparse.ArgumentParser:
     add.add_argument("--name", required=True)
     add.add_argument("--branch")
     add.add_argument("--compose-file")
-    add.add_argument("--domain")
-    add.add_argument("--service")
-    add.add_argument("--port", type=int)
 
     inspect = sub.add_parser("inspect")
     inspect.add_argument("application")
@@ -243,10 +323,46 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("list")
 
-    for name in ("logs", "start", "stop", "restart", "down"):
+    services = sub.add_parser("services")
+    services.add_argument("application")
+
+    for name in ("refresh", "logs", "start", "stop", "restart"):
         action = sub.add_parser(name)
         action.add_argument("application")
+        action.add_argument("--service")
         action.add_argument("--wait", action="store_true")
+
+    down = sub.add_parser("down")
+    down.add_argument("application")
+    down.add_argument("--wait", action="store_true")
+
+    domain_list = sub.add_parser("domain-list")
+    domain_list.add_argument("application")
+    domain_list.add_argument("service")
+
+    domain_assign = sub.add_parser("domain-assign")
+    domain_assign.add_argument("application")
+    domain_assign.add_argument("service")
+    domain_assign.add_argument("--domain", required=True)
+    domain_assign.add_argument("--path", default="/")
+    domain_assign.add_argument("--internal-path", default="/")
+    domain_assign.add_argument("--strip-path", action="store_true")
+    domain_assign.add_argument("--port", type=int)
+    domain_assign.add_argument("--entrypoint", action="append", default=[])
+    domain_assign.add_argument(
+        "--https", action=argparse.BooleanOptionalAction, default=True
+    )
+    domain_assign.add_argument("--middleware", action="append", default=[])
+
+    domain_remove = sub.add_parser("domain-remove")
+    domain_remove.add_argument("application")
+    domain_remove.add_argument("service")
+    domain_remove.add_argument("route_id")
+
+    domain_probe = sub.add_parser("domain-probe")
+    domain_probe.add_argument("application")
+    domain_probe.add_argument("service")
+    domain_probe.add_argument("route_id")
 
     delete = sub.add_parser("delete")
     delete.add_argument("application")
@@ -268,12 +384,10 @@ def run(args: argparse.Namespace, client: Client) -> Any:
             "installation_id": args.installation,
             "repository_id": args.repository,
         }
-        for key in ("branch", "compose_file", "domain", "service"):
+        for key in ("branch", "compose_file"):
             value = getattr(args, key)
             if value is not None:
-                body["ingress_service" if key == "service" else key] = value
-        if args.port is not None:
-            body["ingress_port"] = args.port
+                body[key] = value
         return client.request(
             "POST", "/applications", body, idempotency_key=_idempotency_key()
         )
@@ -293,14 +407,69 @@ def run(args: argparse.Namespace, client: Client) -> Any:
         return client.request("GET", f"/operations/{args.operation}")
     if args.command == "list":
         return client.request("GET", "/applications")
-    if args.command in {"logs", "start", "stop", "restart", "down"}:
+    if args.command == "services":
+        detail = _application_detail(client, args.application)
+        active = detail.get("active_deployment")
+        details = active.get("service_details") if isinstance(active, dict) else None
+        if not isinstance(details, list):
+            raise CliError("Application has no active deployment")
+        return details
+    if args.command in {"refresh", "logs", "start", "stop", "restart", "down"}:
+        body = {}
+        service = getattr(args, "service", None)
+        if service:
+            body["service"] = service
         operation = client.request(
             "POST", f"/applications/{args.application}/actions/{args.command}",
-            {}, idempotency_key=_idempotency_key(),
+            body, idempotency_key=_idempotency_key(),
         )
         if args.wait:
             return client.poll(operation["operation_id"], timeout=args.timeout)
         return operation
+    if args.command == "domain-list":
+        _active_service(client, args.application, args.service)
+        site_id = _site_id(args.application, args.service)
+        available = client.domains_request("GET", "/available")
+        routes = client.domains_request(
+            "GET", f"/routes?site_id={urllib.parse.quote(site_id, safe='')}"
+        )
+        return {
+            "available": available.get("items", []) if isinstance(available, dict) else [],
+            "routes": routes.get("items", []) if isinstance(routes, dict) else [],
+        }
+    if args.command == "domain-assign":
+        service_detail = _active_service(client, args.application, args.service)
+        available = client.domains_request("GET", "/available")
+        items = available.get("items", []) if isinstance(available, dict) else []
+        domain = args.domain.strip().lower()
+        if domain not in {
+            str(item.get("domain", "")).lower()
+            for item in items
+            if isinstance(item, dict)
+        }:
+            raise CliError("Domain is not registered for this tenant")
+        payload = {
+            "domain": domain,
+            "path": args.path,
+            "internal_path": args.internal_path,
+            "strip_path": bool(args.strip_path),
+            "port": _route_port(service_detail, args.port),
+            "entrypoints": list(args.entrypoint),
+            "https": bool(args.https),
+            "middlewares": list(args.middleware),
+            "site_id": _site_id(args.application, args.service),
+        }
+        return client.domains_request("POST", "/routes", payload)
+    if args.command in {"domain-remove", "domain-probe"}:
+        _active_service(client, args.application, args.service)
+        route = client.domains_request("GET", f"/routes/{args.route_id}")
+        if not isinstance(route, dict) or route.get("site_id") != _site_id(
+            args.application, args.service
+        ):
+            raise CliError("Route does not belong to this application service")
+        if args.command == "domain-remove":
+            return client.domains_request("DELETE", f"/routes/{args.route_id}")
+        return client.domains_request("POST", f"/routes/{args.route_id}/probe", {})
     if args.command == "delete":
         application = client.request("GET", f"/applications/{args.application}")
         body = {

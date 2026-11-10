@@ -184,3 +184,183 @@ def test_json_output_shape() -> None:
         apps.build_parser().parse_args(["providers"]), client(transport)
     )
     assert json.loads(json.dumps(value))[0]["app_slug"] == "one"
+
+
+def _detail(service="backend", ports=None):
+    return {
+        "id": "a1",
+        "services": [service],
+        "active_deployment": {
+            "service_details": [
+                {
+                    "name": service,
+                    "status": "running",
+                    "health": "healthy",
+                    "ports": [8000] if ports is None else ports,
+                }
+            ]
+        },
+    }
+
+
+def test_services_prints_dynamic_name_status_health_ports(capsys) -> None:
+    transport = FakeTransport([_detail("api", [8000])])
+    apps.main(["services", "a1"], client(transport))
+    assert capsys.readouterr().out == "name=api status=running health=healthy ports=8000\n"
+
+
+def test_lifecycle_service_selector_is_sent_in_body() -> None:
+    transport = FakeTransport([{"operation_id": "op1"}])
+    apps.run(
+        apps.build_parser().parse_args(["restart", "a1", "--service", "backend"]),
+        client(transport),
+    )
+    assert transport.calls[0]["payload"] == {"service": "backend"}
+    assert transport.calls[0]["url"].endswith(
+        "/api/v1/plugins/apps/applications/a1/actions/restart"
+    )
+
+
+def test_down_does_not_accept_service_selector() -> None:
+    with pytest.raises(SystemExit):
+        apps.build_parser().parse_args(["down", "a1", "--service", "backend"])
+
+
+def test_add_does_not_offer_ingress_flags() -> None:
+    with pytest.raises(SystemExit):
+        apps.build_parser().parse_args([
+            "add", "--installation", "i1", "--repository", "r1", "--name", "Demo",
+            "--domain", "api.example.com",
+        ])
+
+
+def test_domain_list_distinguishes_available_and_linked_routes() -> None:
+    transport = FakeTransport([
+        _detail("backend"),
+        {"items": [{"domain": "api.example.com", "published": True}]},
+        {"items": [{"id": "r1", "domain": "api.example.com", "site_id": "a1:backend"}]},
+    ])
+    value = apps.run(
+        apps.build_parser().parse_args(["domain-list", "a1", "backend"]),
+        client(transport),
+    )
+    assert value["available"][0]["domain"] == "api.example.com"
+    assert value["routes"][0]["id"] == "r1"
+    assert transport.calls[1]["url"].endswith("/api/v1/plugins/domains/available")
+    assert transport.calls[2]["url"].endswith(
+        "/api/v1/plugins/domains/routes?site_id=a1%3Abackend"
+    )
+
+
+def test_domain_assign_uses_registered_domain_and_detected_port() -> None:
+    transport = FakeTransport([
+        _detail("backend", [8000]),
+        {"items": [{"domain": "api.example.com"}]},
+        {"id": "r1", "domain": "api.example.com", "path": "/api"},
+    ])
+    apps.run(
+        apps.build_parser().parse_args([
+            "domain-assign", "a1", "backend",
+            "--domain", "API.example.com",
+            "--path", "/api",
+            "--entrypoint", "web", "--entrypoint", "websecure",
+            "--middleware", "rate-limit@file",
+        ]),
+        client(transport),
+    )
+    assert transport.calls[2]["payload"] == {
+        "domain": "api.example.com",
+        "path": "/api",
+        "internal_path": "/",
+        "strip_path": False,
+        "port": 8000,
+        "entrypoints": ["web", "websecure"],
+        "https": True,
+        "middlewares": ["rate-limit@file"],
+        "site_id": "a1:backend",
+    }
+    assert "container" not in json.dumps(transport.calls[2]["payload"])
+
+
+def test_domain_assign_rejects_unregistered_domain_without_post() -> None:
+    transport = FakeTransport([
+        _detail("backend"),
+        {"items": [{"domain": "other.example.com"}]},
+    ])
+    with pytest.raises(apps.CliError, match="not registered"):
+        apps.run(
+            apps.build_parser().parse_args([
+                "domain-assign", "a1", "backend", "--domain", "api.example.com",
+            ]),
+            client(transport),
+        )
+    assert [call["method"] for call in transport.calls] == ["GET", "GET"]
+
+
+def test_domain_assign_requires_port_when_ambiguous() -> None:
+    transport = FakeTransport([
+        _detail("backend", [8000, 8443]),
+        {"items": [{"domain": "api.example.com"}]},
+    ])
+    with pytest.raises(apps.CliError, match="--port"):
+        apps.run(
+            apps.build_parser().parse_args([
+                "domain-assign", "a1", "backend", "--domain", "api.example.com",
+            ]),
+            client(transport),
+        )
+
+
+def test_domain_remove_and_probe_validate_route_ownership() -> None:
+    transport = FakeTransport([
+        _detail("backend"),
+        {"id": "r1", "site_id": "a1:backend", "domain": "api.example.com"},
+        None,
+    ])
+    apps.run(
+        apps.build_parser().parse_args(["domain-remove", "a1", "backend", "r1"]),
+        client(transport),
+    )
+    assert [call["method"] for call in transport.calls] == ["GET", "GET", "DELETE"]
+
+    probe_transport = FakeTransport([
+        _detail("backend"),
+        {"id": "r1", "site_id": "a1:backend", "domain": "api.example.com"},
+        {"route_id": "r1", "domain": "api.example.com", "http_status": 200},
+    ])
+    value = apps.run(
+        apps.build_parser().parse_args(["domain-probe", "a1", "backend", "r1"]),
+        client(probe_transport),
+    )
+    assert value["http_status"] == 200
+    assert probe_transport.calls[2]["url"].endswith(
+        "/api/v1/plugins/domains/routes/r1/probe"
+    )
+
+
+def test_domain_remove_rejects_route_of_another_service() -> None:
+    transport = FakeTransport([
+        _detail("backend"),
+        {"id": "r1", "site_id": "a1:worker", "domain": "api.example.com"},
+    ])
+    with pytest.raises(apps.CliError, match="does not belong"):
+        apps.run(
+            apps.build_parser().parse_args(["domain-remove", "a1", "backend", "r1"]),
+            client(transport),
+        )
+    assert len(transport.calls) == 2
+
+
+def test_domain_assign_rejects_port_not_exposed_by_service() -> None:
+    transport = FakeTransport([
+        _detail("backend", [8000]),
+        {"items": [{"domain": "api.example.com"}]},
+    ])
+    with pytest.raises(apps.CliError, match="not exposed"):
+        apps.run(
+            apps.build_parser().parse_args([
+                "domain-assign", "a1", "backend", "--domain", "api.example.com",
+                "--port", "9000",
+            ]),
+            client(transport),
+        )
