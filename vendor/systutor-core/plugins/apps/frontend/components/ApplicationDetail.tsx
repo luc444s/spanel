@@ -125,12 +125,12 @@ export function ApplicationDetail({ application, canCreate, canManage, canManage
       <div className="space-y-4">
         {!sourceConnected ? <Alert title="Fuente requiere reconexión">
           El repositorio ya no está autorizado por una instalación activa. Las inspecciones y despliegues nuevos están bloqueados; el lifecycle existente continúa.
-          {canCreate ? <Button className="ml-2" size="sm" variant="secondary" disabled={pending} onClick={() => setSourceOpen(true)}>Elegir fuente</Button> : null}
+          {canCreate ? <Button className="ml-2" variant="secondary" disabled={pending} onClick={() => setSourceOpen(true)}>Elegir fuente</Button> : null}
         </Alert> : null}
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-2">
           <div className="flex flex-wrap gap-1">
             {TABS.map(([value, label]) =>
-              <Button key={value} size="sm" variant={tab === value ? "primary" : "secondary"} onClick={() => setTab(value)}>{label}</Button>)}
+              <Button key={value} variant={tab === value ? "primary" : "secondary"} onClick={() => setTab(value)}>{label}</Button>)}
           </div>
           <span className="rounded bg-muted px-2 py-0.5 text-xs">● {current.status}</span>
         </div>

@@ -24,6 +24,6 @@ export function ServiceCard({ service, domainCount, onOpen }: {
     <p className="mt-2">{service.health === "unknown" ? "Health desconocido" : service.health}</p>
     <p className="text-xs text-muted-foreground">Puertos: {service.ports.join(", ") || "—"}</p>
     <p className="text-xs text-muted-foreground">{domainCount === null ? "Dominios: —" : domainCount ? `${domainCount} dominio${domainCount === 1 ? "" : "s"}` : "Sin dominios"}</p>
-    <Button className="mt-3" size="sm" variant="secondary" onClick={(event) => { event.stopPropagation(); onOpen(); }}>Abrir servicio</Button>
+    <Button className="mt-3" variant="secondary" onClick={(event) => { event.stopPropagation(); onOpen(); }}>Abrir servicio</Button>
   </article>;
 }

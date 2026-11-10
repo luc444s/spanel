@@ -212,7 +212,7 @@ export function ServiceDomains({ applicationId, service, canManage }: {
     {routesQuery.isError ? <Alert title="No se pudieron cargar las rutas">{(routesQuery.error as Error).message}</Alert> : null}
     <div className="flex flex-wrap items-center justify-between gap-2">
       <h3 className="text-sm font-medium">Rutas publicadas</h3>
-      {canManage ? <Button size="sm" onClick={openCreate}>Asignar dominio registrado</Button> : null}
+      {canManage ? <Button onClick={openCreate}>Asignar dominio registrado</Button> : null}
     </div>
     <div className="overflow-x-auto">
       <table className="w-full min-w-[680px] text-left text-sm">
@@ -221,7 +221,7 @@ export function ServiceDomains({ applicationId, service, canManage }: {
           <td className="p-2">{route.domain}</td><td className="p-2"><code>{route.path}</code></td>
           <td className="p-2"><code>{service.name}:{route.port}</code></td><td className="p-2">{route.https ? "Sí" : "No"}</td>
           <td className="p-2">{route.available ? "● Activa" : "Pendiente"}</td>
-          <td className="p-2">{canManage ? <span className="flex flex-wrap gap-1"><Button size="sm" variant="secondary" onClick={() => openEdit(route)}>Editar</Button><Button size="sm" variant="secondary" onClick={() => setRemoving(route)}>Quitar</Button></span> : "—"}</td>
+          <td className="p-2">{canManage ? <span className="flex flex-wrap gap-1"><Button variant="secondary" onClick={() => openEdit(route)}>Editar</Button><Button variant="secondary" onClick={() => setRemoving(route)}>Quitar</Button></span> : "—"}</td>
         </tr>)}</tbody>
       </table>
     </div>
@@ -266,9 +266,9 @@ export function ServiceDomains({ applicationId, service, canManage }: {
         {formError ? <Alert title="No se pudo guardar la ruta">{formError}</Alert> : null}
         {probe ? <Alert title="Resultado del probe">{probe}</Alert> : null}
         <div className="flex flex-wrap justify-end gap-2">
-          <Button type="button" size="sm" variant="secondary" onClick={() => { setFormOpen(false); setEditing(null); }}>Cancelar</Button>
-          <Button type="button" size="sm" variant="secondary" disabled={!editing || probePending} title={editing ? undefined : "Guardá la ruta para probarla"} onClick={() => void runProbe()}>Probar ruta</Button>
-          <Button type="submit" size="sm" disabled={saveMutation.isPending || !form.domain}>Guardar y publicar</Button>
+          <Button type="button" variant="secondary" onClick={() => { setFormOpen(false); setEditing(null); }}>Cancelar</Button>
+          <Button type="button" variant="secondary" disabled={!editing || probePending} title={editing ? undefined : "Guardá la ruta para probarla"} onClick={() => void runProbe()}>Probar ruta</Button>
+          <Button type="submit" disabled={saveMutation.isPending || !form.domain}>Guardar y publicar</Button>
         </div>
       </form>
     </Dialog>
@@ -276,12 +276,12 @@ export function ServiceDomains({ applicationId, service, canManage }: {
     <Dialog open={Boolean(conflict)} title="No se puede publicar la ruta" onClose={() => setConflict(null)} zIndexClassName="z-[1200]">
       <p className="text-sm">{conflict}</p>
       <p className="mt-2 text-sm text-muted-foreground">Cambiá el dominio o el path antes de continuar.</p>
-      <div className="mt-4 flex justify-end"><Button size="sm" onClick={() => setConflict(null)}>Cerrar</Button></div>
+      <div className="mt-4 flex justify-end"><Button onClick={() => setConflict(null)}>Cerrar</Button></div>
     </Dialog>
 
     <Dialog open={Boolean(removing)} title="Quitar ruta" description={removing ? `${removing.domain} ${removing.path}` : undefined} onClose={() => setRemoving(null)} zIndexClassName="z-[1200]">
       <p className="text-sm text-muted-foreground">Se elimina la ruta del proxy. El dominio registrado y los demás servicios no cambian.</p>
-      <div className="mt-4 flex justify-end gap-2"><Button size="sm" variant="secondary" onClick={() => setRemoving(null)}>Cancelar</Button><Button size="sm" className="text-destructive" disabled={removeMutation.isPending} onClick={() => removing && removeMutation.mutate(removing)}>Quitar ruta</Button></div>
+      <div className="mt-4 flex justify-end gap-2"><Button variant="secondary" onClick={() => setRemoving(null)}>Cancelar</Button><Button className="text-destructive" disabled={removeMutation.isPending} onClick={() => removing && removeMutation.mutate(removing)}>Quitar ruta</Button></div>
     </Dialog>
   </div>;
 }

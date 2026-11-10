@@ -23,7 +23,7 @@ export function SecretRevealDialog({ name, pending, error, onClose, onReveal }: 
       <p className="text-sm text-muted-foreground">El valor podría permitir acceso a datos de la aplicación. No lo compartas ni lo incluyas en logs.</p>
       <label className="block space-y-1 text-sm"><span>Motivo *</span><Input value={reason} maxLength={500} autoFocus onChange={(event) => setReason(event.target.value)} /></label>
       {error ? <Alert title="No se pudo revelar">{error}</Alert> : null}
-      <div className="flex justify-end gap-2"><Button type="button" size="sm" variant="secondary" onClick={onClose}>Cancelar</Button><Button type="submit" size="sm" disabled={pending || !reason.trim()}>Revelar durante 30 s</Button></div>
+      <div className="flex justify-end gap-2"><Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button><Button type="submit" disabled={pending || !reason.trim()}>Revelar durante 30 s</Button></div>
     </form>
   </Dialog>;
 }

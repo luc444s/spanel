@@ -22,10 +22,10 @@ export function ServiceOverview({ service, canManage, pending, updatedAt, onActi
       <div><dt className="text-muted-foreground">Última revisión</dt><dd>{lastRevision}</dd></div>
     </dl>
     {canManage ? <div className="flex flex-wrap gap-2">
-      <Button size="sm" variant="secondary" disabled={pending} onClick={() => onAction("refresh")}>Actualizar</Button>
-      <Button size="sm" variant="secondary" disabled={pending} onClick={() => onAction("logs")}>Solicitar logs</Button>
-      <Button size="sm" variant="secondary" disabled={pending} onClick={() => onAction("restart")}>Reiniciar</Button>
-      <Button size="sm" variant="secondary" disabled={pending} onClick={() => onAction(running ? "stop" : "start")}>{running ? "Detener" : "Iniciar"}</Button>
+      <Button variant="secondary" disabled={pending} onClick={() => onAction("refresh")}>Actualizar</Button>
+      <Button variant="secondary" disabled={pending} onClick={() => onAction("logs")}>Solicitar logs</Button>
+      <Button variant="secondary" disabled={pending} onClick={() => onAction("restart")}>Reiniciar</Button>
+      <Button variant="secondary" disabled={pending} onClick={() => onAction(running ? "stop" : "start")}>{running ? "Detener" : "Iniciar"}</Button>
     </div> : null}
   </div>;
 }

@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import type { Operation, ServiceDetail } from "../types";
-import { resultText, serviceFromSubject } from "./ServiceOperations";
-import { routePayload, serviceRoutePreview, type RouteForm } from "./ServiceDomains";
+import type { Operation, ServiceDetail } from "../../../../vendor/systutor-core/plugins/apps/frontend/types";
+import { resultText, serviceFromSubject } from "../../../../vendor/systutor-core/plugins/apps/frontend/components/ServiceOperations";
+import { routePayload, serviceRoutePreview, type RouteForm } from "../../../../vendor/systutor-core/plugins/apps/frontend/components/ServiceDomains";
 import {
   canRevealVariable, remainingSeconds, revealExpiry, sourceLabel,
-} from "./ServiceEnvironment";
+} from "../../../../vendor/systutor-core/plugins/apps/frontend/components/ServiceEnvironment";
 
 const service = {
   name: "api", image: "api:latest", status: "running", health: "healthy",
-  ports: [8000], restart_count: 0, environment: [], created_at: null,
+  ports: [8000], restart_count: 0, environment_names: [], environment: [], created_at: null,
 } as ServiceDetail;
 
 const form: RouteForm = {

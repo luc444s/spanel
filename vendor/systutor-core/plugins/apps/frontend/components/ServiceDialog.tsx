@@ -54,7 +54,7 @@ export function ServiceDialog({ applicationId, applicationName, service, operati
     maxWidthClassName="max-w-4xl" zIndexClassName="z-[1100]">
     <div className="space-y-4">
       <div className="flex flex-wrap gap-1 border-b border-border pb-2">
-        {TABS.map(([value, label]) => <Button key={value} size="sm"
+        {TABS.map(([value, label]) => <Button key={value}
           variant={tab === value ? "primary" : "secondary"}
           onClick={() => setTab(value)}>{label}</Button>)}
       </div>
