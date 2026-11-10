@@ -323,6 +323,7 @@ def wait_service_health(
     client: ApiClient, root: str, service_name: str, timeout: int
 ) -> dict[str, Any]:
     deadline = time.monotonic() + timeout
+    last_state = "missing"
     while time.monotonic() < deadline:
         detail = client.request("GET", root)
         active = detail.get("active_deployment")
@@ -331,13 +332,16 @@ def wait_service_health(
             if isinstance(item, dict) and item.get("name") == service_name:
                 health = str(item.get("health")).lower()
                 running = str(item.get("status")).lower() == "running"
+                last_state = f"{item.get('status')}/{item.get('health')}"
                 # Compose sin healthcheck reporta "unknown"/"none"; el
                 # servicio está sano si Docker lo mantiene running.
                 if health == "healthy" or (running and health in {"unknown", "none", ""}):
                     return detail
                 break
         time.sleep(2)
-    raise E2EError(f"{service_name} did not become healthy within {timeout}s")
+    raise E2EError(
+        f"{service_name} did not become healthy within {timeout}s (last {last_state})"
+    )
 
 
 def expect_missing(client: ApiClient, path: str, label: str) -> None:
