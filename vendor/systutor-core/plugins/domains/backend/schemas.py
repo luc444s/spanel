@@ -183,6 +183,19 @@ class RouteUpdate(BaseModel):
     def not_empty(self):
         if not self.model_fields_set:
             raise ValueError("la actualización no contiene campos")
+        for name in (
+            "domain",
+            "path",
+            "internal_path",
+            "strip_path",
+            "port",
+            "entrypoints",
+            "https",
+            "middlewares",
+            "site_id",
+        ):
+            if name in self.model_fields_set and getattr(self, name) is None:
+                raise ValueError(f"{name} no puede ser null")
         return self
 
 

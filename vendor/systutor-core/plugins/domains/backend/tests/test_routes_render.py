@@ -44,14 +44,17 @@ def test_route_only_document_has_no_base_router_and_keeps_tls() -> None:
     secure = routers["spanel-api-example-com-route-route-1"]
     assert secure["tls"] == {"certResolver": "letsencrypt"}
     assert secure["middlewares"] == [
-        "spanel-api-example-com-route-route-1-rewrite",
+        "spanel-api-example-com-route-route-1-rewrite-strip",
+        "spanel-api-example-com-route-route-1-rewrite-add",
         "rate-limit@file",
     ]
-    middleware = doc["http"]["middlewares"][
-        "spanel-api-example-com-route-route-1-rewrite"
-    ]
-    assert middleware["replacePathRegex"]["regex"] == "^/api(.*)"
-    assert middleware["replacePathRegex"]["replacement"] == "/v1$1"
+    middlewares = doc["http"]["middlewares"]
+    assert middlewares[
+        "spanel-api-example-com-route-route-1-rewrite-strip"
+    ]["stripPrefix"]["prefixes"] == ["/api"]
+    assert middlewares[
+        "spanel-api-example-com-route-route-1-rewrite-add"
+    ]["addPrefix"]["prefix"] == "/v1"
     redirect = routers["spanel-api-example-com-route-route-1-http"]
     assert redirect["entryPoints"] == ["web"]
 
@@ -69,6 +72,20 @@ def test_strip_path_without_internal_rewrite_preserves_prefix() -> None:
     )
     router = doc["http"]["routers"]["spanel-api-example-com-route-r1"]
     assert "middlewares" not in router
+
+
+def test_internal_path_without_strip_accepts_exact_prefix() -> None:
+    doc = rendered(
+        PathRoute(
+            "/api", "app-container", 80, internal_path="/v1", strip_path=False,
+            route_id="r1",
+        )
+    )
+    name = "spanel-api-example-com-route-r1-rewrite"
+    assert doc["http"]["routers"]["spanel-api-example-com-route-r1"]["middlewares"] == [name]
+    rewrite = doc["http"]["middlewares"][name]["replacePathRegex"]
+    assert rewrite["regex"] == "^/api(.*)"
+    assert rewrite["replacement"] == "/v1$1"
 
 
 def test_parser_recognizes_route_router_names() -> None:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import shlex
 import socket
@@ -590,7 +591,8 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
     # ---- rutas gestionadas (A.SPEC 0060) ----------------------------------
 
     def route_document_path(self, domain: str) -> Path:
-        return self.files.config_dir / site_file_name(slug_for(f"route-{domain}"))
+        digest = hashlib.sha256(domain.encode()).hexdigest()[:20]
+        return self.files.config_dir / site_file_name(f"route-{digest}")
 
     def _connect_route_containers(self, routes: list[PathRoute]) -> None:
         network = self.settings.network

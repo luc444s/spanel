@@ -156,29 +156,35 @@ def _route_rewrite(
     internal_path: str,
     strip_path: bool,
     middleware_name: str,
-) -> dict | None:
-    """Middleware que mapea el path externo al path interno del backend.
+) -> dict[str, dict]:
+    """Middlewares que mapean el path externo al path interno del backend.
 
-    `strip_path` elimina el prefijo externo; `internal_path` es el prefijo que
-    recibe el servicio. Sin strip y con `/` se preserva el path original.
+    `stripPrefix` elimina el prefijo externo y `addPrefix` agrega el interno.
+    Sin strip, `replacePathRegex` sustituye el prefijo una sola vez. Ambos
+    reutilizan los middlewares nativos de Traefik; no se inventa routing.
     """
     internal = normalize_path_prefix(internal_path)
     if prefix == "/":
-        return None
+        return {}
     if strip_path:
-        target = internal
-    elif internal != "/" and internal != prefix:
-        target = internal
-    else:
-        return None
-    return {
-        middleware_name: {
-            "replacePathRegex": {
-                "regex": f"^{re.escape(prefix)}(.*)",
-                "replacement": f"{target}$1",
+        result: dict[str, dict] = {
+            f"{middleware_name}-strip": {
+                "stripPrefix": {"prefixes": [prefix]}
             }
         }
-    }
+        if internal != "/":
+            result[f"{middleware_name}-add"] = {"addPrefix": {"prefix": internal}}
+        return result
+    if internal != "/" and internal != prefix:
+        return {
+            middleware_name: {
+                "replacePathRegex": {
+                    "regex": f"^{re.escape(prefix)}(.*)",
+                    "replacement": f"{internal}$1",
+                }
+            }
+        }
+    return {}
 
 
 def _route_entrypoints(
@@ -255,9 +261,9 @@ def render_site_yaml(
             strip_path=route.strip_path,
             middleware_name=f"{route_service}-rewrite",
         )
-        if rewrite is not None:
+        if rewrite:
             middlewares.update(rewrite)
-            route_middlewares.append(f"{route_service}-rewrite")
+            route_middlewares.extend(rewrite)
         for raw in route.middlewares:
             route_middlewares.append(_safe_proxy_token(raw, "middleware"))
         if route.https and redirect_eps:

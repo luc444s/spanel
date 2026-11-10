@@ -14,7 +14,7 @@ from plugins.domains.backend import service as service_module
 from plugins.domains.backend.models import DomainRoute
 from plugins.domains.backend.proxy import CertificateInfo, PathRoute
 from plugins.domains.backend.schemas import RouteCreate, RouteUpdate
-from plugins.domains.backend.service import DomainsService
+from plugins.domains.backend.service import DomainsService, release_application_routes
 from systutor.contracts.domain_namespace import register_domain_providers
 from systutor.contracts.domain_ownership import OwnedSite, register_site_provider
 from systutor.core.database import Base
@@ -221,3 +221,19 @@ def test_route_database_row_is_domains_owned(setup):
     )
     row = service._db.get(DomainRoute, item.id)
     assert row is not None and row.tenant_id == "t1"
+
+
+def test_application_delete_releases_its_routes(setup):
+    service, ops, _ = setup
+    service.create_route(
+        context(), RouteCreate(domain="api.example.com", site_id="app-1:web", port=80)
+    )
+    service.create_route(
+        context(),
+        RouteCreate(
+            domain="api.example.com", site_id="app-1:worker", path="/jobs", port=9000
+        ),
+    )
+    assert len(ops.documents["api.example.com"]) == 2
+    release_application_routes(service._db, service._app, "t1", "app-1")
+    assert service._db.query(DomainRoute).count() == 0

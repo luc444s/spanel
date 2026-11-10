@@ -6,6 +6,7 @@ propiedad con los contratos `domain_namespace`/`domain_ownership`.
 
 from __future__ import annotations
 
+import logging
 from io import StringIO
 
 from fastapi import FastAPI
@@ -55,6 +56,8 @@ from systutor.kernel.tenants.context import TenantContext
 from systutor.kernel.tenants.models import Tenant
 from systutor.kernel.tenants.service import list_tenants
 
+logger = logging.getLogger(__name__)
+
 
 def published_domain_usage(db: Session, domain: str) -> DomainUsage | None:
     """Uso extra publicado por el proxy, o `None` si el proxy no responde."""
@@ -67,6 +70,38 @@ def published_domain_usage(db: Session, domain: str) -> DomainUsage | None:
     except Exception:  # noqa: BLE001 - el proxy no debe romper una lectura
         return None
     return None
+
+
+def release_application_routes(
+    db: Session, app: FastAPI, tenant_id: str, application_id: str
+) -> None:
+    """Libera las rutas de todos los servicios de una aplicación eliminada.
+
+    Se invoca desde el worker de Apps mediante un hook del runtime; la
+    propiedad, el renderer y la escritura siguen siendo de Dominios.
+    """
+    prefix = f"{application_id}:"
+    rows = list(
+        db.scalars(
+            select(DomainRoute).where(
+                DomainRoute.tenant_id == tenant_id,
+                DomainRoute.site_id.startswith(prefix),
+            )
+        ).all()
+    )
+    if not rows:
+        return
+    service = DomainsService(db, app)
+    domains = sorted({row.domain for row in rows})
+    for row in rows:
+        db.delete(row)
+    db.flush()
+    for domain in domains:
+        try:
+            service._publish_domain_routes(tenant_id, domain, ready=False)
+        except Exception:  # noqa: BLE001 - el proxy caído no bloquea el delete
+            logger.warning("domains_route_cleanup_failed", extra={"domain": domain})
+    db.commit()
 
 
 class DomainsService:
