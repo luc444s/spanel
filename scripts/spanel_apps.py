@@ -277,6 +277,23 @@ def _site_id(application: str, service: str) -> str:
     return f"{application}:{service}"
 
 
+def _validate_domains_options(
+    available: object,
+    entrypoints: Sequence[str],
+    middlewares: Sequence[str],
+) -> None:
+    if not isinstance(available, dict):
+        return
+    if "entrypoints" in available:
+        allowed = {str(value) for value in available.get("entrypoints") or []}
+        if any(value.strip() not in allowed for value in entrypoints):
+            raise CliError("Entrypoint is not allowed by Domains")
+    if "middlewares" in available:
+        allowed = {str(value) for value in available.get("middlewares") or []}
+        if any(value.strip() not in allowed for value in middlewares):
+            raise CliError("Middleware is not allowed by Domains")
+
+
 def _route_port(service_detail: dict, requested: int | None) -> int:
     ports = service_detail.get("ports") or []
     if requested is not None:
@@ -441,6 +458,7 @@ def run(args: argparse.Namespace, client: Client) -> Any:
         service_detail = _active_service(client, args.application, args.service)
         available = client.domains_request("GET", "/available")
         items = available.get("items", []) if isinstance(available, dict) else []
+        _validate_domains_options(available, args.entrypoint, args.middleware)
         domain = args.domain.strip().lower()
         if domain not in {
             str(item.get("domain", "")).lower()

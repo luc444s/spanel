@@ -255,7 +255,11 @@ def test_domain_list_distinguishes_available_and_linked_routes() -> None:
 def test_domain_assign_uses_registered_domain_and_detected_port() -> None:
     transport = FakeTransport([
         _detail("backend", [8000]),
-        {"items": [{"domain": "api.example.com"}]},
+        {
+            "items": [{"domain": "api.example.com"}],
+            "entrypoints": ["web", "websecure"],
+            "middlewares": ["rate-limit@file"],
+        },
         {"id": "r1", "domain": "api.example.com", "path": "/api"},
     ])
     apps.run(
@@ -363,4 +367,41 @@ def test_domain_assign_rejects_port_not_exposed_by_service() -> None:
                 "--port", "9000",
             ]),
             client(transport),
+        )
+
+
+def test_domain_assign_rejects_options_outside_domains_allowlist() -> None:
+    transport = FakeTransport([
+        _detail("backend"),
+        {
+            "items": [{"domain": "api.example.com"}],
+            "entrypoints": ["web", "websecure"],
+            "middlewares": [],
+        },
+    ])
+    with pytest.raises(apps.CliError, match="Middleware is not allowed"):
+        apps.run(
+            apps.build_parser().parse_args([
+                "domain-assign", "a1", "backend", "--domain", "api.example.com",
+                "--middleware", "untrusted@file",
+            ]),
+            client(transport),
+        )
+    assert [call["method"] for call in transport.calls] == ["GET", "GET"]
+
+    entrypoint_transport = FakeTransport([
+        _detail("backend"),
+        {
+            "items": [{"domain": "api.example.com"}],
+            "entrypoints": ["web", "websecure"],
+            "middlewares": [],
+        },
+    ])
+    with pytest.raises(apps.CliError, match="Entrypoint is not allowed"):
+        apps.run(
+            apps.build_parser().parse_args([
+                "domain-assign", "a1", "backend", "--domain", "api.example.com",
+                "--entrypoint", "admin",
+            ]),
+            client(entrypoint_transport),
         )
