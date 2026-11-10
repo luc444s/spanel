@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Alert } from "@systutor/shell/ui/alert";
 import { Button } from "@systutor/shell/ui/button";
 import { Dialog } from "@systutor/shell/ui/dialog";
+import { Tabs } from "@systutor/shell/ui/tabs";
 import { toast } from "@systutor/shell/ui/toast";
 
 import { domainsKeys, listRoutes } from "../../../domains/frontend/api";
@@ -18,13 +19,10 @@ import { DeployDialog } from "./DeployDialog";
 import { FindingsReport } from "./FindingsReport";
 import { ServiceCard } from "./ServiceCard";
 import { ServiceDialog } from "./ServiceDialog";
+import { ServiceOperations } from "./ServiceOperations";
 import { SourceDialog } from "./SourceDialog";
 
 type Tab = "overview" | "audit" | "deployments" | "operations";
-const TABS: Array<[Tab, string]> = [
-  ["overview", "Resumen"], ["audit", "Auditoría"],
-  ["deployments", "Deployments"], ["operations", "Operaciones"],
-];
 const ACTIONS: Array<[AppAction, string]> = [
   ["refresh", "Actualizar todo"], ["down", "Down"],
 ];
@@ -119,55 +117,64 @@ export function ApplicationDetail({ application, canCreate, canManage, canManage
 
   const lastDeploy = activeDeployment?.finished_at ?? activeDeployment?.created_at
     ?? detail.data?.deployments?.[0]?.finished_at ?? null;
+  const tabs = [
+    {
+      value: "overview" as const,
+      label: "Resumen",
+      content: <div className="space-y-4">
+        <dl className="grid gap-3 text-sm sm:grid-cols-2">
+          <div><dt className="text-muted-foreground">Estado</dt><dd>● {current.status}</dd></div>
+          <div><dt className="text-muted-foreground">Fuente</dt><dd>GitHub · {sourceConnected ? "conectado" : "requiere reconexión"}</dd></div>
+          <div><dt className="text-muted-foreground">Compose</dt><dd>{current.compose_file ?? report.compose ?? "Autodetectar"}</dd></div>
+          <div><dt className="text-muted-foreground">Commit activo</dt><dd><code>{activeDeployment?.commit ?? "—"}</code></dd></div>
+          <div><dt className="text-muted-foreground">Proyecto runtime</dt><dd><code>{detail.data?.runtime_project ?? "—"}</code></dd></div>
+          <div><dt className="text-muted-foreground">Último deploy</dt><dd>{lastDeploy ? new Date(lastDeploy).toLocaleString() : "—"}</dd></div>
+        </dl>
+        <div className="space-y-2">
+          <h3 className="text-sm font-medium">Servicios</h3>
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {services.map((service) => <ServiceCard key={service.name} service={service}
+              domainCount={canReadDomains
+                ? routes.filter((route) => route.site_id === `${application.id}:${service.name}`).length
+                : null}
+              onOpen={() => setServiceName(service.name)} />)}
+          </div>
+          {services.length === 0 ? <p className="text-sm text-muted-foreground">Sin servicios en el deployment activo.</p> : null}
+          <p className="text-xs text-muted-foreground">Doble clic sobre una tarjeta para administrarla.</p>
+        </div>
+      </div>,
+    },
+    {
+      value: "audit" as const,
+      label: "Auditoría",
+      content: findings.length ? <FindingsReport findings={findings} />
+        : hasAuditReport ? <Alert title="Inspección aprobada">No se encontraron hallazgos.</Alert>
+          : <Alert title="Sin informe">Ejecutá una inspección para obtener findings.</Alert>,
+    },
+    {
+      value: "deployments" as const,
+      label: "Deployments",
+      content: <div className="space-y-2">
+        {(detail.data?.deployments ?? []).map((deployment) => <div key={deployment.id} className="rounded border border-border p-3 text-sm"><strong>{deployment.status}</strong> · commit <code>{deployment.commit ?? "—"}</code><br /><span className="text-muted-foreground">Servicios: {deployment.services.join(", ") || "—"}</span>{deployment.public_error ? <p>{deployment.public_error}</p> : null}</div>)}
+        {(detail.data?.deployments ?? []).length === 0 ? <p className="text-sm text-muted-foreground">Sin deployments.</p> : null}
+      </div>,
+    },
+    {
+      value: "operations" as const,
+      label: "Operaciones",
+      content: <ServiceOperations operations={appOperations} />,
+    },
+  ];
 
   return <>
-    <Dialog open title={application.name} description={`${application.repository} · ${application.branch}`} onClose={onClose}>
+    <Dialog open title={application.name} description={`${application.repository} · ${application.branch}`}
+      maxWidthClassName="max-w-[800px]" onClose={onClose}>
       <div className="space-y-4">
         {!sourceConnected ? <Alert title="Fuente requiere reconexión">
           El repositorio ya no está autorizado por una instalación activa. Las inspecciones y despliegues nuevos están bloqueados; el lifecycle existente continúa.
           {canCreate ? <Button className="ml-2" variant="secondary" disabled={pending} onClick={() => setSourceOpen(true)}>Elegir fuente</Button> : null}
         </Alert> : null}
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-2">
-          <div className="flex flex-wrap gap-1">
-            {TABS.map(([value, label]) =>
-              <Button key={value} variant={tab === value ? "primary" : "secondary"} onClick={() => setTab(value)}>{label}</Button>)}
-          </div>
-          <span className="rounded bg-muted px-2 py-0.5 text-xs">● {current.status}</span>
-        </div>
-
-        {tab === "overview" ? <div className="space-y-4">
-          <dl className="grid gap-3 text-sm sm:grid-cols-2">
-            <div><dt className="text-muted-foreground">Fuente</dt><dd>GitHub · {sourceConnected ? "conectado" : "requiere reconexión"}</dd></div>
-            <div><dt className="text-muted-foreground">Compose</dt><dd>{current.compose_file ?? report.compose ?? "Autodetectar"}</dd></div>
-            <div><dt className="text-muted-foreground">Commit activo</dt><dd><code>{activeDeployment?.commit ?? "—"}</code></dd></div>
-            <div><dt className="text-muted-foreground">Proyecto runtime</dt><dd><code>{detail.data?.runtime_project ?? "—"}</code></dd></div>
-            <div><dt className="text-muted-foreground">Último deploy</dt><dd>{lastDeploy ? new Date(lastDeploy).toLocaleString() : "—"}</dd></div>
-          </dl>
-          <div className="space-y-2">
-            <h3 className="text-sm font-medium">Servicios</h3>
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-              {services.map((service) => <ServiceCard key={service.name} service={service}
-                domainCount={canReadDomains
-                  ? routes.filter((route) => route.site_id === `${application.id}:${service.name}`).length
-                  : null}
-                onOpen={() => setServiceName(service.name)} />)}
-            </div>
-            {services.length === 0 ? <p className="text-sm text-muted-foreground">Sin servicios en el deployment activo.</p> : null}
-            <p className="text-xs text-muted-foreground">Doble clic sobre una tarjeta para administrarla.</p>
-          </div>
-        </div> : null}
-
-        {tab === "audit" ? findings.length ? <FindingsReport findings={findings} />
-          : hasAuditReport ? <Alert title="Inspección aprobada">No se encontraron hallazgos.</Alert>
-            : <Alert title="Sin informe">Ejecutá una inspección para obtener findings.</Alert> : null}
-        {tab === "deployments" ? <div className="space-y-2">
-          {(detail.data?.deployments ?? []).map((deployment) => <div key={deployment.id} className="rounded border border-border p-3 text-sm"><strong>{deployment.status}</strong> · commit <code>{deployment.commit ?? "—"}</code><br /><span className="text-muted-foreground">Servicios: {deployment.services.join(", ") || "—"}</span>{deployment.public_error ? <p>{deployment.public_error}</p> : null}</div>)}
-          {(detail.data?.deployments ?? []).length === 0 ? <p className="text-sm text-muted-foreground">Sin deployments.</p> : null}
-        </div> : null}
-        {tab === "operations" ? <div className="space-y-2">
-          {appOperations.map((operation) => <div key={operation.id} className="rounded border border-border p-3 text-sm"><strong>{operation.kind}</strong> · {operation.status} · {operation.phase}<br /><code className="text-xs">{operation.id}</code>{operation.public_error ? <p className="text-destructive">{operation.public_error}</p> : null}</div>)}
-          {appOperations.length === 0 ? <p className="text-sm text-muted-foreground">No hay operaciones.</p> : null}
-        </div> : null}
+        <Tabs value={tab} onChange={(value) => setTab(value as Tab)} tabs={tabs} />
 
         <div className="flex flex-wrap gap-2 border-t border-border pt-3">
           {canCreate ? <Button variant="secondary" disabled={pending || busy || !sourceConnected} onClick={() => {

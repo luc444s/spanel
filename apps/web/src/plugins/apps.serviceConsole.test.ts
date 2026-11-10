@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import type { Operation, ServiceDetail } from "../../../../vendor/systutor-core/plugins/apps/frontend/types";
-import { resultText, serviceFromSubject } from "../../../../vendor/systutor-core/plugins/apps/frontend/components/ServiceOperations";
+import {
+  OPERATIONS_PAGE_SIZE, operationDuration, resultText, serviceFromSubject,
+} from "../../../../vendor/systutor-core/plugins/apps/frontend/components/ServiceOperations";
 import { routePayload, serviceRoutePreview, type RouteForm } from "../../../../vendor/systutor-core/plugins/apps/frontend/components/ServiceDomains";
 import {
   canRevealVariable, remainingSeconds, revealExpiry, sourceLabel,
@@ -79,5 +81,18 @@ describe("Apps service console", () => {
     expect(resultText({ ...operation, result: { hidden: "value" } })).toBe(
       "Sin detalle público.",
     );
+  });
+
+  it("paginates operations at eight rows and formats durations compactly", () => {
+    expect(OPERATIONS_PAGE_SIZE).toBe(8);
+    const operation = {
+      id: "op1", application_id: "a1", subject_type: "app_service",
+      subject_id: "a1:api", kind: "restart", status: "succeeded", phase: "complete",
+      report: null, result: null, error_code: null, public_error: null,
+      created_at: null, started_at: "2026-01-01T00:00:00Z",
+      finished_at: "2026-01-01T00:00:01.5Z",
+    } as Operation;
+    expect(operationDuration(operation)).toBe("1.5 s");
+    expect(operationDuration({ ...operation, finished_at: null })).toBe("—");
   });
 });

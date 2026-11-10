@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
 
 import { Alert } from "@systutor/shell/ui/alert";
-import { Button } from "@systutor/shell/ui/button";
 import { Dialog } from "@systutor/shell/ui/dialog";
+import { Tabs } from "@systutor/shell/ui/tabs";
 
 import type { AppAction, Operation, ServiceDetail } from "../types";
 import { ServiceDomains } from "./ServiceDomains";
@@ -13,14 +13,6 @@ import { ServiceOverview } from "./ServiceOverview";
 
 type Tab = "overview" | "variables" | "domains" | "logs" | "operations";
 type ServiceAction = Exclude<AppAction, "down">;
-
-const TABS: Array<[Tab, string]> = [
-  ["overview", "Overview"],
-  ["variables", "Variables"],
-  ["domains", "Dominios"],
-  ["logs", "Logs"],
-  ["operations", "Operaciones"],
-];
 
 export function ServiceDialog({ applicationId, applicationName, service, operations,
   canManage, canManageDomains, canReadDomains, canReveal, pending, updatedAt,
@@ -49,26 +41,44 @@ export function ServiceDialog({ applicationId, applicationName, service, operati
   const lastLogs = scoped.find((operation) =>
     operation.kind === "logs" && operation.subject_id === subject && operation.status === "succeeded");
 
-  return <Dialog open title={`${applicationName} / ${service.name}`}
-    description={`Servicio Compose: ${service.name}`} onClose={onClose}
-    maxWidthClassName="max-w-4xl" zIndexClassName="z-[1100]">
-    <div className="space-y-4">
-      <div className="flex flex-wrap gap-1 border-b border-border pb-2">
-        {TABS.map(([value, label]) => <Button key={value}
-          variant={tab === value ? "primary" : "secondary"}
-          onClick={() => setTab(value)}>{label}</Button>)}
-      </div>
-      {tab === "overview" ? <ServiceOverview service={service} canManage={canManage}
-        pending={pending} updatedAt={updatedAt} onAction={onAction} /> : null}
-      {tab === "variables" ? <ServiceEnvironment applicationId={applicationId}
-        service={service} canReveal={canReveal} /> : null}
-      {tab === "domains" ? (canReadDomains
+  const tabs = [
+    {
+      value: "overview" as const,
+      label: "Overview",
+      content: <ServiceOverview service={service} canManage={canManage}
+        pending={pending} updatedAt={updatedAt} onAction={onAction} />,
+    },
+    {
+      value: "variables" as const,
+      label: "Variables",
+      content: <ServiceEnvironment applicationId={applicationId}
+        service={service} canReveal={canReveal} />,
+    },
+    {
+      value: "domains" as const,
+      label: "Dominios",
+      content: canReadDomains
         ? <ServiceDomains applicationId={applicationId} service={service}
           canManage={canManage && canManageDomains} />
-        : <Alert title="Sin permiso">Necesitás dominios.domains.read para consultar las rutas de este servicio.</Alert>) : null}
-      {tab === "logs" ? <ServiceLogs operation={lastLogs} canManage={canManage}
-        pending={pending} onRequest={() => onAction("logs")} /> : null}
-      {tab === "operations" ? <ServiceOperations operations={scoped} /> : null}
-    </div>
+        : <Alert title="Sin permiso">Necesitás dominios.domains.read para consultar las rutas de este servicio.</Alert>,
+    },
+    {
+      value: "logs" as const,
+      label: "Logs",
+      content: <ServiceLogs operation={lastLogs} canManage={canManage}
+        pending={pending} onRequest={() => onAction("logs")} />,
+    },
+    {
+      value: "operations" as const,
+      label: "Operaciones",
+      content: <ServiceOperations operations={scoped}
+        emptyMessage="No hay operaciones para este servicio." />,
+    },
+  ];
+
+  return <Dialog open title={`${applicationName} / ${service.name}`}
+    description={`Servicio Compose: ${service.name}`} onClose={onClose}
+    maxWidthClassName="max-w-[900px]" zIndexClassName="z-[1100]">
+    <Tabs value={tab} onChange={(value) => setTab(value as Tab)} tabs={tabs} />
   </Dialog>;
 }
