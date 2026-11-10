@@ -361,3 +361,22 @@ def test_service_ports_only_expose_container_side() -> None:
         }
     })
     assert ports == {"web": [8000, 8443, 9000]}
+
+
+def test_domains_sites_use_stable_ids_and_container_names(tmp_path: Path) -> None:
+    from plugins.apps.backend.register import resolve_apps_sites
+
+    engine = database(tmp_path)
+    with Session(engine) as db:
+        deployment = db.get(Deployment, "d1")
+        deployment.manifest = {
+            **deployment.manifest,
+            "container_names": {"web": "app-demo-web-1", "db": "app-demo-db-1"},
+        }
+        db.commit()
+        sites = resolve_apps_sites(db, "t1")
+    assert [(site.site_id, site.container) for site in sites] == [
+        ("a1:db", "app-demo-db-1"),
+        ("a1:web", "app-demo-web-1"),
+    ]
+    assert all(":" in site.site_id for site in sites)

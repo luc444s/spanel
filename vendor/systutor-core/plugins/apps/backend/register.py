@@ -59,8 +59,11 @@ def resolve_apps_sites(db: Session, tenant_id: str | None) -> list[OwnedSite]:
         if not app.active_deployment_id:
             continue
         deployment = db.get(Deployment, app.active_deployment_id)
-        containers = (deployment.manifest or {}).get("containers", {}) if deployment else {}
-        for service, container in sorted(containers.items()):
+        manifest = (deployment.manifest or {}) if deployment is not None else {}
+        containers = manifest.get("containers", {})
+        names = manifest.get("container_names", {})
+        for service, container_id in sorted(containers.items()):
+            container = names.get(service) or container_id
             if not container:
                 continue
             result.append(

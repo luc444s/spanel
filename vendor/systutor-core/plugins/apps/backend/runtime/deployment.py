@@ -387,6 +387,22 @@ def _service_internal_ports(data: dict[str, Any]) -> dict[str, list[int]]:
     return result
 
 
+def _container_names(
+    runner: Runner, containers: dict[str, str]
+) -> dict[str, str]:
+    """Stable Docker DNS names for the active containers (never IDs)."""
+    result: dict[str, str] = {}
+    for service, container in containers.items():
+        inspected = runner.run(
+            ["docker", "container", "inspect", "-f", "{{.Name}}", container],
+            check=False,
+        )
+        name = inspected.stdout.strip().lstrip("/")
+        if inspected.returncode == 0 and name:
+            result[service] = name
+    return result
+
+
 def runtime_snapshot(
     runner: Runner, containers: dict[str, str]
 ) -> dict[str, dict[str, Any]]:
@@ -707,6 +723,7 @@ def deploy(
         _verify_containers(runner, containers, project, options.non_root, options.wait)
         manifest["status"] = "running"
         manifest["containers"] = containers
+        manifest["container_names"] = _container_names(runner, containers)
         manifest["service_runtime"] = runtime_snapshot(runner, containers)
         _write_manifest(runner, release, manifest)
         if options.publish_state:
