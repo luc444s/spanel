@@ -320,7 +320,11 @@ def managed_secret_name(detail: dict[str, Any], service_name: str) -> str:
 
 
 def wait_service_health(
-    client: ApiClient, root: str, service_name: str, timeout: int
+    client: ApiClient,
+    root: str,
+    service_name: str,
+    timeout: int,
+    refresh_path: str | None = None,
 ) -> dict[str, Any]:
     deadline = time.monotonic() + timeout
     last_state = "missing"
@@ -338,6 +342,8 @@ def wait_service_health(
                 if health == "healthy" or (running and health in {"unknown", "none", ""}):
                     return detail
                 break
+        if refresh_path is not None:
+            queue(client, "POST", refresh_path, None, timeout, "health refresh")
         time.sleep(2)
     raise E2EError(
         f"{service_name} did not become healthy within {timeout}s (last {last_state})"
@@ -639,7 +645,13 @@ def run(args: argparse.Namespace) -> int:
             args.operation_timeout, "start",
         )
         queue(client, "POST", f"{root}/actions/refresh", None, args.operation_timeout, "post-start refresh")
-        detail = wait_service_health(client, root, service_name, args.operation_timeout)
+        detail = wait_service_health(
+            client,
+            root,
+            service_name,
+            args.operation_timeout,
+            refresh_path=f"{root}/actions/refresh",
+        )
 
         print("[11/17] Reveal a managed secret with reason and audit without value")
         secret_name = managed_secret_name(detail, service_name)
