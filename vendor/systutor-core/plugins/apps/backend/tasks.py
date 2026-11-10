@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from sqlalchemy import select
 
 from systutor.contracts.site_domain_publisher import get_site_domain_publisher
@@ -54,6 +56,11 @@ def _recover() -> None:
 
 
 _recover()
+logger = logging.getLogger(__name__)
+try:
+    worker.reconcile_routes()
+except Exception:  # noqa: BLE001 - el worker debe arrancar aunque falle el proxy
+    logger.warning("apps_route_reconcile_failed", exc_info=True)
 apps_operation = build_actor(worker.run)
 
 __all__ = ["apps_operation"]

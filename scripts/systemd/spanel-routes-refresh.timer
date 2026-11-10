@@ -1,0 +1,12 @@
+[Unit]
+Description=Spanel route reconciliation every five minutes
+Documentation=file:/opt/spanel/README.md
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=5min
+Unit=spanel-routes-refresh.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target

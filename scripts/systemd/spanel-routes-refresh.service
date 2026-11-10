@@ -1,0 +1,18 @@
+[Unit]
+Description=Spanel: re-render Apps routes and reconnect the proxy network
+Documentation=file:/opt/spanel/README.md
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+WorkingDirectory=/opt/spanel
+ExecStart=/usr/bin/docker compose --env-file .env.docker exec -T app python /app/scripts/refresh_routes.py
+TimeoutStartSec=300
+RemainAfterExit=no
+PrivateTmp=true
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true

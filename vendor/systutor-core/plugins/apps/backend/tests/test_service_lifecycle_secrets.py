@@ -222,6 +222,19 @@ def test_worker_deletes_draft_even_without_active_deployment(tmp_path: Path) -> 
         assert app.status == "deleted"
 
 
+def test_worker_reconciles_routes_for_active_apps(tmp_path: Path) -> None:
+    engine = database(tmp_path)
+    refreshed: list[tuple[str, str]] = []
+    worker = AppsWorker(
+        lambda: Session(engine), TokenCipher(b"k" * 32),
+        route_refresh=lambda _db, tenant_id, application_id: refreshed.append(
+            (tenant_id, application_id)
+        ),
+    )
+    assert worker.reconcile_routes() == 1
+    assert refreshed == [("t1", "a1")]
+
+
 def test_tenant_environment_is_encrypted_and_reused_on_redeploy(tmp_path: Path) -> None:
     engine = database(tmp_path)
     cipher = TokenCipher(b"k" * 32)

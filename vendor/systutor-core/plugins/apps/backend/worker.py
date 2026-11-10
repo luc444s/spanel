@@ -284,6 +284,31 @@ class AppsWorker:
                             )
             return {"deployment_id": deployment.id, "status": "running"}
 
+    def reconcile_routes(self) -> int:
+        """Re-publish routes for every active app; safe to run on every boot."""
+        if self.route_refresh is None:
+            return 0
+        with self.session_factory() as db:
+            rows = list(db.execute(
+                select(Application.id, Application.tenant_id).where(
+                    Application.deleted_at.is_(None),
+                    Application.active_deployment_id.is_not(None),
+                )
+            ).all())
+        refreshed = 0
+        for application_id, tenant_id in rows:
+            with self.session_factory() as db:
+                try:
+                    self.route_refresh(db, tenant_id, application_id)
+                except Exception:  # noqa: BLE001 - una app no bloquea al resto
+                    logger.warning(
+                        "apps_route_reconcile_failed",
+                        extra={"application_id": application_id},
+                    )
+                else:
+                    refreshed += 1
+        return refreshed
+
     def _mark_reconnect(self, application_id: str) -> None:
         with self.session_factory() as db:
             app = db.get(Application, application_id)
