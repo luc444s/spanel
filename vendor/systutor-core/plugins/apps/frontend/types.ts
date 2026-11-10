@@ -151,12 +151,23 @@ export type DeploymentDetail = Deployment & {
     name: string;
     image: string | null;
     status: string;
+    health: string;
+    ports: number[];
+    restart_count: number;
     environment_names: string[];
+    environment: ServiceEnvironmentVariable[];
     created_at: string | null;
   }>;
   created_at: string | null;
   finished_at: string | null;
 };
 
+export type ServiceEnvironmentVariable = {
+  name: string;
+  source: "managed" | "tenant" | "image";
+  secret: boolean;
+  revealable: boolean;
+};
+export type ServiceDetail = DeploymentDetail["service_details"][number];
 export type EnvironmentEntry = { name: string; value: string };
 export type AppAction = "refresh" | "logs" | "start" | "stop" | "restart" | "down";
