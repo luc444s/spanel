@@ -157,6 +157,24 @@ def test_configure_orders_app_health_then_worker(tmp_path: Path) -> None:
     )
 
 
+def test_configure_installs_routes_timer_after_worker(tmp_path: Path) -> None:
+    env = tmp_path / ".env.docker"
+    env.write_text("POSTGRES_DB=spanel\n", encoding="utf-8")
+    compose = tmp_path / "docker-compose.yml"
+    compose.write_text(COMPOSE, encoding="utf-8")
+    events: list[str] = []
+    configure(
+        env_file=env, compose_file=compose, key_path=tmp_path / "secrets/apps_key",
+        public_url=None, restart=True, build=True, dry_run=False,
+        runner=lambda command: events.append(
+            "config" if "config" in command else command[-1]
+        ),
+        waiter=lambda: events.append("healthy"),
+        timer=lambda: events.append("timer"),
+    )
+    assert events == ["config", "app", "healthy", "apps-worker", "timer"]
+
+
 def test_dry_run_changes_nothing_and_runs_no_commands(tmp_path: Path) -> None:
     env = tmp_path / ".env.docker"
     original = "POSTGRES_DB=spanel\n"

@@ -261,6 +261,7 @@ def configure(
     dry_run: bool,
     runner: CommandRunner = run_command,
     waiter: Callable[[], None] = wait_for_app,
+    timer: Callable[[], None] | None = None,
 ) -> tuple[str, bool, Path | None]:
     try:
         env_text = env_file.read_text(encoding="utf-8") if env_file.exists() else ""
@@ -286,7 +287,17 @@ def configure(
             runner(commands[1])
             waiter()
             runner(commands[2])
+            if timer is not None:
+                timer()
     return detected_url, created, backup
+
+
+def install_routes_timer() -> None:
+    """Best-effort: keep the route watchdog installed when running as root."""
+    if os.geteuid() != 0 or shutil.which("systemctl") is None:
+        return
+    script = Path(__file__).resolve().with_name("install_routes_timer.py")
+    subprocess.run([sys.executable, str(script)], check=False)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -298,6 +309,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--restart", action="store_true", help="Build and recreate app then apps-worker")
     parser.add_argument("--no-build", action="store_true", help="Reuse the current image with --restart")
     parser.add_argument("--dry-run", action="store_true", help="Validate and show the plan without writes/commands")
+    parser.add_argument(
+        "--no-routes-timer", action="store_true",
+        help="Do not install/update the route reconciliation timer",
+    )
     return parser
 
 
@@ -308,6 +323,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             env_file=args.env_file.resolve(), compose_file=args.compose_file.resolve(),
             key_path=args.key_path, public_url=args.public_url, restart=args.restart,
             build=not args.no_build, dry_run=args.dry_run,
+            timer=None if args.no_routes_timer else install_routes_timer,
         )
     except ConfigureError as exc:
         print(f"error: {exc}", file=sys.stderr)
