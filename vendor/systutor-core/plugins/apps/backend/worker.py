@@ -40,6 +40,7 @@ from .runtime import (
     compose_candidates,
     deploy,
     lifecycle,
+    runtime_snapshot,
 )
 from .runtime.deployment import _publish_release_state
 from .service import audit as record_apps_audit
@@ -228,56 +229,6 @@ class AppsWorker:
                 _DEPLOY_LOCK.release()
             if manifest is None:
                 raise RuntimeError("Deployment produced no manifest")
-            if source[6]:
-                try:
-                    service = source[4]
-                    port = source[5]
-                    if not service or service not in manifest.get("containers", {}):
-                        raise RuntimeError(
-                            "Ingress service did not resolve to exactly one container"
-                        )
-                    if port is None or not 1 <= port <= 65535:
-                        raise RuntimeError("Ingress port is invalid")
-                    if self.publisher is None:
-                        raise RuntimeError("Domain publisher is unavailable")
-                    self.publisher.publish(
-                        manifest["containers"][service], source[6], port=port
-                    )
-                except Exception:
-                    rollback_ok = True
-                    try:
-                        lifecycle(
-                            LifecycleOptions(
-                                command="down", project=source[3],
-                                release=Path(str(manifest["release"])),
-                            ),
-                            runner,
-                        )
-                        if previous_release is not None and previous is not None:
-                            lifecycle(
-                                LifecycleOptions(
-                                    command="start", project=source[3], release=previous_release
-                                ),
-                                runner,
-                            )
-                            previous_containers = (previous.manifest or {}).get("containers", {})
-                            if (
-                                previous.ingress_service in previous_containers
-                                and previous.ingress_port
-                            ):
-                                self.publisher.publish(
-                                    previous_containers[previous.ingress_service], source[6],
-                                    port=previous.ingress_port,
-                                )
-                    except Exception:
-                        rollback_ok = False
-                    if not rollback_ok:
-                        with self.session_factory() as db:
-                            failed_app = db.get(Application, application_id)
-                            if failed_app is not None:
-                                failed_app.status = "degraded"
-                                db.commit()
-                    raise
             _publish_release_state(runner, Path(str(manifest["release"])), manifest)
             with self.session_factory() as db:
                 deployment = Deployment(
@@ -435,26 +386,39 @@ class AppsWorker:
             project, domain = app.runtime_project, app.domain
             operation = db.get(Operation, operation_id)
             purge_data = bool((operation.report or {}).get("purge_data")) if operation else False
+            service = (operation.report or {}).get("service") if operation else None
+            if service is not None:
+                containers = deployment.manifest.get("containers", {})
+                if not isinstance(service, str) or service not in containers:
+                    raise RuntimeError("Service does not belong to the active deployment")
+                if kind in {"down", "delete"}:
+                    raise RuntimeError("down and delete always affect the whole application")
         command = "status" if kind == "refresh" else kind
+        runner = self.runner_factory(self._transport())
         result = lifecycle(
             LifecycleOptions(
                 command=command, project=project,
                 release=Path(deployment.release) if deployment.release else None,
                 purge_data=purge_data if kind == "delete" else False,
                 confirm_purge=project if kind == "delete" and purge_data else None,
+                service=service,
             ),
-            self.runner_factory(self._transport()),
+            runner,
         )
-        if domain and self.publisher is not None:
-            if kind in {"stop", "down", "delete"}:
-                self.publisher.unpublish(domain)
-            elif kind in {"start", "restart"}:
-                containers = deployment.manifest.get("containers", {})
-                app_service = deployment.ingress_service
-                if app_service and app_service in containers and deployment.ingress_port:
-                    self.publisher.publish(
-                        containers[app_service], domain, port=deployment.ingress_port
-                    )
+        if kind == "refresh":
+            containers = deployment.manifest.get("containers", {})
+            snapshot = runtime_snapshot(runner, containers)
+            if snapshot:
+                with self.session_factory() as db:
+                    current = db.get(Deployment, deployment.id)
+                    if current is not None:
+                        current.manifest = {
+                            **(current.manifest or {}),
+                            "service_runtime": snapshot,
+                        }
+                        db.commit()
+        if domain and self.publisher is not None and kind == "delete":
+            self.publisher.unpublish(domain)
         if kind == "delete":
             release = Path(str(deployment.manifest.get("release", "")))
             project_root = (

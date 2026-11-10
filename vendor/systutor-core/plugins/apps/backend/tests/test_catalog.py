@@ -143,6 +143,21 @@ def test_create_application_derives_canonical_source(tmp_path: Path) -> None:
     assert app.source_status == "connected"
 
 
+def test_new_application_does_not_claim_or_publish_legacy_ingress(tmp_path: Path) -> None:
+    db = database(tmp_path)
+    user = db.get(User, "u1")
+    app = catalog.create_application(
+        db, context(), user,
+        ApplicationCreate(
+            name="Demo", installation_id="i1", repository_id="r1",
+            domain="legacy.example.com", ingress_service="web", ingress_port=8000,
+        ),
+    )
+    assert app.domain is None
+    assert app.ingress_service is None
+    assert app.ingress_port is None
+
+
 @pytest.mark.parametrize(
     ("installation_id", "repository_id", "code"),
     [

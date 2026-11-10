@@ -44,18 +44,33 @@ class AppsResources:
 
 
 def resolve_apps_sites(db: Session, tenant_id: str | None) -> list[OwnedSite]:
+    """Stable service identities for Domains routes.
+
+    The site id is ``<application_id>:<service>`` and never a container name.
+    Domains resolves the active container from the deployment manifest every
+    time it publishes or reads a route, so redeploys can replace containers
+    without changing route ownership.
+    """
     stmt = select(Application).where(Application.deleted_at.is_(None))
     if tenant_id is not None:
         stmt = stmt.where(Application.tenant_id == tenant_id)
     result: list[OwnedSite] = []
     for app in db.scalars(stmt):
-        if not app.active_deployment_id or not app.ingress_service:
+        if not app.active_deployment_id:
             continue
         deployment = db.get(Deployment, app.active_deployment_id)
         containers = (deployment.manifest or {}).get("containers", {}) if deployment else {}
-        container = containers.get(app.ingress_service)
-        if container:
-            result.append(OwnedSite(app.id, app.tenant_id, container, app.domain))
+        for service, container in sorted(containers.items()):
+            if not container:
+                continue
+            result.append(
+                OwnedSite(
+                    f"{app.id}:{service}",
+                    app.tenant_id,
+                    container,
+                    app.domain if service == app.ingress_service else None,
+                )
+            )
     return result
 
 

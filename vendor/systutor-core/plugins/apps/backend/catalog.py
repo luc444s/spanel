@@ -168,8 +168,13 @@ def create_application(
         source_installation_id=installation.id,
         source_repository_id=repository.id,
         source_status="connected",
-        runtime_project=f"app-{uuid4().hex[:24]}", domain=body.domain,
-        ingress_service=body.ingress_service, ingress_port=body.ingress_port,
+        runtime_project=f"app-{uuid4().hex[:24]}",
+        # Ingress belongs to Dominios. Historic input columns stay readable
+        # for existing rows, but new applications never publish an automatic
+        # second route from Apps.
+        domain=None,
+        ingress_service=None,
+        ingress_port=None,
     )
     db.add(app)
     db.flush()
@@ -419,22 +424,30 @@ def _deployment_view(row: Deployment) -> dict:
     services = sorted(manifest.get("containers", {}).keys())
     images = manifest.get("images", {})
     environments = manifest.get("service_environment", {})
+    ports = manifest.get("service_ports", {})
+    runtime = manifest.get("service_runtime", {})
+    details = []
+    for service in services:
+        state = runtime.get(service) if isinstance(runtime, dict) else {}
+        state = state if isinstance(state, dict) else {}
+        health = state.get("health")
+        details.append({
+            "name": service,
+            "image": images.get(service),
+            "status": state.get("status") or row.status,
+            "health": "unknown" if health in (None, "none") else health,
+            "ports": ports.get(service) or [],
+            "restart_count": state.get("restart_count") or 0,
+            "environment_names": environments.get(service, []),
+            "created_at": state.get("created_at") or row.created_at,
+        })
     return {
         "id": row.id, "status": row.status, "commit": row.commit,
         "tree_hash": row.tree_hash, "compose_file": row.compose_file,
         "ingress_service": row.ingress_service, "ingress_port": row.ingress_port,
         "release": row.release, "public_error": row.public_error,
         "services": services,
-        "service_details": [
-            {
-                "name": service,
-                "image": images.get(service),
-                "status": row.status,
-                "environment_names": environments.get(service, []),
-                "created_at": row.created_at,
-            }
-            for service in services
-        ],
+        "service_details": details,
         "created_at": row.created_at, "finished_at": row.finished_at,
     }
 
