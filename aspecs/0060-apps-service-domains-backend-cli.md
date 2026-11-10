@@ -294,6 +294,12 @@ SERVICE                 nombre de servicio del deployment activo
 --middleware NAME       repetible
 ```
 
+Semántica del path raíz: con `--path /` la ruta aplica a todo el host. Si
+`--internal-path` es distinto de `/`, ese prefijo se antepone al path recibido
+(`/docs` → `/v1/docs`). `--strip-path` no elimina la raíz, porque no hay
+prefijo externo que quitar; no se genera `stripPrefix /` ni un regex que pueda
+entrar en bucle.
+
 El comando obtiene primero aplicación, servicio y dominio; después llama al
 `POST /domains/routes` existente con su schema existente. No traduce a
 contenedor ni ejecuta `proxy_domain.py add`.

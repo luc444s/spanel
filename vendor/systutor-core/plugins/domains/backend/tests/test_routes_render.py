@@ -74,6 +74,38 @@ def test_strip_path_without_internal_rewrite_preserves_prefix() -> None:
     assert "middlewares" not in router
 
 
+def test_root_path_applies_internal_prefix_and_never_strips_root() -> None:
+    for strip in (False, True):
+        doc = rendered(
+            PathRoute(
+                "/", "app-container", 80, internal_path="/v1", strip_path=strip,
+                route_id="r1",
+            )
+        )
+        router = doc["http"]["routers"]["spanel-api-example-com-route-r1"]
+        name = "spanel-api-example-com-route-r1-rewrite"
+        assert router["middlewares"] == [name]
+        rewrite = doc["http"]["middlewares"][name]["replacePathRegex"]
+        assert rewrite == {"regex": "^/(.*)", "replacement": "/v1/$1"}
+        assert "stripPrefix" not in str(doc["http"]["middlewares"])
+
+
+def test_root_with_root_internal_path_has_no_rewrite() -> None:
+    for strip in (False, True):
+        doc = rendered(
+            PathRoute(
+                "/", "app-container", 80, internal_path="/", strip_path=strip,
+                route_id="r1",
+            )
+        )
+        router = doc["http"]["routers"]["spanel-api-example-com-route-r1"]
+        assert "middlewares" not in router
+        assert not any(
+            "rewrite" in name for name in doc["http"]["middlewares"]
+        )
+        assert "stripPrefix" not in str(doc["http"]["middlewares"])
+
+
 def test_internal_path_without_strip_accepts_exact_prefix() -> None:
     doc = rendered(
         PathRoute(

@@ -238,6 +238,9 @@ Formulario exacto:
 │                  ↓ Strip /api                                                │
 │ backend:8000/*                                                              │
 │                                                                              │
+│ Nota: con Path externo `/` no se puede quitar la raíz. Si Internal Path      │
+│ es `/v1`, la preview muestra `backend/* → /v1/*`; Strip Path no cambia eso.  │
+│                                                                              │
 │ VALIDACIÓN                                                                  │
 │ ✓ El dominio pertenece al tenant                                             │
 │ ✓ No existe conflicto para host + path                                       │

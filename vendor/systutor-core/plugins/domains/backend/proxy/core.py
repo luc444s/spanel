@@ -162,10 +162,24 @@ def _route_rewrite(
     `stripPrefix` elimina el prefijo externo y `addPrefix` agrega el interno.
     Sin strip, `replacePathRegex` sustituye el prefijo una sola vez. Ambos
     reutilizan los middlewares nativos de Traefik; no se inventa routing.
+
+    En la raíz externa (`/`) no hay prefijo que quitar: `strip_path` es un
+    no-op y un `internal_path` distinto de `/` se aplica como prefijo,
+    preservando el resto del path. Así no se genera `stripPrefix /` ni un
+    regex susceptible de bucles.
     """
     internal = normalize_path_prefix(internal_path)
     if prefix == "/":
-        return {}
+        if internal == "/":
+            return {}
+        return {
+            middleware_name: {
+                "replacePathRegex": {
+                    "regex": "^/(.*)",
+                    "replacement": f"{internal}/$1",
+                }
+            }
+        }
     if strip_path:
         result: dict[str, dict] = {
             f"{middleware_name}-strip": {
