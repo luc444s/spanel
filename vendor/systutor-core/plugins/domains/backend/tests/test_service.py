@@ -33,6 +33,9 @@ class FakeDb:
     def commit(self) -> None:
         self.commits += 1
 
+    def scalars(self, _stmt):
+        return SimpleNamespace(all=lambda: [])
+
 
 class FakeOps:
     def __init__(self) -> None:
@@ -405,6 +408,22 @@ def test_list_incluye_reservados(setup):
     assert by_domain["d.com"].published is False
     assert by_domain["d.com"].site_id is None
     assert err is None
+
+
+def test_list_marca_como_publicada_una_ruta_de_apps(setup):
+    service, _, _ = setup
+    service._route_rows = lambda tenant_id, **_: [  # type: ignore[method-assign]
+        SimpleNamespace(domain="editores.systutor.com", site_id="site-b")
+    ]
+
+    items, _, _ = service.list_domains("t1", can_manage=True)
+    by_domain = {item.domain: item for item in items}
+
+    routed = by_domain["editores.systutor.com"]
+    assert routed.published is True
+    assert routed.owner == "domains"
+    assert routed.site_id == "site-b"
+    assert routed.container == "spanel-b-wp"
 
 
 def test_list_respecta_aislamiento_de_reservas(setup):

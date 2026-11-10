@@ -333,6 +333,19 @@ class DomainsService:
             seen.add(domain)
             items.append(item(domain, site=site, owner="domains", editable=can_manage))
 
+        # Las rutas se publican en `spanel-route-*.yml`, que no forman parte de
+        # `extras`. Sin este cruce, un dominio activo de Apps aparecía como
+        # reservado ("Sin publicar") y ofrecía vincularlo otra vez.
+        for row in self._route_rows(tenant_id):
+            domain = row.domain.strip().lower()
+            if not domain or domain in seen:
+                continue
+            site = self._route_site(tenant_id, row.site_id)
+            if site is None:
+                continue
+            seen.add(domain)
+            items.append(item(domain, site=site, owner="domains", editable=can_manage))
+
         for domain in self._reserved_domains(tenant_id, seen=seen):
             seen.add(domain)
             items.append(

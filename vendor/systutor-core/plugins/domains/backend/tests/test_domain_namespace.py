@@ -61,6 +61,9 @@ class FakeDb:
         self.gets.append((model, key))
         return None
 
+    def scalars(self, _stmt):
+        return SimpleNamespace(all=lambda: [])
+
 
 class FakeOps:
     def __init__(self) -> None:
