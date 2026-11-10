@@ -20,6 +20,7 @@ from .core import (
     EXIT_OK,
     EXIT_TRANSPORT,
     EXIT_VALIDATION,
+    FILE_PREFIX,
     PathRoute,
     ProxyError,
     document_container,
@@ -485,6 +486,8 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
 
     def _find_owner(self, domain: str) -> Path | None:
         for path in self.site_files():
+            if self._is_route_document(path):
+                continue
             text = self._read_text(path)
             if not text or not is_managed_document(text):
                 continue
@@ -549,6 +552,8 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
         """Todos los dominios extra gestionados, leídos de los YAML."""
         rows: list[ManagedDomain] = []
         for path in self.site_files():
+            if self._is_route_document(path):
+                continue
             text = self._read_text(path)
             if not text or not is_managed_document(text):
                 continue
@@ -589,6 +594,10 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
         return EXIT_OK
 
     # ---- rutas gestionadas (A.SPEC 0060) ----------------------------------
+
+    @staticmethod
+    def _is_route_document(path: Path) -> bool:
+        return path.name.startswith(f"{FILE_PREFIX}route-")
 
     def route_document_path(self, domain: str) -> Path:
         digest = hashlib.sha256(domain.encode()).hexdigest()[:20]
