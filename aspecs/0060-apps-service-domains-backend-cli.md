@@ -39,16 +39,47 @@ validadores y operaciones existentes. Si alguno no está disponible en el
 checkout efectivo, se debe detener la implementación y reportar la discrepancia;
 no se autoriza recrearlo en Apps ni crear una variante con otro nombre.
 
+### Decisión de ampliación aprobada (2026-11-09)
+
+El preflight detectó que este checkout no contenía la superficie de rutas de
+Dominios declarada arriba: sólo existían dominios primarios/extra publicados en
+archivos gestionados por `ProxyOperations`. El usuario autorizó explícitamente
+**extender Dominios** de forma mínima para materializar esa superficie, en lugar
+de simularla en Apps.
+
+La extensión es la siguiente y es la única autorizada:
+
+- `GET /api/v1/plugins/domains/available`: dominios registrados y visibles para
+  el tenant, incluyendo publicados y reservados.
+- `GET|POST /api/v1/plugins/domains/routes` y
+  `GET|PATCH|DELETE /api/v1/plugins/domains/routes/{route_id}`: CRUD de rutas
+  con `domain`, `path`, `internal_path`, `strip_path`, `port`, `entrypoints`,
+  `https`, `middlewares` y `site_id` estable. `site_id` identifica el sitio
+  resuelto por el contrato `domain_ownership`; nunca un nombre de contenedor,
+  Docker ID, proyecto, red ni argv.
+- `POST /api/v1/plugins/domains/routes/{route_id}/probe`: sondeo de certificado
+  y ruta usando el sondeo TLS existente de Dominios.
+- Persistencia mínima en Dominios para IDs estables, ownership por tenant y
+  edición/eliminación. La publicación sigue usando los YAML gestionados, el
+  renderer y `ProxyOperations` existentes; no se crea un segundo publisher,
+  renderer, inventario ni sistema TLS.
+
+Apps registra sus servicios como sitios resolubles por `domain_ownership`
+(`site_id = <application_id>:<service>`) para que Dominios resuelva el
+contenedor activo. Las rutas se reconcilian contra el sitio estable al leerlas,
+probarlas y operarlas; el nombre efímero del contenedor nunca se guarda en Apps.
+
 No crear:
 
-- otro modelo `DomainRoute`;
+- un segundo modelo o almacenamiento de rutas fuera de `plugins/domains`;
 - otro publisher de Traefik;
 - endpoints `/apps/domains`;
-- endpoints duplicados `/domains/routes`;
+- endpoints duplicados `/domains/routes` en Apps;
 - otro inventario de dominios;
 - otro renderer YAML;
 - otro sistema de certificados;
-- un contrato público nuevo si el contrato actual ya resuelve el caso.
+- un contrato público nuevo si el contrato actual ya resuelve el caso
+  (`domain_ownership` resuelve el sitio estable; no se agrega otro registry).
 
 ## SCOPE
 
@@ -364,10 +395,12 @@ change_surface:
     - aspecs/0060-apps-service-domains-backend-cli.md
     - vendor/systutor-core/plugins/apps/backend/**
     - vendor/systutor-core/plugins/apps/permissions/**
+    - vendor/systutor-core/plugins/domains/backend/**
+    - vendor/systutor-core/plugins/domains/migrations/**
+    - vendor/systutor-core/plugins/domains/frontend/api.ts
     - scripts/spanel_apps.py
     - scripts/tests/test_spanel_apps.py
   import_only:
-    - vendor/systutor-core/plugins/domains/**
     - vendor/systutor-core/src/systutor/contracts/**
   prohibited:
     - vendor/systutor-core/plugins/apps/frontend/**
