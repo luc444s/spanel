@@ -20,6 +20,9 @@ export default function AppsPage() {
   const canConnect = permissions.includes("apps.github.connect");
   const canCreate = permissions.includes("apps.applications.create");
   const canManage = permissions.includes("apps.applications.manage");
+  const canManageDomains = permissions.includes("domains.domains.manage");
+  const canReadDomains = permissions.includes("domains.domains.read");
+  const canReveal = permissions.includes("apps.secrets.read");
   const platform = permissions.includes("core.platform.admin");
   const canDeploy = canPlatformMutate(permissions, "apps.deployments.create");
   const canDelete = canPlatformMutate(permissions, "apps.applications.delete");
@@ -73,6 +76,9 @@ export default function AppsPage() {
     {applications.data?.length === 0 ? <p className="rounded border border-border p-4 text-sm text-muted-foreground">No hay aplicaciones.</p> : null}
 
     <CreateApplicationDialog open={createOpen} platform={platform} onClose={() => setCreateOpen(false)} onAccepted={accepted} />
-    <ApplicationDetail application={selected} canCreate={canCreate} canManage={canManage} canDeploy={canDeploy} canDelete={canDelete} onClose={() => setSelected(null)} onAccepted={operationAccepted} />
+    <ApplicationDetail key={selected?.id ?? "no-application"} application={selected} canCreate={canCreate} canManage={canManage}
+      canManageDomains={canManageDomains} canReadDomains={canReadDomains}
+      canReveal={canReveal} canDeploy={canDeploy} canDelete={canDelete}
+      onClose={() => setSelected(null)} onAccepted={operationAccepted} />
   </section>;
 }

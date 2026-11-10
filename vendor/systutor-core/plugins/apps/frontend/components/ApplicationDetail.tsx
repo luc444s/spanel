@@ -1,33 +1,42 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Alert } from "@systutor/shell/ui/alert";
 import { Button } from "@systutor/shell/ui/button";
 import { Dialog } from "@systutor/shell/ui/dialog";
 import { toast } from "@systutor/shell/ui/toast";
 
+import { domainsKeys, listRoutes } from "../../../domains/frontend/api";
 import {
   appsKeys, getApplication, inspectApplication, listOperations, newIdempotencyKey,
-  runApplicationAction,
+  runApplicationAction, runServiceAction,
 } from "../api";
 import { actionAllowed, hasBlockingFindings } from "../logic";
 import type { AppAction, Application, AuditReport, Finding, OperationSummary } from "../types";
 import { DeleteDialog } from "./DeleteDialog";
 import { DeployDialog } from "./DeployDialog";
 import { FindingsReport } from "./FindingsReport";
+import { ServiceCard } from "./ServiceCard";
+import { ServiceDialog } from "./ServiceDialog";
 import { SourceDialog } from "./SourceDialog";
 
-type Tab = "overview" | "audit" | "deployments" | "operations" | "logs";
+type Tab = "overview" | "audit" | "deployments" | "operations";
+const TABS: Array<[Tab, string]> = [
+  ["overview", "Resumen"], ["audit", "Auditoría"],
+  ["deployments", "Deployments"], ["operations", "Operaciones"],
+];
 const ACTIONS: Array<[AppAction, string]> = [
-  ["refresh", "Actualizar"], ["logs", "Solicitar logs"], ["start", "Iniciar"],
-  ["stop", "Detener"], ["restart", "Reiniciar"], ["down", "Down"],
+  ["refresh", "Actualizar todo"], ["down", "Down"],
 ];
 
-export function ApplicationDetail({ application, canCreate, canManage,
-  canDeploy, canDelete, onClose, onAccepted }: {
+export function ApplicationDetail({ application, canCreate, canManage, canManageDomains,
+  canReadDomains, canReveal, canDeploy, canDelete, onClose, onAccepted }: {
   application: Application | null;
   canCreate: boolean;
   canManage: boolean;
+  canManageDomains: boolean;
+  canReadDomains: boolean;
+  canReveal: boolean;
   canDeploy: boolean;
   canDelete: boolean;
   onClose: () => void;
@@ -35,6 +44,7 @@ export function ApplicationDetail({ application, canCreate, canManage,
 }) {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<Tab>("overview");
+  const [serviceName, setServiceName] = useState<string | null>(null);
   const [deployOpen, setDeployOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [sourceOpen, setSourceOpen] = useState(false);
@@ -47,6 +57,11 @@ export function ApplicationDetail({ application, canCreate, canManage,
       const current = state.state.data;
       return current && ["building", "deploying"].includes(current.status) ? 3_000 : false;
     },
+  });
+  const routesQuery = useQuery({
+    queryKey: domainsKeys.routes(),
+    queryFn: () => listRoutes(),
+    enabled: Boolean(application) && canReadDomains,
   });
   const operationsQuery = useQuery({
     queryKey: appsKeys.operations(application?.id ?? "idle"),
@@ -69,9 +84,15 @@ export function ApplicationDetail({ application, canCreate, canManage,
   const findings = (operationFindings ?? detail.data?.findings ?? []) as Finding[];
   const hasAuditReport = Boolean(auditOperation);
   const blocked = Boolean(report.blocking) || hasBlockingFindings(findings);
-  const logs = appOperations.find((item) => item.kind === "logs" && item.status === "succeeded");
   const sourceConnected = (current?.source_status ?? "source_reconnect_required") === "connected";
   const activeDeployment = detail.data?.active_deployment ?? null;
+  const services = activeDeployment?.service_details ?? [];
+  const selectedService = services.find((service) => service.name === serviceName) ?? null;
+  const routes = routesQuery.data?.items ?? [];
+
+  useEffect(() => {
+    setServiceName(null);
+  }, [application?.id, activeDeployment?.id]);
 
   if (!application || !current) return null;
 
@@ -96,6 +117,9 @@ export function ApplicationDetail({ application, canCreate, canManage,
     }
   }
 
+  const lastDeploy = activeDeployment?.finished_at ?? activeDeployment?.created_at
+    ?? detail.data?.deployments?.[0]?.finished_at ?? null;
+
   return <>
     <Dialog open title={application.name} description={`${application.repository} · ${application.branch}`} onClose={onClose}>
       <div className="space-y-4">
@@ -103,62 +127,33 @@ export function ApplicationDetail({ application, canCreate, canManage,
           El repositorio ya no está autorizado por una instalación activa. Las inspecciones y despliegues nuevos están bloqueados; el lifecycle existente continúa.
           {canCreate ? <Button className="ml-2" size="sm" variant="secondary" disabled={pending} onClick={() => setSourceOpen(true)}>Elegir fuente</Button> : null}
         </Alert> : null}
-        <div className="flex flex-wrap gap-1 border-b border-border pb-2">
-          {(["overview", "audit", "deployments", "operations", "logs"] as Tab[]).map((item) =>
-            <Button key={item} size="sm" variant={tab === item ? "default" : "secondary"} onClick={() => setTab(item)}>{item}</Button>)}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-2">
+          <div className="flex flex-wrap gap-1">
+            {TABS.map(([value, label]) =>
+              <Button key={value} size="sm" variant={tab === value ? "primary" : "secondary"} onClick={() => setTab(value)}>{label}</Button>)}
+          </div>
+          <span className="rounded bg-muted px-2 py-0.5 text-xs">● {current.status}</span>
         </div>
 
-        {tab === "overview" ? <div className="space-y-3">
+        {tab === "overview" ? <div className="space-y-4">
           <dl className="grid gap-3 text-sm sm:grid-cols-2">
-            <div><dt className="text-muted-foreground">Estado</dt><dd>{current.status}</dd></div>
-            <div><dt className="text-muted-foreground">Fuente</dt><dd>{current.repository} · {current.branch}</dd></div>
+            <div><dt className="text-muted-foreground">Fuente</dt><dd>GitHub · {sourceConnected ? "conectado" : "requiere reconexión"}</dd></div>
             <div><dt className="text-muted-foreground">Compose</dt><dd>{current.compose_file ?? report.compose ?? "Autodetectar"}</dd></div>
-            <div><dt className="text-muted-foreground">Candidatos Compose</dt><dd>{(detail.data?.compose_candidates ?? []).join(", ") || "—"}</dd></div>
-            <div><dt className="text-muted-foreground">Dominio</dt><dd>{current.domain ?? "—"}</dd></div>
-            <div><dt className="text-muted-foreground">Ingress</dt><dd>{current.ingress_service ? `${current.ingress_service}:${current.ingress_port}` : "—"}</dd></div>
-            <div><dt className="text-muted-foreground">Deployment activo</dt><dd>{activeDeployment?.id ?? "—"}</dd></div>
             <div><dt className="text-muted-foreground">Commit activo</dt><dd><code>{activeDeployment?.commit ?? "—"}</code></dd></div>
-            <div><dt className="text-muted-foreground">Source status</dt><dd>{current.source_status}</dd></div>
+            <div><dt className="text-muted-foreground">Proyecto runtime</dt><dd><code>{detail.data?.runtime_project ?? "—"}</code></dd></div>
+            <div><dt className="text-muted-foreground">Último deploy</dt><dd>{lastDeploy ? new Date(lastDeploy).toLocaleString() : "—"}</dd></div>
           </dl>
           <div className="space-y-2">
-            <h3 className="text-sm font-medium">Contenedores</h3>
-            <div className="grid gap-2 sm:grid-cols-3">
-              {(activeDeployment?.service_details ?? []).map((service) => (
-                <article key={service.name} className="rounded border border-border p-3 text-sm">
-                  <div className="flex items-center justify-between gap-2">
-                    <strong className="capitalize">{service.name}</strong>
-                    <span className="text-xs text-muted-foreground">{service.status}</span>
-                  </div>
-                  <p className="mt-1 truncate text-xs text-muted-foreground" title={service.image ?? undefined}>
-                    {service.image ?? "Imagen no registrada"}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Creado {service.created_at ? new Date(service.created_at).toLocaleString() : "—"}
-                  </p>
-                  <details className="mt-2 text-xs">
-                    <summary className="cursor-pointer">Variables ({service.environment_names.length})</summary>
-                    <div className="mt-1 flex flex-wrap gap-1">
-                      {service.environment_names.map((name) => <code key={name} className="rounded bg-muted px-1 py-0.5">{name}</code>)}
-                      {service.environment_names.length === 0 ? <span className="text-muted-foreground">Sin variables declaradas</span> : null}
-                    </div>
-                  </details>
-                </article>
-              ))}
+            <h3 className="text-sm font-medium">Servicios</h3>
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              {services.map((service) => <ServiceCard key={service.name} service={service}
+                domainCount={canReadDomains
+                  ? routes.filter((route) => route.site_id === `${application.id}:${service.name}`).length
+                  : null}
+                onOpen={() => setServiceName(service.name)} />)}
             </div>
-            {(activeDeployment?.service_details ?? []).length === 0 ? <p className="text-sm text-muted-foreground">Sin contenedores activos.</p> : null}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {canCreate ? <Button variant="secondary" disabled={pending || busy || !sourceConnected} onClick={() => {
-              const id = `apps-inspect-${application.id}`;
-              toast.loading("Enviando inspección…", { id });
-              void accept(
-                () => inspectApplication(application.id, newIdempotencyKey()),
-                { id, accepted: "Inspección aceptada; podés seguir trabajando" },
-              );
-            }}>Inspeccionar</Button> : null}
-            {canDeploy ? <Button disabled={busy || blocked || !sourceConnected} onClick={() => setDeployOpen(true)}>Desplegar</Button> : null}
-            {canManage ? ACTIONS.map(([action, label]) => <Button key={action} variant="secondary" disabled={pending || !actionAllowed(current, action, busy)} onClick={() => void accept(() => runApplicationAction(application.id, action, newIdempotencyKey()))}>{label}</Button>) : null}
-            {canDelete ? <Button variant="secondary" disabled={busy} className="text-destructive" onClick={() => setDeleteOpen(true)}>Eliminar</Button> : null}
+            {services.length === 0 ? <p className="text-sm text-muted-foreground">Sin servicios en el deployment activo.</p> : null}
+            <p className="text-xs text-muted-foreground">Doble clic sobre una tarjeta para administrarla.</p>
           </div>
         </div> : null}
 
@@ -173,9 +168,31 @@ export function ApplicationDetail({ application, canCreate, canManage,
           {appOperations.map((operation) => <div key={operation.id} className="rounded border border-border p-3 text-sm"><strong>{operation.kind}</strong> · {operation.status} · {operation.phase}<br /><code className="text-xs">{operation.id}</code>{operation.public_error ? <p className="text-destructive">{operation.public_error}</p> : null}</div>)}
           {appOperations.length === 0 ? <p className="text-sm text-muted-foreground">No hay operaciones.</p> : null}
         </div> : null}
-        {tab === "logs" ? <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded border border-border bg-muted p-3 text-xs">{String(logs?.result?.output ?? "Solicitá logs; el resultado redactado aparecerá aquí.")}</pre> : null}
+
+        <div className="flex flex-wrap gap-2 border-t border-border pt-3">
+          {canCreate ? <Button variant="secondary" disabled={pending || busy || !sourceConnected} onClick={() => {
+            const id = `apps-inspect-${application.id}`;
+            toast.loading("Enviando inspección…", { id });
+            void accept(
+              () => inspectApplication(application.id, newIdempotencyKey()),
+              { id, accepted: "Inspección aceptada; podés seguir trabajando" },
+            );
+          }}>Inspeccionar</Button> : null}
+          {canDeploy ? <Button disabled={busy || blocked || !sourceConnected} onClick={() => setDeployOpen(true)}>Desplegar</Button> : null}
+          {canManage ? ACTIONS.map(([action, label]) => <Button key={action} variant="secondary" disabled={pending || !actionAllowed(current, action, busy)} onClick={() => void accept(() => runApplicationAction(application.id, action, newIdempotencyKey()))}>{label}</Button>) : null}
+          {canDelete ? <Button variant="secondary" disabled={busy} className="text-destructive" onClick={() => setDeleteOpen(true)}>Eliminar aplicación</Button> : null}
+        </div>
       </div>
     </Dialog>
+    {selectedService ? <ServiceDialog key={`${application.id}:${selectedService.name}`}
+      applicationId={application.id} applicationName={application.name}
+      service={selectedService} operations={appOperations}
+      canManage={canManage} canReadDomains={canReadDomains}
+      canManageDomains={canManageDomains} canReveal={canReveal}
+      pending={pending} updatedAt={detail.dataUpdatedAt}
+      onClose={() => setServiceName(null)}
+      onAction={(action) => void accept(() =>
+        runServiceAction(application.id, selectedService.name, action, newIdempotencyKey()))} /> : null}
     <DeployDialog application={current} open={deployOpen} blocked={blocked} onClose={() => setDeployOpen(false)} onAccepted={(operation) => { setDeployOpen(false); onAccepted(operation); }} />
     <DeleteDialog application={current} open={deleteOpen} onClose={() => setDeleteOpen(false)} onAccepted={(operation) => { setDeleteOpen(false); onAccepted(operation); }} />
     <SourceDialog application={current} open={sourceOpen} onClose={() => setSourceOpen(false)} />
