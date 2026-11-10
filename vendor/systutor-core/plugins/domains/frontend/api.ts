@@ -53,8 +53,52 @@ export type LinkDomainPayload = {
   www: boolean;
 };
 
+// ---- Rutas gestionadas (A.SPEC 0060) -------------------------------------
+
+export type DomainRoute = {
+  id: string;
+  domain: string;
+  path: string;
+  internal_path: string;
+  strip_path: boolean;
+  port: number;
+  entrypoints: string[];
+  https: boolean;
+  middlewares: string[];
+  site_id: string;
+  available: boolean;
+};
+
+export type DomainRoutePayload = {
+  domain: string;
+  path?: string;
+  internal_path?: string;
+  strip_path?: boolean;
+  port: number;
+  entrypoints?: string[];
+  https?: boolean;
+  middlewares?: string[];
+  site_id: string;
+};
+
+export type DomainRouteUpdate = Partial<Omit<DomainRoutePayload, "site_id">> & {
+  site_id?: string;
+};
+
+export type DomainRouteProbe = {
+  route_id: string;
+  domain: string;
+  path: string;
+  http_status: number | null;
+  certificate: CertificateInfo | null;
+};
+
 export const domainsKeys = {
   list: ["domains", "list"] as const,
+  available: ["domains", "available"] as const,
+  routes: (siteId?: string) =>
+    siteId ? (["domains", "routes", siteId] as const) : (["domains", "routes"] as const),
+  route: (id: string) => ["domains", "routes", id] as const,
   certificate: (domain: string) => ["domains", "certificate", domain] as const,
 };
 
@@ -94,6 +138,46 @@ export function removeDomain(domain: string) {
 export function getCertificate(domain: string) {
   return apiRequest<CertificateInfo>(
     `${BASE}/${encodeURIComponent(domain)}/certificate`
+  );
+}
+
+export function listAvailableDomains() {
+  return apiRequest<{ items: DomainItem[] }>(`${BASE}/available`);
+}
+
+export function listRoutes(siteId?: string) {
+  const query = siteId ? `?site_id=${encodeURIComponent(siteId)}` : "";
+  return apiRequest<{ items: DomainRoute[] }>(`${BASE}/routes${query}`);
+}
+
+export function getRoute(routeId: string) {
+  return apiRequest<DomainRoute>(`${BASE}/routes/${encodeURIComponent(routeId)}`);
+}
+
+export function createRoute(payload: DomainRoutePayload) {
+  return apiRequest<DomainRoute>(`${BASE}/routes`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateRoute(routeId: string, payload: DomainRouteUpdate) {
+  return apiRequest<DomainRoute>(`${BASE}/routes/${encodeURIComponent(routeId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function removeRoute(routeId: string) {
+  return apiRequest<void>(`${BASE}/routes/${encodeURIComponent(routeId)}`, {
+    method: "DELETE",
+  });
+}
+
+export function probeRoute(routeId: string) {
+  return apiRequest<DomainRouteProbe>(
+    `${BASE}/routes/${encodeURIComponent(routeId)}/probe`,
+    { method: "POST" }
   );
 }
 

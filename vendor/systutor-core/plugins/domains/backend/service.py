@@ -9,20 +9,29 @@ from __future__ import annotations
 from io import StringIO
 
 from fastapi import FastAPI
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from plugins.domains.backend.models import DomainRoute
 from plugins.domains.backend.proxy import (
     EXIT_VALIDATION,
+    PathRoute,
     ProxyError,
     ProxyOperations,
     Settings,
     build_runner,
     normalize_domain,
+    normalize_path_prefix,
 )
 from plugins.domains.backend.schemas import (
+    AvailableDomainsResponse,
     CertificateResponse,
     DomainCheckResponse,
     DomainItem,
+    RouteCreate,
+    RouteItem,
+    RouteProbeResponse,
+    RouteUpdate,
     SiteOption,
 )
 from plugins.domains.backend.settings import get_domains_settings
@@ -353,6 +362,341 @@ class DomainsService:
             sans=list(info.sans),
             verified=info.verified,
             error=info.error,
+        )
+
+    # ---- rutas gestionadas (A.SPEC 0060) ---------------------------------
+
+    def _route_rows(
+        self,
+        tenant_id: str,
+        *,
+        domain: str | None = None,
+        site_id: str | None = None,
+    ) -> list[DomainRoute]:
+        stmt = select(DomainRoute).where(DomainRoute.tenant_id == tenant_id)
+        if domain is not None:
+            stmt = stmt.where(DomainRoute.domain == domain)
+        if site_id is not None:
+            stmt = stmt.where(DomainRoute.site_id == site_id)
+        return list(
+            self._db.scalars(
+                stmt.order_by(DomainRoute.domain, DomainRoute.path, DomainRoute.id)
+            ).all()
+        )
+
+    def _route_site(self, tenant_id: str, site_id: str) -> SiteOption | None:
+        site = resolve_site(self._app, self._db, tenant_id, site_id)
+        if site is None:
+            return None
+        return SiteOption(
+            site_id=site.site_id,
+            container=site.container,
+            primary_domain=site.primary_domain,
+        )
+
+    @staticmethod
+    def _route_item(row: DomainRoute, available: bool) -> RouteItem:
+        return RouteItem(
+            id=row.id,
+            domain=row.domain,
+            path=row.path,
+            internal_path=row.internal_path,
+            strip_path=row.strip_path,
+            port=row.port,
+            entrypoints=list(row.entrypoints or []),
+            https=row.https,
+            middlewares=list(row.middlewares or []),
+            site_id=row.site_id,
+            available=available,
+        )
+
+    def _publish_domain_routes(
+        self,
+        tenant_id: str,
+        domain: str,
+        *,
+        ready: bool,
+    ) -> None:
+        rows = self._route_rows(tenant_id, domain=domain)
+        routes: list[PathRoute] = []
+        for row in rows:
+            site = self._route_site(tenant_id, row.site_id)
+            if site is None:
+                continue
+            routes.append(
+                PathRoute(
+                    prefix=row.path,
+                    container=site.container,
+                    port=row.port,
+                    internal_path=row.internal_path,
+                    strip_path=row.strip_path,
+                    entrypoints=tuple(row.entrypoints or ()),
+                    https=row.https,
+                    middlewares=tuple(row.middlewares or ()),
+                    route_id=row.id,
+                )
+            )
+        operations = self._ready() if ready else self._operations()
+        try:
+            operations.write_route_document(
+                domain,
+                routes,
+                validate_runtime=ready,
+                connect_network=ready,
+            )
+        except ProxyError as exc:
+            raise self._proxy_error(exc) from exc
+
+    def _registered_domains(self, tenant_id: str) -> set[str]:
+        owned = set(list_tenant_domains(self._app, self._db, tenant_id))
+        items, _, _ = self.list_domains(tenant_id, can_manage=False)
+        for item in items:
+            if item.owner == "domains":
+                owned.add(item.domain)
+        return owned
+
+    def available_domains(self, tenant_id: str) -> AvailableDomainsResponse:
+        items, _, _ = self.list_domains(tenant_id, can_manage=True)
+        return AvailableDomainsResponse(
+            items=[item for item in items if item.owner == "domains"]
+        )
+
+    def _route_domain(self, tenant_context: TenantContext, domain: str) -> str:
+        primary, _ = self._candidates(domain, False)
+        if primary not in self._registered_domains(tenant_context.current_tenant_id):
+            raise NotFoundError("Dominio desconocido")
+        return primary
+
+    def _conflicting_route(
+        self, tenant_id: str, domain: str, path: str, *, exclude_id: str | None = None
+    ) -> bool:
+        stmt = select(DomainRoute.id).where(
+            DomainRoute.domain == domain, DomainRoute.path == path
+        )
+        if exclude_id is not None:
+            stmt = stmt.where(DomainRoute.id != exclude_id)
+        if self._db.scalar(stmt) is not None:
+            return True
+        try:
+            return self._operations().path_conflict(domain, path)
+        except ProxyError:
+            return False
+
+    def list_routes(
+        self,
+        tenant_context: TenantContext,
+        *,
+        site_id: str | None = None,
+        domain: str | None = None,
+    ) -> list[RouteItem]:
+        tenant_id = tenant_context.current_tenant_id
+        if domain is not None:
+            domain = self._candidates(domain, False)[0]
+        rows = self._route_rows(tenant_id, domain=domain, site_id=site_id)
+        domains = sorted({row.domain for row in rows})
+        for item in domains:
+            try:
+                self._publish_domain_routes(tenant_id, item, ready=False)
+            except AppError:
+                # Una lectura no debe ocultar el inventario por un proxy caído.
+                continue
+        items: list[RouteItem] = []
+        for row in rows:
+            items.append(
+                self._route_item(
+                    row, self._route_site(tenant_id, row.site_id) is not None
+                )
+            )
+        return items
+
+    def get_route(
+        self, tenant_context: TenantContext, route_id: str
+    ) -> RouteItem:
+        row = self._db.scalar(
+            select(DomainRoute).where(
+                DomainRoute.id == route_id,
+                DomainRoute.tenant_id == tenant_context.current_tenant_id,
+            )
+        )
+        if row is None:
+            raise NotFoundError("Ruta desconocida")
+        try:
+            self._publish_domain_routes(row.tenant_id, row.domain, ready=False)
+        except AppError:
+            pass
+        return self._route_item(
+            row, self._route_site(row.tenant_id, row.site_id) is not None
+        )
+
+    def create_route(
+        self, tenant_context: TenantContext, body: RouteCreate
+    ) -> RouteItem:
+        tenant_id = tenant_context.current_tenant_id
+        domain = self._route_domain(tenant_context, body.domain)
+        site = self._route_site(tenant_id, body.site_id)
+        if site is None:
+            raise NotFoundError("Servicio desconocido")
+        path = normalize_path_prefix(body.path)
+        if self._conflicting_route(tenant_id, domain, path):
+            raise AppError(
+                "La ruta ya está asignada",
+                status_code=409,
+                code="domains.route_conflict",
+            )
+        row = DomainRoute(
+            tenant_id=tenant_id,
+            domain=domain,
+            path=path,
+            internal_path=normalize_path_prefix(body.internal_path),
+            strip_path=body.strip_path,
+            port=body.port,
+            entrypoints=list(body.entrypoints),
+            https=body.https,
+            middlewares=list(body.middlewares),
+            site_id=site.site_id,
+        )
+        self._db.add(row)
+        self._db.flush()
+        try:
+            self._publish_domain_routes(tenant_id, domain, ready=True)
+        except Exception:
+            rollback = getattr(self._db, "rollback", None)
+            if rollback is not None:
+                rollback()
+            raise
+        self._audit(
+            tenant_context,
+            action="domains.route.created",
+            domain=domain,
+            details={
+                "route_id": row.id,
+                "site_id": row.site_id,
+                "path": row.path,
+                "https": row.https,
+            },
+        )
+        return self._route_item(row, True)
+
+    def update_route(
+        self, tenant_context: TenantContext, route_id: str, body: RouteUpdate
+    ) -> RouteItem:
+        tenant_id = tenant_context.current_tenant_id
+        row = self._db.scalar(
+            select(DomainRoute).where(
+                DomainRoute.id == route_id, DomainRoute.tenant_id == tenant_id
+            )
+        )
+        if row is None:
+            raise NotFoundError("Ruta desconocida")
+        previous_domain = row.domain
+        values = body.model_dump(exclude_unset=True)
+        if "domain" in values:
+            values["domain"] = self._route_domain(tenant_context, values["domain"])
+        if "site_id" in values and self._route_site(tenant_id, values["site_id"]) is None:
+            raise NotFoundError("Servicio desconocido")
+        if "path" in values:
+            values["path"] = normalize_path_prefix(values["path"])
+        if "internal_path" in values:
+            values["internal_path"] = normalize_path_prefix(values["internal_path"])
+        target_domain = values.get("domain", row.domain)
+        target_path = values.get("path", row.path)
+        if self._conflicting_route(
+            tenant_id, target_domain, target_path, exclude_id=row.id
+        ):
+            raise AppError(
+                "La ruta ya está asignada",
+                status_code=409,
+                code="domains.route_conflict",
+            )
+        for key, value in values.items():
+            setattr(row, key, value)
+        self._db.flush()
+        try:
+            self._publish_domain_routes(tenant_id, previous_domain, ready=True)
+            if row.domain != previous_domain:
+                self._publish_domain_routes(tenant_id, row.domain, ready=True)
+        except Exception:
+            rollback = getattr(self._db, "rollback", None)
+            if rollback is not None:
+                rollback()
+            raise
+        self._audit(
+            tenant_context,
+            action="domains.route.updated",
+            domain=row.domain,
+            details={
+                "route_id": row.id,
+                "site_id": row.site_id,
+                "path": row.path,
+                "https": row.https,
+            },
+        )
+        return self._route_item(row, True)
+
+    def delete_route(self, tenant_context: TenantContext, route_id: str) -> None:
+        tenant_id = tenant_context.current_tenant_id
+        row = self._db.scalar(
+            select(DomainRoute).where(
+                DomainRoute.id == route_id, DomainRoute.tenant_id == tenant_id
+            )
+        )
+        if row is None:
+            raise NotFoundError("Ruta desconocida")
+        domain = row.domain
+        self._db.delete(row)
+        self._db.flush()
+        try:
+            self._publish_domain_routes(tenant_id, domain, ready=True)
+        except Exception:
+            rollback = getattr(self._db, "rollback", None)
+            if rollback is not None:
+                rollback()
+            raise
+        self._audit(
+            tenant_context,
+            action="domains.route.removed",
+            domain=domain,
+            details={"route_id": route_id, "site_id": row.site_id, "path": row.path},
+        )
+
+    def probe_route(
+        self, tenant_context: TenantContext, route_id: str
+    ) -> RouteProbeResponse:
+        tenant_id = tenant_context.current_tenant_id
+        row = self._db.scalar(
+            select(DomainRoute).where(
+                DomainRoute.id == route_id, DomainRoute.tenant_id == tenant_id
+            )
+        )
+        if row is None:
+            raise NotFoundError("Ruta desconocida")
+        if self._route_site(tenant_id, row.site_id) is None:
+            raise AppError(
+                "El servicio de la ruta no está disponible",
+                status_code=409,
+                code="domains.route_target_unavailable",
+            )
+        try:
+            self._publish_domain_routes(tenant_id, row.domain, ready=False)
+            operations = self._operations()
+            info, code = operations.probe_route(row.domain, row.path)
+        except ProxyError as exc:
+            raise self._proxy_error(exc) from exc
+        return RouteProbeResponse(
+            route_id=row.id,
+            domain=row.domain,
+            path=row.path,
+            http_status=code,
+            certificate=CertificateResponse(
+                domain=row.domain,
+                state=info.state,
+                issuer=info.issuer,
+                subject=info.subject,
+                not_after=info.not_after,
+                sans=list(info.sans),
+                verified=info.verified,
+                error=info.error,
+            ),
         )
 
     # ---- escritura -------------------------------------------------------

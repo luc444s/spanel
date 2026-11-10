@@ -12,12 +12,18 @@ from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.orm import Session
 
 from plugins.domains.backend.schemas import (
+    AvailableDomainsResponse,
     CertificateResponse,
     CreateDomainRequest,
     CreateDomainsResponse,
     DomainCheckResponse,
     DomainsResponse,
     LinkDomainRequest,
+    RouteCreate,
+    RouteItem,
+    RouteProbeResponse,
+    RoutesResponse,
+    RouteUpdate,
 )
 from plugins.domains.backend.service import DomainsService
 from systutor.api.deps import get_db_session
@@ -95,6 +101,80 @@ def check_domain(
     service: DomainsService = Depends(_get_service),
 ) -> DomainCheckResponse:
     return service.check_domain(tenant_context, domain)
+
+
+@router.get("/available", response_model=AvailableDomainsResponse)
+def available_domains(
+    tenant_context: TenantContext = Depends(get_current_tenant_context),
+    _current_user: User = Depends(require_permission("domains.domains.read")),
+    service: DomainsService = Depends(_get_service),
+) -> AvailableDomainsResponse:
+    return service.available_domains(tenant_context.current_tenant_id)
+
+
+@router.get("/routes", response_model=RoutesResponse)
+def list_routes(
+    site_id: str | None = None,
+    domain: str | None = None,
+    tenant_context: TenantContext = Depends(get_current_tenant_context),
+    _current_user: User = Depends(require_permission("domains.domains.read")),
+    service: DomainsService = Depends(_get_service),
+) -> RoutesResponse:
+    return RoutesResponse(
+        items=service.list_routes(tenant_context, site_id=site_id, domain=domain)
+    )
+
+
+@router.post("/routes", response_model=RouteItem, status_code=201)
+def create_route(
+    body: RouteCreate,
+    tenant_context: TenantContext = Depends(get_current_tenant_context),
+    _current_user: User = Depends(require_permission("domains.domains.manage")),
+    service: DomainsService = Depends(_get_service),
+) -> RouteItem:
+    return service.create_route(tenant_context, body)
+
+
+@router.get("/routes/{route_id}", response_model=RouteItem)
+def get_route(
+    route_id: str,
+    tenant_context: TenantContext = Depends(get_current_tenant_context),
+    _current_user: User = Depends(require_permission("domains.domains.read")),
+    service: DomainsService = Depends(_get_service),
+) -> RouteItem:
+    return service.get_route(tenant_context, route_id)
+
+
+@router.patch("/routes/{route_id}", response_model=RouteItem)
+def update_route(
+    route_id: str,
+    body: RouteUpdate,
+    tenant_context: TenantContext = Depends(get_current_tenant_context),
+    _current_user: User = Depends(require_permission("domains.domains.manage")),
+    service: DomainsService = Depends(_get_service),
+) -> RouteItem:
+    return service.update_route(tenant_context, route_id, body)
+
+
+@router.delete("/routes/{route_id}", status_code=204)
+def delete_route(
+    route_id: str,
+    tenant_context: TenantContext = Depends(get_current_tenant_context),
+    _current_user: User = Depends(require_permission("domains.domains.manage")),
+    service: DomainsService = Depends(_get_service),
+) -> Response:
+    service.delete_route(tenant_context, route_id)
+    return Response(status_code=204)
+
+
+@router.post("/routes/{route_id}/probe", response_model=RouteProbeResponse)
+def probe_route(
+    route_id: str,
+    tenant_context: TenantContext = Depends(get_current_tenant_context),
+    _current_user: User = Depends(require_permission("domains.domains.read")),
+    service: DomainsService = Depends(_get_service),
+) -> RouteProbeResponse:
+    return service.probe_route(tenant_context, route_id)
 
 
 @router.post("", response_model=CreateDomainsResponse, status_code=201)

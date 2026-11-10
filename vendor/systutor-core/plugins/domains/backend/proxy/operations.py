@@ -28,6 +28,7 @@ from .core import (
     document_resolver,
     is_managed_document,
     normalize_domain,
+    normalize_path_prefix,
     parse_site_document,
     render_site_yaml,
     site_file_name,
@@ -452,11 +453,14 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
             EXIT_CERT,
         )
 
-    def _route_code(self, domain: str) -> int | None:
-        """Código HTTP de `GET /` hablando TLS directo al proxy con SNI del dominio."""
+    def _route_code(self, domain: str, path: str = "/") -> int | None:
+        """Código HTTP de `GET path` hablando TLS directo al proxy con SNI."""
         host = self.probe_host()
         if not host:
             return None
+        normalized = normalize_path_prefix(path)
+        if any(character in normalized for character in '"\\'):
+            raise ProxyError("path de sondeo inválido", EXIT_VALIDATION)
         context = ssl.create_default_context()
         if self.settings.ca_file:
             context.load_verify_locations(cafile=str(self.settings.ca_file))
@@ -466,7 +470,7 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
                 context.wrap_socket(raw, server_hostname=domain) as tls,
             ):
                 request = (
-                    f"GET / HTTP/1.1\r\nHost: {domain}\r\n"
+                    f"GET {normalized} HTTP/1.1\r\nHost: {domain}\r\n"
                     "Connection: close\r\nUser-Agent: spanel-proxy-domain\r\n\r\n"
                 )
                 tls.sendall(request.encode())
@@ -582,6 +586,110 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
         for row in sorted(rows, key=lambda item: item.domain):
             self.say(f"{row.domain:<40} {row.container:<28} {row.resolver:<12} {row.file}")
         return EXIT_OK
+
+    # ---- rutas gestionadas (A.SPEC 0060) ----------------------------------
+
+    def route_document_path(self, domain: str) -> Path:
+        return self.files.config_dir / site_file_name(slug_for(f"route-{domain}"))
+
+    def _connect_route_containers(self, routes: list[PathRoute]) -> None:
+        network = self.settings.network
+        for route in routes:
+            if network not in self.container_networks(route.container):
+                self.warn(f"==> docker network connect {network} {route.container}")
+                self.docker("network", "connect", network, route.container)
+
+    def write_route_document(
+        self,
+        domain: str,
+        routes: list[PathRoute],
+        *,
+        validate_runtime: bool = True,
+        connect_network: bool = True,
+    ) -> Path | None:
+        """Publica sólo rutas de path para un dominio, sin router base.
+
+        Reutiliza el renderer y la escritura atómica existentes. Un dominio sin
+        rutas borra su documento gestionado; nunca toca otros YAML.
+        """
+        domain = normalize_domain(domain, self.profile)
+        path = self.route_document_path(domain)
+        if not routes:
+            self.remove_route_document(domain)
+            return None
+        for route in routes:
+            if not route.container.strip():
+                raise ProxyError("contenedor de ruta vacío", EXIT_VALIDATION)
+            if not 1 <= route.port <= 65535:
+                raise ProxyError("puerto de ruta inválido", EXIT_VALIDATION)
+            if validate_runtime:
+                if not self.container_exists(route.container):
+                    raise ProxyError(
+                        f"el servicio de ruta '{route.container}' no existe como contenedor",
+                        EXIT_TRANSPORT,
+                    )
+                if not self.container_running(route.container):
+                    raise ProxyError(
+                        f"el servicio de ruta '{route.container}' no está running",
+                        EXIT_TRANSPORT,
+                    )
+        content = render_site_yaml(
+            domain,
+            [domain],
+            self.resolver,
+            self.settings.entrypoint_http,
+            self.settings.entrypoint_https,
+            path_routes=routes,
+            include_base=False,
+        )
+        existing_text = self._read_text(path)
+        if existing_text is not None and not is_managed_document(existing_text):
+            raise ProxyError(f"{path} existe y no está gestionado por spanel", EXIT_VALIDATION)
+        if existing_text == content:
+            return path
+        if validate_runtime and connect_network and routes:
+            self._connect_route_containers(routes)
+        if existing_text is not None:
+            self._backup(path, existing_text)
+        self._write_text(path, content)
+        self.audit("route-write", "app-route", domain, "written")
+        return path
+
+    def remove_route_document(self, domain: str) -> bool:
+        path = self.route_document_path(normalize_domain(domain, self.profile))
+        text = self._read_text(path)
+        if text is None:
+            return False
+        validate_managed_path(path)
+        self._backup(path, text)
+        self._delete_file(path)
+        self.audit("route-remove", "app-route", domain, "deleted")
+        return True
+
+    def path_conflict(self, domain: str, prefix: str) -> bool:
+        """¿Otro YAML gestionado ya publica ese host+path?"""
+        needle = normalize_path_prefix(prefix)
+        for path in self.site_files():
+            if path == self.route_document_path(domain):
+                continue
+            text = self._read_text(path)
+            if not text or not is_managed_document(text):
+                continue
+            try:
+                data = parse_site_document(text)
+            except ProxyError:
+                continue
+            if domain not in document_domains(data):
+                continue
+            if needle == "/":
+                return True
+            if any(route.prefix == needle for route in document_path_routes(data)):
+                return True
+        return False
+
+    def probe_route(self, domain: str, path: str = "/") -> tuple[CertificateInfo, int | None]:
+        info = self.certificate(domain)
+        return info, self._route_code(domain, path)
 
     # ---- remove -----------------------------------------------------------
 

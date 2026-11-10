@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import re
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class DomainItem(BaseModel):
@@ -66,3 +67,136 @@ class CertificateResponse(BaseModel):
     sans: list[str] = Field(default_factory=list)
     verified: bool = False
     error: str | None = None
+
+
+# ---- rutas gestionadas (A.SPEC 0060) --------------------------------------
+
+_SAFE_PROXY_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*(?:@[a-z]+)?$")
+
+
+def _path_value(value: str) -> str:
+    path = value.strip()
+    if (
+        not path.startswith("/")
+        or path.startswith("//")
+        or len(path) > 255
+        or any(character in path for character in "`\r\n\t?#\"")
+    ):
+        raise ValueError("path inválido")
+    return path.rstrip("/") or "/"
+
+
+def _proxy_names(values: list[str], label: str) -> list[str]:
+    result: list[str] = []
+    for raw in values:
+        value = raw.strip()
+        if not _SAFE_PROXY_NAME.fullmatch(value):
+            raise ValueError(f"{label} inválido")
+        if value in result:
+            raise ValueError(f"{label} duplicado")
+        result.append(value)
+    if len(result) > 20:
+        raise ValueError(f"demasiados {label}")
+    return result
+
+
+class RouteItem(BaseModel):
+    id: str
+    domain: str
+    path: str
+    internal_path: str
+    strip_path: bool
+    port: int
+    entrypoints: list[str] = Field(default_factory=list)
+    https: bool = True
+    middlewares: list[str] = Field(default_factory=list)
+    site_id: str
+    available: bool = True
+
+
+class RouteCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    domain: str = Field(min_length=4, max_length=253)
+    path: str = "/"
+    internal_path: str = "/"
+    strip_path: bool = False
+    port: int = Field(ge=1, le=65535)
+    entrypoints: list[str] = Field(default_factory=list, max_length=20)
+    https: bool = True
+    middlewares: list[str] = Field(default_factory=list, max_length=20)
+    site_id: str = Field(min_length=1, max_length=504)
+
+    @field_validator("path", "internal_path")
+    @classmethod
+    def valid_path(cls, value: str) -> str:
+        return _path_value(value)
+
+    @field_validator("entrypoints", "middlewares")
+    @classmethod
+    def valid_names(cls, value: list[str]) -> list[str]:
+        return _proxy_names(value, "valor")
+
+    @field_validator("site_id")
+    @classmethod
+    def valid_site(cls, value: str) -> str:
+        site = value.strip()
+        if any(character in site for character in "`\r\n\t "):
+            raise ValueError("site_id inválido")
+        return site
+
+
+class RouteUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    domain: str | None = Field(default=None, min_length=4, max_length=253)
+    path: str | None = None
+    internal_path: str | None = None
+    strip_path: bool | None = None
+    port: int | None = Field(default=None, ge=1, le=65535)
+    entrypoints: list[str] | None = Field(default=None, max_length=20)
+    https: bool | None = None
+    middlewares: list[str] | None = Field(default=None, max_length=20)
+    site_id: str | None = Field(default=None, min_length=1, max_length=504)
+
+    @field_validator("path", "internal_path")
+    @classmethod
+    def valid_path(cls, value: str | None) -> str | None:
+        return None if value is None else _path_value(value)
+
+    @field_validator("entrypoints", "middlewares")
+    @classmethod
+    def valid_names(cls, value: list[str] | None) -> list[str] | None:
+        return None if value is None else _proxy_names(value, "valor")
+
+    @field_validator("site_id")
+    @classmethod
+    def valid_site(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        site = value.strip()
+        if any(character in site for character in "`\r\n\t "):
+            raise ValueError("site_id inválido")
+        return site
+
+    @model_validator(mode="after")
+    def not_empty(self):
+        if not self.model_fields_set:
+            raise ValueError("la actualización no contiene campos")
+        return self
+
+
+class RoutesResponse(BaseModel):
+    items: list[RouteItem]
+
+
+class AvailableDomainsResponse(BaseModel):
+    items: list[DomainItem]
+
+
+class RouteProbeResponse(BaseModel):
+    route_id: str
+    domain: str
+    path: str
+    http_status: int | None = None
+    certificate: CertificateResponse | None = None

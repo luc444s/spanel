@@ -115,6 +115,21 @@ class PathRoute:
     prefix: str
     container: str
     port: int
+    internal_path: str = "/"
+    strip_path: bool = False
+    entrypoints: tuple[str, ...] = ()
+    https: bool = True
+    middlewares: tuple[str, ...] = ()
+    route_id: str | None = None
+
+
+def _safe_proxy_token(value: str, label: str) -> str:
+    token = value.strip()
+    if not token or len(token) > 255:
+        raise ProxyError(f"{label} inválido", EXIT_VALIDATION)
+    if any(character in token for character in "`\r\n\t "):
+        raise ProxyError(f"{label} inválido", EXIT_VALIDATION)
+    return token
 
 
 def normalize_path_prefix(value: str) -> str:
@@ -122,7 +137,7 @@ def normalize_path_prefix(value: str) -> str:
     if not prefix.startswith("/") or prefix.startswith("//"):
         raise ProxyError("el prefijo debe comenzar con una sola /", EXIT_VALIDATION)
     prefix = prefix.rstrip("/") or "/"
-    if prefix == "/" or any(character in prefix for character in "`\r\n?#"):
+    if any(character in prefix for character in "`\r\n?#"):
         raise ProxyError("prefijo de ruta inválido", EXIT_VALIDATION)
     return prefix
 
@@ -130,7 +145,54 @@ def normalize_path_prefix(value: str) -> str:
 def path_router_rule(domains: Iterable[str], prefix: str) -> str:
     host_rule = router_rule(domains)
     path = normalize_path_prefix(prefix)
+    if path == "/":
+        return host_rule
     return f"({host_rule}) && (Path(`{path}`) || PathPrefix(`{path}/`))"
+
+
+def _route_rewrite(
+    *,
+    prefix: str,
+    internal_path: str,
+    strip_path: bool,
+    middleware_name: str,
+) -> dict | None:
+    """Middleware que mapea el path externo al path interno del backend.
+
+    `strip_path` elimina el prefijo externo; `internal_path` es el prefijo que
+    recibe el servicio. Sin strip y con `/` se preserva el path original.
+    """
+    internal = normalize_path_prefix(internal_path)
+    if prefix == "/":
+        return None
+    if strip_path:
+        target = internal
+    elif internal != "/" and internal != prefix:
+        target = internal
+    else:
+        return None
+    return {
+        middleware_name: {
+            "replacePathRegex": {
+                "regex": f"^{re.escape(prefix)}(.*)",
+                "replacement": f"{target}$1",
+            }
+        }
+    }
+
+
+def _route_entrypoints(
+    route: PathRoute, entrypoint_http: str, entrypoint_https: str
+) -> tuple[list[str], list[str]]:
+    """Entrypoints HTTP/HTTPS efectivos para una ruta gestionada."""
+    configured = [
+        _safe_proxy_token(value, "entrypoint") for value in route.entrypoints
+    ]
+    if not route.https:
+        return configured or [entrypoint_http], []
+    secure = [value for value in configured if value != entrypoint_http]
+    redirect = [entrypoint_http] if not configured or entrypoint_http in configured else []
+    return redirect, secure or [entrypoint_https]
 
 
 def render_site_yaml(
@@ -141,63 +203,92 @@ def render_site_yaml(
     entrypoint_https: str = "websecure",
     port: int = 80,
     path_routes: Sequence[PathRoute] = (),
+    *,
+    include_base: bool = True,
 ) -> str:
     if not 1 <= port <= 65535:
         raise ProxyError("puerto inválido", EXIT_VALIDATION)
     slug = slug_for(container)
     rule = router_rule(domains)
     service = f"{FILE_PREFIX}{slug}"
-    doc = {
-        "http": {
-            "routers": {
-                f"{service}-http": {
-                    "rule": rule,
-                    "entryPoints": [entrypoint_http],
-                    "middlewares": [f"{service}-redirect"],
-                    "service": service,
-                    "priority": 200,
-                },
-                service: {
-                    "rule": rule,
-                    "entryPoints": [entrypoint_https],
-                    "service": service,
-                    "tls": {"certResolver": resolver},
-                    "priority": 100,
-                },
-            },
-            "middlewares": {
-                f"{service}-redirect": {
-                    "redirectScheme": {"scheme": "https", "permanent": True},
-                }
-            },
-            "services": {
-                service: {
-                    "loadBalancer": {"servers": [{"url": f"http://{container}:{port}"}]}
-                }
-            },
+    routers: dict[str, dict] = {}
+    services: dict[str, dict] = {}
+    middlewares: dict[str, dict] = {}
+    if include_base:
+        routers[f"{service}-http"] = {
+            "rule": rule,
+            "entryPoints": [entrypoint_http],
+            "middlewares": [f"{service}-redirect"],
+            "service": service,
+            "priority": 200,
         }
-    }
-    routers = doc["http"]["routers"]
-    services = doc["http"]["services"]
+        routers[service] = {
+            "rule": rule,
+            "entryPoints": [entrypoint_https],
+            "service": service,
+            "tls": {"certResolver": resolver},
+            "priority": 100,
+        }
+        middlewares[f"{service}-redirect"] = {
+            "redirectScheme": {"scheme": "https", "permanent": True},
+        }
+        services[service] = {
+            "loadBalancer": {"servers": [{"url": f"http://{container}:{port}"}]}
+        }
+
     for index, route in enumerate(path_routes, start=1):
         if not route.container.strip():
             raise ProxyError("contenedor de ruta vacío", EXIT_VALIDATION)
         if not 1 <= route.port <= 65535:
             raise ProxyError("puerto de ruta inválido", EXIT_VALIDATION)
         prefix = normalize_path_prefix(route.prefix)
-        route_service = f"{service}-path-{index}"
-        routers[route_service] = {
-            "rule": path_router_rule(domains, prefix),
-            "entryPoints": [entrypoint_https],
+        suffix = route.route_id or f"path-{index}"
+        route_service = f"{service}-route-{suffix}"
+        route_rule = path_router_rule(domains, prefix)
+        redirect_eps, secure_eps = _route_entrypoints(
+            route, entrypoint_http, entrypoint_https
+        )
+        route_middlewares: list[str] = []
+        rewrite = _route_rewrite(
+            prefix=prefix,
+            internal_path=route.internal_path,
+            strip_path=route.strip_path,
+            middleware_name=f"{route_service}-rewrite",
+        )
+        if rewrite is not None:
+            middlewares.update(rewrite)
+            route_middlewares.append(f"{route_service}-rewrite")
+        for raw in route.middlewares:
+            route_middlewares.append(_safe_proxy_token(raw, "middleware"))
+        if route.https and redirect_eps:
+            redirect_name = f"{route_service}-redirect"
+            middlewares[redirect_name] = {
+                "redirectScheme": {"scheme": "https", "permanent": True},
+            }
+            routers[f"{route_service}-http"] = {
+                "rule": route_rule,
+                "entryPoints": redirect_eps,
+                "middlewares": [redirect_name],
+                "service": route_service,
+                "priority": 300 + index,
+            }
+        router: dict[str, object] = {
+            "rule": route_rule,
+            "entryPoints": secure_eps if route.https else redirect_eps,
             "service": route_service,
-            "tls": {"certResolver": resolver},
-            "priority": 300 + index,
+            "priority": 400 + index,
         }
+        if route_middlewares:
+            router["middlewares"] = route_middlewares
+        if route.https:
+            router["tls"] = {"certResolver": resolver}
+        routers[route_service] = router
         services[route_service] = {
             "loadBalancer": {
                 "servers": [{"url": f"http://{route.container}:{route.port}"}]
             }
         }
+    doc = {"http": {"routers": routers, "middlewares": middlewares, "services": services}}
     body = yaml.safe_dump(doc, sort_keys=False, allow_unicode=True, default_flow_style=False)
     return f"{MARKER}\n{body}"
 
@@ -263,7 +354,11 @@ def document_path_routes(data: dict) -> list[PathRoute]:
     routers = (data.get("http") or {}).get("routers") or {}
     services = (data.get("http") or {}).get("services") or {}
     for name, router in routers.items():
-        if "-path-" not in str(name) or not isinstance(router, dict):
+        if (
+            "-path-" not in str(name) and "-route-" not in str(name)
+        ) or not isinstance(router, dict):
+            continue
+        if str(name).endswith("-http"):
             continue
         rule = str(router.get("rule") or "")
         prefix_match = re.search(r"Path\(`([^`]+)`\)", rule)
