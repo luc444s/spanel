@@ -455,3 +455,30 @@ def test_deploy_manifest_persists_tenant_names_but_never_values(tmp_path: Path) 
     assert manifest["tenant_environment_names"] == ["JWT_SECRET_KEY"]
     assert "canary-value" not in str(manifest)
     assert manifest["service_environment"] == {"web": ["JWT_SECRET_KEY"]}
+
+
+def test_service_environment_includes_interpolated_managed_names() -> None:
+    from plugins.apps.backend.runtime.deployment import _service_environment_names
+
+    names = _service_environment_names({
+        "services": {
+            "backend": {
+                "environment": {
+                    "DATABASE_URL": (
+                        "postgresql://${APP_DB_USER}:${APP_DB_PASSWORD}"
+                        "@database:5432/${APP_DB_NAME}"
+                    ),
+                    "CORS_ORIGINS": "${CORS_ORIGINS:-http://localhost}",
+                }
+            },
+            "frontend": {"environment": {"VITE_API_BASE_URL": "/api"}},
+        }
+    })
+    assert names["backend"] == [
+        "APP_DB_NAME",
+        "APP_DB_PASSWORD",
+        "APP_DB_USER",
+        "CORS_ORIGINS",
+        "DATABASE_URL",
+    ]
+    assert names["frontend"] == ["VITE_API_BASE_URL"]

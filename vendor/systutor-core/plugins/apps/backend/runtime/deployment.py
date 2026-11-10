@@ -435,17 +435,34 @@ def runtime_snapshot(
     return result
 
 
+_ENV_REFERENCE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::[^}]*)?\}")
+
+
 def _service_environment_names(data: dict[str, Any]) -> dict[str, list[str]]:
+    """Nombres declarados o interpolados por el Compose de cada servicio.
+
+    Las credenciales administradas (``APP_DB_*``) no se listan como claves de
+    ``environment``: se interpolan dentro de otra variable, por ejemplo
+    ``DATABASE_URL``. También son parte del entorno efectivo del servicio y
+    deben aparecer en la metadata para poder revelarlas con auditoría.
+    """
     result: dict[str, list[str]] = {}
     for service, config in data["services"].items():
         environment = config.get("environment", {}) if isinstance(config, dict) else {}
+        names: list[str] = []
+        values: list[str] = []
         if isinstance(environment, dict):
             names = [str(name) for name in environment]
+            values = [str(value) for value in environment.values()]
         elif isinstance(environment, list):
-            names = [str(item).split("=", 1)[0] for item in environment]
-        else:
-            names = []
-        result[str(service)] = sorted({name for name in names if name})
+            for item in environment:
+                key, _, value = str(item).partition("=")
+                names.append(key)
+                values.append(value)
+        referenced = {
+            name for value in values for name in _ENV_REFERENCE.findall(value)
+        }
+        result[str(service)] = sorted({name for name in names if name} | referenced)
     return result
 
 
