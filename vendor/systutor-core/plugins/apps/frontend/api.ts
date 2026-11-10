@@ -74,6 +74,14 @@ export const deployApplication = (id: string, environment: EnvironmentEntry[], k
 export const runApplicationAction = (id: string, action: AppAction, key: string) =>
   apiRequest<OperationSummary>(`${ROOT}/applications/${encodeURIComponent(id)}/actions/${action}`,
     operationOptions("POST", key));
+export const runServiceAction = (id: string, service: string, action: Exclude<AppAction, "down">, key: string) =>
+  apiRequest<OperationSummary>(`${ROOT}/applications/${encodeURIComponent(id)}/actions/${action}`,
+    operationOptions("POST", key, { service }));
+export const revealManagedSecret = (id: string, name: string, reason: string) =>
+  apiRequest<{ name: string; value: string }>(
+    `${ROOT}/applications/${encodeURIComponent(id)}/secrets/${encodeURIComponent(name)}/reveal`,
+    { method: "POST", body: JSON.stringify({ reason }) },
+  );
 export const deleteApplication = (id: string, confirm: string, purgeData: boolean, key: string) =>
   apiRequest<OperationSummary>(`${ROOT}/applications/${encodeURIComponent(id)}`,
     operationOptions("DELETE", key, { confirm, purge_data: purgeData }));
