@@ -199,6 +199,25 @@ def test_worker_revalidates_service_before_lifecycle(tmp_path: Path, monkeypatch
     assert called == []
 
 
+def test_worker_deletes_draft_even_without_active_deployment(tmp_path: Path) -> None:
+    engine = database(tmp_path)
+    with Session(engine) as db:
+        db.add(Operation(
+            id="op-draft", application_id="a2", tenant_id="t2",
+            actor_user_id="u2", subject_type="application", subject_id="a2",
+            kind="delete", status="running", idempotency_key="draft",
+            request_hash="h", report={"purge_data": False},
+        ))
+        db.commit()
+    worker = AppsWorker(lambda: Session(engine), TokenCipher(b"k" * 32))
+    result = worker._lifecycle_operation("op-draft", "a2", "delete")
+    assert result["action"] == "delete"
+    with Session(engine) as db:
+        app = db.get(Application, "a2")
+        assert app is not None and app.deleted_at is not None
+        assert app.status == "deleted"
+
+
 def test_service_details_are_dynamic_and_never_include_values(tmp_path: Path) -> None:
     engine = database(tmp_path)
     with Session(engine) as db:

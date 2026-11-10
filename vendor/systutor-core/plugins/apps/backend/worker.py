@@ -394,22 +394,49 @@ class AppsWorker:
     def _lifecycle_operation(self, operation_id: str, application_id: str, kind: str) -> dict:
         with self.session_factory() as db:
             app = db.get(Application, application_id)
-            if app is None or not app.active_deployment_id:
-                raise RuntimeError("Active deployment not found")
-            deployment = db.get(Deployment, app.active_deployment_id)
-            if deployment is None or not deployment.manifest:
-                raise RuntimeError("Owned deployment manifest not found")
+            if app is None:
+                raise RuntimeError("Application not found")
             project, domain = app.runtime_project, app.domain
             tenant_id = app.tenant_id
             operation = db.get(Operation, operation_id)
             purge_data = bool((operation.report or {}).get("purge_data")) if operation else False
             service = (operation.report or {}).get("service") if operation else None
+            deployment = (
+                db.get(Deployment, app.active_deployment_id)
+                if app.active_deployment_id else None
+            )
+            if deployment is None or not deployment.manifest:
+                if kind != "delete":
+                    raise RuntimeError("Active deployment not found")
+                deployment = None
             if service is not None:
-                containers = deployment.manifest.get("containers", {})
+                containers = deployment.manifest.get("containers", {}) if deployment else {}
                 if not isinstance(service, str) or service not in containers:
                     raise RuntimeError("Service does not belong to the active deployment")
                 if kind in {"down", "delete"}:
                     raise RuntimeError("down and delete always affect the whole application")
+        if deployment is None:
+            # Un borrador (o una inspección fallida) no tiene runtime que
+            # detener: solo hay que retirar rutas y metadatos.
+            if self.route_cleanup is not None:
+                with self.session_factory() as db:
+                    self.route_cleanup(db, tenant_id, application_id)
+            if domain and self.publisher is not None:
+                self.publisher.unpublish(domain)
+            with self.session_factory() as db:
+                current = db.get(Application, application_id)
+                if current is not None:
+                    current.deleted_at = datetime.now(UTC)
+                    current.status = "deleted"
+                    if purge_data:
+                        clear_managed_environment(current)
+                    db.commit()
+            return {
+                "application_id": application_id,
+                "operation_id": operation_id,
+                "action": kind,
+                "output": "No active deployment; application metadata removed.",
+            }
         command = "status" if kind == "refresh" else kind
         runner = self.runner_factory(self._transport())
         result = lifecycle(
