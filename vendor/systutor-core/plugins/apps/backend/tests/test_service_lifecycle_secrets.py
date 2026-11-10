@@ -20,6 +20,10 @@ from plugins.apps.backend.crypto import TokenCipher
 from plugins.apps.backend.managed_environment import managed_database_environment
 from plugins.apps.backend.models import Application, Deployment, Operation
 from plugins.apps.backend.schemas import ActionRequest, SecretRevealRequest
+from plugins.apps.backend.tenant_environment import (
+    save_tenant_environment,
+    saved_tenant_environment,
+)
 from plugins.apps.backend.worker import AppsWorker
 from systutor.core.database import Base
 from systutor.core.errors import register_exception_handlers
@@ -216,6 +220,29 @@ def test_worker_deletes_draft_even_without_active_deployment(tmp_path: Path) -> 
         app = db.get(Application, "a2")
         assert app is not None and app.deleted_at is not None
         assert app.status == "deleted"
+
+
+def test_tenant_environment_is_encrypted_and_reused_on_redeploy(tmp_path: Path) -> None:
+    engine = database(tmp_path)
+    cipher = TokenCipher(b"k" * 32)
+    entries = [
+        ("JWT_SECRET_KEY", "super-secret"),
+        ("VITE_API_BASE_URL", "/api"),
+    ]
+    with Session(engine) as db:
+        app = db.get(Application, "a1")
+        assert app is not None
+        saved = save_tenant_environment(db, app, cipher, entries)
+        db.commit()
+        assert saved == entries
+        assert app.has_saved_environment is True
+        assert "super-secret" not in str(app.tenant_env_ciphertext)
+        assert saved_tenant_environment(app, cipher) == entries
+
+        # Un bloque nuevo lo reemplaza por completo.
+        replacement = [("API_KEY", "new-key")]
+        assert save_tenant_environment(db, app, cipher, replacement) == replacement
+        assert saved_tenant_environment(app, cipher) == replacement
 
 
 def test_service_details_are_dynamic_and_never_include_values(tmp_path: Path) -> None:

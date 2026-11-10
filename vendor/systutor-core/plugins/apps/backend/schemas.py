@@ -125,6 +125,7 @@ class ApplicationView(BaseModel):
     source_installation_id: str | None
     source_repository_id: str | None
     source_status: str
+    has_saved_environment: bool = False
 
     model_config = {"from_attributes": True}
 

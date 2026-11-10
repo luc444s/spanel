@@ -118,12 +118,20 @@ class Application(Base):
     managed_env_ciphertext: Mapped[bytes | None] = mapped_column(LargeBinary)
     managed_env_nonce: Mapped[bytes | None] = mapped_column(LargeBinary)
     managed_env_key_version: Mapped[int | None] = mapped_column(Integer)
+    tenant_env_ciphertext: Mapped[bytes | None] = mapped_column(LargeBinary)
+    tenant_env_nonce: Mapped[bytes | None] = mapped_column(LargeBinary)
+    tenant_env_key_version: Mapped[int | None] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(32), default="draft")
     active_deployment_id: Mapped[str | None] = mapped_column(String(36))
     active_operation_id: Mapped[str | None] = mapped_column(String(36), index=True)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    @property
+    def has_saved_environment(self) -> bool:
+        """Whether a reusable tenant environment is stored encrypted."""
+        return self.tenant_env_ciphertext is not None
 
 
 class Deployment(Base):

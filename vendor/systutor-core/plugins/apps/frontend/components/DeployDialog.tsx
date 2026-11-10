@@ -73,14 +73,18 @@ export function DeployDialog({ application, open, blocked, onClose, onAccepted }
             className="min-h-48 font-mono text-xs"
             value={dotenv}
             onChange={(event) => { setDotenv(event.target.value); setIntent(null); setError(null); }}
-            placeholder={"DATABASE_URL=protocol://${APP_DB_USER}:${APP_DB_PASSWORD}@database:1234/${APP_DB_NAME}\nVITE_API_BASE_URL=https://api.example"}
+            placeholder={application.has_saved_environment
+              ? "Dejá vacío para reutilizar las variables guardadas, o pegá un bloque nuevo para reemplazarlas."
+              : "DATABASE_URL=protocol://${APP_DB_USER}:${APP_DB_PASSWORD}@database:1234/${APP_DB_NAME}\nVITE_API_BASE_URL=https://api.example"}
             autoComplete="off"
             spellCheck={false}
           />
         </label>
-        <p className="text-xs text-muted-foreground">
-          Podés pegar un archivo .env completo. Los valores sólo viven en este diálogo y se eliminan al aceptar el deployment.
-        </p>
+        {application.has_saved_environment ? <p className="text-xs text-muted-foreground">
+          Este deployment tiene variables guardadas. Si dejás el campo vacío se reutilizan; si pegás un bloque, reemplaza las anteriores. Los valores no se vuelven a mostrar.
+        </p> : <p className="text-xs text-muted-foreground">
+          Podés pegar un archivo .env completo. Al aceptar, el bloque queda guardado cifrado para los próximos deployments.
+        </p>}
         <p className="text-xs text-muted-foreground">
           Apps genera y conserva cifrados APP_DB_NAME, APP_DB_USER y APP_DB_PASSWORD. No los incluyas aquí; el Compose puede referenciarlos desde cualquier motor.
         </p>

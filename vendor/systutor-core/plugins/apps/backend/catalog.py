@@ -410,6 +410,7 @@ def application_detail(db: Session, tenant_id: str, application_id: str) -> dict
         "source_installation_id": app.source_installation_id,
         "source_repository_id": app.source_repository_id,
         "source_status": app.source_status,
+        "has_saved_environment": app.has_saved_environment,
         "runtime_project": app.runtime_project,
         "active_deployment": _deployment_view(active) if active else None,
         "services": services,

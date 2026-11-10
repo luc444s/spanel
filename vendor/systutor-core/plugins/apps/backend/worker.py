@@ -59,6 +59,7 @@ class AppsWorker:
         publisher: Any = None,
         github: GithubClient | None = None,
         route_cleanup: Callable[[Session, str, str], None] | None = None,
+        route_refresh: Callable[[Session, str, str], None] | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.cipher = cipher
@@ -66,6 +67,7 @@ class AppsWorker:
         self.publisher = publisher
         self.github = github or UrllibGithubClient()
         self.route_cleanup = route_cleanup
+        self.route_refresh = route_refresh
 
     def run(self, operation_id: str) -> None:
         with self.session_factory() as db:
@@ -269,6 +271,17 @@ class AppsWorker:
                     app.active_deployment_id = deployment.id
                     app.status = "running"
                 db.commit()
+            if self.route_refresh is not None:
+                with self.session_factory() as db:
+                    current_app = db.get(Application, application_id)
+                    if current_app is not None:
+                        try:
+                            self.route_refresh(db, current_app.tenant_id, application_id)
+                        except Exception:  # noqa: BLE001 - rutas no bloquean deploy
+                            logger.warning(
+                                "apps_route_refresh_failed",
+                                extra={"application_id": application_id},
+                            )
             return {"deployment_id": deployment.id, "status": "running"}
 
     def _mark_reconnect(self, application_id: str) -> None:

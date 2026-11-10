@@ -104,6 +104,38 @@ def release_application_routes(
     db.commit()
 
 
+def refresh_application_routes(
+    db: Session, app: FastAPI, tenant_id: str, application_id: str
+) -> None:
+    """Re-publish an app's routes after a deployment replaced its containers.
+
+    Only rewrites Domains-owned documents and reconnects the current containers
+    to the proxy network. A failing proxy never fails the deployment.
+    """
+    prefix = f"{application_id}:"
+    rows = list(
+        db.scalars(
+            select(DomainRoute).where(
+                DomainRoute.tenant_id == tenant_id,
+                DomainRoute.site_id.startswith(prefix),
+            )
+        ).all()
+    )
+    if not rows:
+        return
+    service = DomainsService(db, app)
+    for domain in sorted({row.domain for row in rows}):
+        try:
+            service._publish_domain_routes(tenant_id, domain, ready=True)
+        except Exception:  # noqa: BLE001 - el proxy caído no bloquea el deploy
+            logger.warning(
+                "domains_route_refresh_failed",
+                extra={"domain": domain, "application_id": application_id},
+                exc_info=True,
+            )
+    db.commit()
+
+
 class DomainsService:
     def __init__(self, db: Session, app: FastAPI) -> None:
         self._db = db

@@ -69,6 +69,7 @@ export type Application = {
   source_installation_id: string | null;
   source_repository_id: string | null;
   source_status: string;
+  has_saved_environment?: boolean;
 };
 
 export type ApplicationCreate = {

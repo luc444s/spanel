@@ -14,7 +14,11 @@ from plugins.domains.backend import service as service_module
 from plugins.domains.backend.models import DomainRoute
 from plugins.domains.backend.proxy import CertificateInfo, PathRoute
 from plugins.domains.backend.schemas import RouteCreate, RouteUpdate
-from plugins.domains.backend.service import DomainsService, release_application_routes
+from plugins.domains.backend.service import (
+    DomainsService,
+    refresh_application_routes,
+    release_application_routes,
+)
 from systutor.contracts.domain_namespace import register_domain_providers
 from systutor.contracts.domain_ownership import OwnedSite, register_site_provider
 from systutor.core.database import Base
@@ -208,6 +212,23 @@ def test_get_and_list_are_tenant_scoped_and_reconcile_container(setup):
     assert service.get_route(context(), item.id).id == item.id
     with pytest.raises(NotFoundError):
         service.get_route(context("t2"), item.id)
+
+
+def test_refresh_application_routes_republishes_current_container(setup, monkeypatch):
+    service, ops, _ = setup
+    item = service.create_route(
+        context(), RouteCreate(domain="api.example.com", site_id="app-1:web", port=80)
+    )
+    ops.documents["api.example.com"][0] = PathRoute(
+        "/", "old-container", 80, route_id=item.id
+    )
+    monkeypatch.setattr(
+        service_module, "DomainsService", lambda _db, _app: service
+    )
+
+    refresh_application_routes(service._db, service._app, "t1", "app-1")
+
+    assert ops.documents["api.example.com"][0].container == "app-container-a"
 
 
 def test_probe_reuses_existing_tls_probe(setup):

@@ -43,6 +43,7 @@ from .schemas import (
 )
 from .service import audit
 from .states import StateUnavailable
+from .tenant_environment import save_tenant_environment, saved_tenant_environment
 
 router = APIRouter(tags=["apps"])
 
@@ -300,11 +301,16 @@ def deploy_application(
     if not context.is_platform:
         raise AppError("Platform permission required", status_code=403, code="apps.platform_required")
     app = catalog.get_application(db, context.current_tenant_id, application_id)
-    environment = merge_managed_environment(
-        db, app, _resources(request).cipher(), body.environment
+    cipher = _resources(request).cipher()
+    tenant_environment = (
+        body.environment
+        or saved_tenant_environment(app, cipher)
     )
+    environment = merge_managed_environment(db, app, cipher, tenant_environment)
+    if body.environment:
+        save_tenant_environment(db, app, cipher, body.environment)
     return _queue(request, db, app, user, "deploy", idempotency_key,
-                  {"environment": body.environment}, environment)
+                  {"environment": tenant_environment}, environment)
 
 
 @router.get("/applications/{application_id}/deployments")

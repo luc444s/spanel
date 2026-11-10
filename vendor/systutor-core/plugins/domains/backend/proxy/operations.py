@@ -656,10 +656,12 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
         existing_text = self._read_text(path)
         if existing_text is not None and not is_managed_document(existing_text):
             raise ProxyError(f"{path} existe y no está gestionado por spanel", EXIT_VALIDATION)
-        if existing_text == content:
-            return path
+        # Un redeploy reemplaza el contenedor conservando el nombre: hay que
+        # reconectar aunque el YAML renderizado sea idéntico.
         if validate_runtime and connect_network and routes:
             self._connect_route_containers(routes)
+        if existing_text == content:
+            return path
         if existing_text is not None:
             self._backup(path, existing_text)
         self._write_text(path, content)

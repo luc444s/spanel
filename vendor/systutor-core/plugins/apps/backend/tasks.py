@@ -25,16 +25,18 @@ cipher = TokenCipher.from_text(
     settings.read_secret(settings.encryption_key_file), settings.key_version
 )
 route_cleanup = None
+route_refresh = None
 try:
     from app.main import app
 
     publisher = get_site_domain_publisher(app)
     route_cleanup = getattr(app.state, "domain_routes_cleanup", None)
+    route_refresh = getattr(app.state, "domain_routes_refresh", None)
 except Exception:
     publisher = None
 worker = AppsWorker(
     session_factory, cipher, publisher=publisher, github=UrllibGithubClient(),
-    route_cleanup=route_cleanup,
+    route_cleanup=route_cleanup, route_refresh=route_refresh,
 )
 
 

@@ -11,6 +11,7 @@ from plugins.domains.backend.publisher import register_domains_publisher
 from plugins.domains.backend.router import router
 from plugins.domains.backend.service import (
     published_domain_usage,
+    refresh_application_routes,
     release_application_routes,
 )
 from plugins.domains.backend.settings import get_domains_settings, register_domains_settings
@@ -46,6 +47,11 @@ def register(context: PluginContext) -> None:
         app.state.domains_context = context
         app.state.domain_routes_cleanup = (
             lambda db, tenant_id, application_id: release_application_routes(
+                db, app, tenant_id, application_id
+            )
+        )
+        app.state.domain_routes_refresh = (
+            lambda db, tenant_id, application_id: refresh_application_routes(
                 db, app, tenant_id, application_id
             )
         )
