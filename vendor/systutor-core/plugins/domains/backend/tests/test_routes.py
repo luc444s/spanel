@@ -98,14 +98,21 @@ def setup(tmp_path):
     service = DomainsService(db, app)
     service._operations = lambda: ops  # type: ignore[method-assign]
     service._ready = lambda: ops  # type: ignore[method-assign]
-    service._settings = lambda: SimpleNamespace(profile="internal")  # type: ignore[method-assign]
+    service._settings = lambda: SimpleNamespace(  # type: ignore[method-assign]
+        profile="internal", entrypoint_http="web", entrypoint_https="websecure"
+    )
     original = service_module.record_audit
+    original_domains_settings = service_module.get_domains_settings
     audits: list[dict] = []
     service_module.record_audit = lambda _db, **kwargs: audits.append(kwargs)
+    service_module.get_domains_settings = lambda: SimpleNamespace(
+        middlewares=("rate-limit@file",)
+    )
     try:
         yield service, ops, audits
     finally:
         service_module.record_audit = original
+        service_module.get_domains_settings = original_domains_settings
         db.close()
         engine.dispose()
 
@@ -237,3 +244,106 @@ def test_application_delete_releases_its_routes(setup):
     assert len(ops.documents["api.example.com"]) == 2
     release_application_routes(service._db, service._app, "t1", "app-1")
     assert service._db.query(DomainRoute).count() == 0
+
+
+def test_available_exposes_only_effective_route_options(setup):
+    service, _, _ = setup
+    available = service.available_domains("t1")
+    assert available.entrypoints == ["web", "websecure"]
+    assert available.middlewares == ["rate-limit@file"]
+
+
+def test_create_rejects_entrypoint_outside_profile(setup):
+    service, ops, _ = setup
+    with pytest.raises(AppError) as exc:
+        service.create_route(
+            context(),
+            RouteCreate(
+                domain="api.example.com", site_id="app-1:web", port=80,
+                entrypoints=["admin"],
+            ),
+        )
+    assert exc.value.status_code == 422
+    assert exc.value.code == "domains.entrypoint_not_allowed"
+    assert ops.documents == {}
+
+
+def test_create_rejects_middleware_outside_platform_allowlist(setup):
+    service, ops, _ = setup
+    with pytest.raises(AppError) as exc:
+        service.create_route(
+            context(),
+            RouteCreate(
+                domain="api.example.com", site_id="app-1:web", port=80,
+                middlewares=["untrusted@file"],
+            ),
+        )
+    assert exc.value.status_code == 422
+    assert exc.value.code == "domains.middleware_not_allowed"
+    assert ops.documents == {}
+
+
+def test_update_rejects_disallowed_options_without_mutating(setup):
+    service, _, _ = setup
+    item = service.create_route(
+        context(), RouteCreate(domain="api.example.com", site_id="app-1:web", port=80)
+    )
+    with pytest.raises(AppError) as entrypoint:
+        service.update_route(context(), item.id, RouteUpdate(entrypoints=["admin"]))
+    assert entrypoint.value.code == "domains.entrypoint_not_allowed"
+    with pytest.raises(AppError) as middleware:
+        service.update_route(
+            context(), item.id, RouteUpdate(middlewares=["untrusted@file"])
+        )
+    assert middleware.value.code == "domains.middleware_not_allowed"
+    assert service.get_route(context(), item.id).entrypoints == []
+    assert service.get_route(context(), item.id).middlewares == []
+
+
+def test_empty_platform_allowlist_is_safe_by_default(setup):
+    service, _, _ = setup
+    original = service_module.get_domains_settings
+    service_module.get_domains_settings = lambda: SimpleNamespace(middlewares=())
+    try:
+        with pytest.raises(AppError) as exc:
+            service.create_route(
+                context(),
+                RouteCreate(
+                    domain="api.example.com", site_id="app-1:web", port=80,
+                    middlewares=["rate-limit@file"],
+                ),
+            )
+        assert exc.value.code == "domains.middleware_not_allowed"
+        assert service.create_route(
+            context(),
+            RouteCreate(domain="api.example.com", site_id="app-1:web", port=80),
+        ).id
+    finally:
+        service_module.get_domains_settings = original
+
+
+def test_cross_tenant_domain_and_route_are_opaque(setup):
+    service, _, _ = setup
+    with pytest.raises(NotFoundError) as foreign_domain:
+        service.create_route(
+            context(),
+            RouteCreate(domain="other.example.com", site_id="app-1:web", port=80),
+        )
+    assert str(foreign_domain.value) == "Dominio desconocido"
+    foreign = service.create_route(
+        context("t2"),
+        RouteCreate(domain="other.example.com", site_id="app-2:web", port=80),
+    )
+    with pytest.raises(NotFoundError) as foreign_route:
+        service.get_route(context(), foreign.id)
+    assert str(foreign_route.value) == "Ruta desconocida"
+
+
+def test_middleware_allowlist_parser_is_explicit_and_empty_by_default():
+    from plugins.domains.backend.settings import _allowlist
+
+    assert _allowlist("") == ()
+    assert _allowlist(" rate-limit@file, auth@file,rate-limit@file ") == (
+        "rate-limit@file",
+        "auth@file",
+    )

@@ -142,7 +142,11 @@ export function getCertificate(domain: string) {
 }
 
 export function listAvailableDomains() {
-  return apiRequest<{ items: DomainItem[] }>(`${BASE}/available`);
+  return apiRequest<{
+    items: DomainItem[];
+    entrypoints: string[];
+    middlewares: string[];
+  }>(`${BASE}/available`);
 }
 
 export function listRoutes(siteId?: string) {

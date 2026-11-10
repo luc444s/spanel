@@ -205,6 +205,8 @@ class RoutesResponse(BaseModel):
 
 class AvailableDomainsResponse(BaseModel):
     items: list[DomainItem]
+    entrypoints: list[str] = Field(default_factory=list)
+    middlewares: list[str] = Field(default_factory=list)
 
 
 class RouteProbeResponse(BaseModel):

@@ -69,6 +69,18 @@ Apps registra sus servicios como sitios resolubles por `domain_ownership`
 contenedor activo. Las rutas se reconcilian contra el sitio estable al leerlas,
 probarlas y operarlas; el nombre efímero del contenedor nunca se guarda en Apps.
 
+Allowlist de opciones de ruta:
+
+- `entrypoints` sólo admite los entrypoints HTTP/HTTPS efectivos del perfil
+  (`Settings.entrypoint_http` y `Settings.entrypoint_https`). Omitirlos usa los
+  defaults de Dominios; cualquier otro valor se rechaza con 422.
+- `middlewares` sólo admite la allowlist explícita de plataforma configurada en
+  `SPANEL_DOMAINS_MIDDLEWARES` (lista separada por comas). El default seguro es
+  vacío: sin configuración no se puede referenciar ningún middleware. Un valor
+  ausente se rechaza con 422 sin escribir la ruta.
+- `GET /domains/available` expone `entrypoints` y `middlewares` permitidos para
+  que la UI y el CLI no inventen opciones.
+
 No crear:
 
 - un segundo modelo o almacenamiento de rutas fuera de `plugins/domains`;
@@ -289,9 +301,9 @@ SERVICE                 nombre de servicio del deployment activo
 --internal-path PATH    default /
 --strip-path            default false
 --port PORT             obligatorio salvo un único puerto detectable
---entrypoint NAME       repetible; omitir usa defaults de Dominios
+--entrypoint NAME       repetible; sólo los efectivos del perfil
 --https / --no-https    HTTPS por defecto
---middleware NAME       repetible
+--middleware NAME       repetible; sólo desde la allowlist de plataforma
 ```
 
 Semántica del path raíz: con `--path /` la ruta aplica a todo el host. Si

@@ -252,9 +252,12 @@ Formulario exacto:
 ```
 
 Las opciones disponibles y mensajes de validación proceden de Dominios. Apps no
-crea middlewares, entrypoints o certificados. **Probar ruta** usa el probe
-existente. **Guardar y publicar** usa la mutación existente. Editar y eliminar
-usan PATCH/DELETE existentes y requieren confirmación cuando corresponda.
+crea middlewares, entrypoints o certificados. Los selectores de entrypoints y
+middlewares se llenan exclusivamente con `entrypoints` y `middlewares` de
+`GET /domains/available`; no se aceptan valores libres. Un 422 de Dominios se
+muestra sin convertirlo en éxito. **Probar ruta** usa el probe existente.
+**Guardar y publicar** usa la mutación existente. Editar y eliminar usan
+PATCH/DELETE existentes y requieren confirmación cuando corresponda.
 
 Conflicto:
 

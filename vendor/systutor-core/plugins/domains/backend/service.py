@@ -490,10 +490,50 @@ class DomainsService:
                 owned.add(item.domain)
         return owned
 
+    @staticmethod
+    def _unique_names(values: list[str]) -> list[str]:
+        return list(dict.fromkeys(value for value in values if value))
+
+    def _route_options(self) -> tuple[list[str], list[str]]:
+        settings = self._settings()
+        entrypoints = self._unique_names(
+            [settings.entrypoint_http, settings.entrypoint_https]
+        )
+        middlewares = self._unique_names(
+            list(get_domains_settings().middlewares)
+        )
+        return entrypoints, middlewares
+
+    def _validate_route_options(
+        self,
+        entrypoints: list[str] | None,
+        middlewares: list[str] | None,
+    ) -> None:
+        allowed_entrypoints, allowed_middlewares = self._route_options()
+        if entrypoints is not None and any(
+            value not in allowed_entrypoints for value in entrypoints
+        ):
+            raise AppError(
+                "Entrypoint no permitido para el perfil efectivo",
+                status_code=422,
+                code="domains.entrypoint_not_allowed",
+            )
+        if middlewares is not None and any(
+            value not in allowed_middlewares for value in middlewares
+        ):
+            raise AppError(
+                "Middleware no permitido por la plataforma",
+                status_code=422,
+                code="domains.middleware_not_allowed",
+            )
+
     def available_domains(self, tenant_id: str) -> AvailableDomainsResponse:
         items, _, _ = self.list_domains(tenant_id, can_manage=True)
+        entrypoints, middlewares = self._route_options()
         return AvailableDomainsResponse(
-            items=[item for item in items if item.owner == "domains"]
+            items=[item for item in items if item.owner == "domains"],
+            entrypoints=entrypoints,
+            middlewares=middlewares,
         )
 
     def _route_domain(self, tenant_context: TenantContext, domain: str) -> str:
@@ -572,6 +612,7 @@ class DomainsService:
         if site is None:
             raise NotFoundError("Servicio desconocido")
         path = normalize_path_prefix(body.path)
+        self._validate_route_options(body.entrypoints, body.middlewares)
         if self._conflicting_route(tenant_id, domain, path):
             raise AppError(
                 "La ruta ya está asignada",
@@ -633,6 +674,9 @@ class DomainsService:
             values["path"] = normalize_path_prefix(values["path"])
         if "internal_path" in values:
             values["internal_path"] = normalize_path_prefix(values["internal_path"])
+        self._validate_route_options(
+            values.get("entrypoints"), values.get("middlewares")
+        )
         target_domain = values.get("domain", row.domain)
         target_path = values.get("path", row.path)
         if self._conflicting_route(

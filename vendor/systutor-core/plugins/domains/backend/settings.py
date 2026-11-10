@@ -37,6 +37,9 @@ class DomainsSettings(BaseModel):
     transport: str = "auto"
     proxy_ssh_host: str = ""
     proxy_config_dir: str = ""
+    # Allowlist de middlewares que la plataforma autoriza a referenciar en una
+    # ruta. Vacío por defecto: ninguna ruta puede inventar middlewares.
+    middlewares: tuple[str, ...] = ()
 
     def proxy_settings(self) -> Settings:
         if self.profile not in PROFILES:
@@ -52,6 +55,15 @@ class DomainsSettings(BaseModel):
 _settings: DomainsSettings | None = None
 
 
+def _allowlist(value: str) -> tuple[str, ...]:
+    names: list[str] = []
+    for raw in value.split(","):
+        name = raw.strip()
+        if name and name not in names:
+            names.append(name)
+    return tuple(names)
+
+
 def register_domains_settings() -> None:
     global _settings
     _load_env()
@@ -61,6 +73,7 @@ def register_domains_settings() -> None:
         transport=os.getenv("SPANEL_PROXY_TRANSPORT", "auto").strip() or "auto",
         proxy_ssh_host=os.getenv("SPANEL_PROXY_SSH_HOST", "").strip(),
         proxy_config_dir=os.getenv("SPANEL_PROXY_CONFIG_DIR", "").strip(),
+        middlewares=_allowlist(os.getenv("SPANEL_DOMAINS_MIDDLEWARES", "")),
     )
 
 
