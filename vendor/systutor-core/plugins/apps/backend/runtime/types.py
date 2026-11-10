@@ -83,6 +83,7 @@ class LifecycleOptions:
     purge_data: bool = False
     confirm_purge: str | None = None
     release: Path | None = None
+    service: str | None = None
 
 
 @dataclass(frozen=True)

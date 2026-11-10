@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class ManifestStartRequest(BaseModel):
@@ -72,7 +72,40 @@ class DeployRequest(BaseModel):
     environment: list[tuple[str, str]] = Field(default_factory=list, max_length=100)
 
 
+class ActionRequest(BaseModel):
+    """Optional Compose service selector; runtime identifiers are forbidden."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    service: str | None = Field(default=None, min_length=1, max_length=255)
+
+    @field_validator("service")
+    @classmethod
+    def safe_service(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if any(character in value for character in "`\r\n\t /:\\"):
+            raise ValueError("service is invalid")
+        return value
+
+
+class SecretRevealRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(min_length=4, max_length=500)
+
+    @field_validator("reason")
+    @classmethod
+    def safe_reason(cls, value: str) -> str:
+        reason = value.strip()
+        if len(reason) < 4:
+            raise ValueError("reason is required")
+        return reason
+
+
 class DeleteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     confirm: str
     purge_data: bool = False
 
@@ -121,6 +154,22 @@ class OperationDetail(BaseModel):
     finished_at: datetime | None = None
 
     model_config = {"from_attributes": True}
+
+
+class ServiceDetail(BaseModel):
+    name: str
+    image: str | None = None
+    status: str
+    health: str
+    ports: list[int] = Field(default_factory=list)
+    restart_count: int = 0
+    environment_names: list[str] = Field(default_factory=list)
+    created_at: datetime | None = None
+
+
+class SecretRevealResponse(BaseModel):
+    name: str
+    value: str
 
 
 class ProviderView(BaseModel):

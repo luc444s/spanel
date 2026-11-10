@@ -65,6 +65,13 @@ def _invalid(message: str) -> AppError:
     )
 
 
+def managed_environment_values(
+    application: Application, cipher: TokenCipher
+) -> dict[str, str] | None:
+    """Existing managed values without generating or rotating anything."""
+    return _decrypt(application, cipher)
+
+
 def managed_database_environment(
     db: Session,
     application: Application,

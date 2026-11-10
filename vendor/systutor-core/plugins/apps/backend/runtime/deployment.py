@@ -362,6 +362,63 @@ def _image_users(
     return images
 
 
+def _service_internal_ports(data: dict[str, Any]) -> dict[str, list[int]]:
+    """Container-side ports only; host bindings never reach the API."""
+    result: dict[str, list[int]] = {}
+    for service, config in data["services"].items():
+        if not isinstance(config, dict):
+            result[str(service)] = []
+            continue
+        found: set[int] = set()
+        for key in ("ports", "expose"):
+            for item in config.get(key) or []:
+                value: Any = item
+                if isinstance(item, dict):
+                    value = item.get("target")
+                elif isinstance(item, str):
+                    value = item.split("/", 1)[0].rsplit(":", 1)[-1]
+                if isinstance(value, int) and 1 <= value <= 65535:
+                    found.add(value)
+                elif isinstance(value, str) and value.isdigit():
+                    port = int(value)
+                    if 1 <= port <= 65535:
+                        found.add(port)
+        result[str(service)] = sorted(found)
+    return result
+
+
+def runtime_snapshot(
+    runner: Runner, containers: dict[str, str]
+) -> dict[str, dict[str, Any]]:
+    """Best-effort, non-secret runtime state for the service modal."""
+    result: dict[str, dict[str, Any]] = {}
+    for service, container in containers.items():
+        values: dict[str, Any] = {}
+        for key, template in (
+            ("status", "{{.State.Status}}"),
+            (
+                "health",
+                "{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}",
+            ),
+            ("restart_count", "{{.RestartCount}}"),
+            ("created_at", "{{.Created}}"),
+        ):
+            inspected = runner.run(
+                ["docker", "container", "inspect", "-f", template, container],
+                check=False,
+            )
+            if inspected.returncode:
+                continue
+            text = inspected.stdout.strip()
+            if key == "restart_count" and text.isdigit():
+                values[key] = int(text)
+            elif text:
+                values[key] = text
+        if values:
+            result[service] = values
+    return result
+
+
 def _service_environment_names(data: dict[str, Any]) -> dict[str, list[str]]:
     result: dict[str, list[str]] = {}
     for service, config in data["services"].items():
@@ -521,6 +578,7 @@ def _manifest_data(
         "compose": result.compose.relative_to(result.root).as_posix(),
         "services": sorted(result.data["services"]),
         "service_environment": _service_environment_names(result.data),
+        "service_ports": _service_internal_ports(result.data),
         "images": images,
         "host": host,
         "created_at": datetime.now(UTC).isoformat(),
@@ -649,6 +707,7 @@ def deploy(
         _verify_containers(runner, containers, project, options.non_root, options.wait)
         manifest["status"] = "running"
         manifest["containers"] = containers
+        manifest["service_runtime"] = runtime_snapshot(runner, containers)
         _write_manifest(runner, release, manifest)
         if options.publish_state:
             _publish_release_state(runner, release, manifest)

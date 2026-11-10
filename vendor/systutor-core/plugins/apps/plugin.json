@@ -12,13 +12,15 @@
     "apps.applications.manage",
     "apps.applications.create",
     "apps.deployments.create",
-    "apps.applications.delete"
+    "apps.applications.delete",
+    "apps.secrets.read"
   ],
   "tenant_admin_permissions": [
     "apps.github.connect",
     "apps.applications.read",
     "apps.applications.manage",
-    "apps.applications.create"
+    "apps.applications.create",
+    "apps.secrets.read"
   ],
   "platform_permissions": [
     "apps.deployments.create",

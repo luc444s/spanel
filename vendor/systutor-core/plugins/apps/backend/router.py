@@ -18,11 +18,16 @@ from systutor.kernel.auth.models import User
 from systutor.kernel.tenants.context import TenantContext
 
 from . import catalog
-from .managed_environment import merge_managed_environment
+from .managed_environment import (
+    MANAGED_DATABASE_NAMES,
+    managed_environment_values,
+    merge_managed_environment,
+)
 from .manifest_flow import ManifestFlow
 from .models import Application, Deployment, Operation
 from .operations import create_operation, dispatch_operation, write_pending_env
 from .schemas import (
+    ActionRequest,
     ApplicationCreate,
     ApplicationView,
     DeleteRequest,
@@ -32,6 +37,8 @@ from .schemas import (
     OperationView,
     ProviderView,
     RepositoryView,
+    SecretRevealRequest,
+    SecretRevealResponse,
     SourceUpdate,
 )
 from .service import audit
@@ -71,18 +78,26 @@ def _queued(operation: Operation) -> OperationView:
 def _queue(
     request: Request, db: Session, app: Application, user: User, kind: str,
     key: str | None, payload: object, pending: list[tuple[str, str]] | None = None,
+    *, service: str | None = None,
 ) -> OperationView:
     operation, created = create_operation(
         db, application=app, actor_user_id=user.id, kind=kind,
         idempotency_key=key or "", payload=payload,
         correlation_id=request.headers.get("X-Request-ID"),
+        subject_type="app_service" if service else None,
+        subject_id=f"{app.id}:{service}" if service else None,
     )
     if not created:
         return _queued(operation)
     pending_path: Path | None = None
     try:
+        report: dict[str, object] = {}
         if kind == "delete" and isinstance(payload, dict):
-            operation.report = {"purge_data": bool(payload.get("purge_data"))}
+            report["purge_data"] = bool(payload.get("purge_data"))
+        if service:
+            report["service"] = service
+        if report:
+            operation.report = report
             db.commit()
         if pending is not None:
             pending_path, names, fingerprint = write_pending_env(
@@ -301,6 +316,7 @@ def list_deployments(
 @router.post("/applications/{application_id}/actions/{action}", response_model=OperationView, status_code=202)
 def application_action(
     application_id: str, action: str, request: Request,
+    body: ActionRequest | None = Body(default=None),
     idempotency_key: str | None = Header(None), db: Session = Depends(get_db_session),
     context: TenantContext = Depends(get_current_tenant_context),
     user: User = Depends(require_permission("apps.applications.manage")),
@@ -308,7 +324,80 @@ def application_action(
     if action not in {"refresh", "logs", "start", "stop", "restart", "down"}:
         raise AppError("Unknown action", status_code=404, code="apps.action_not_found")
     app = catalog.get_application(db, context.current_tenant_id, application_id)
-    return _queue(request, db, app, user, action, idempotency_key, {})
+    service = body.service if body is not None else None
+    if service and action == "down":
+        raise AppError(
+            "down always affects the whole application",
+            status_code=422,
+            code="apps.service_scope_forbidden",
+        )
+    if service:
+        deployment = (
+            db.get(Deployment, app.active_deployment_id)
+            if app.active_deployment_id else None
+        )
+        containers = (
+            (deployment.manifest or {}).get("containers", {})
+            if deployment is not None else {}
+        )
+        if service not in containers:
+            raise AppError(
+                "Service does not belong to the active deployment",
+                status_code=422,
+                code="apps.invalid_service",
+            )
+    payload = {"service": service} if service else {}
+    return _queue(request, db, app, user, action, idempotency_key, payload, service=service)
+
+
+@router.post(
+    "/applications/{application_id}/secrets/{name}/reveal",
+    response_model=SecretRevealResponse,
+)
+def reveal_managed_secret(
+    application_id: str,
+    name: str,
+    body: SecretRevealRequest,
+    response: Response,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    context: TenantContext = Depends(get_current_tenant_context),
+    user: User = Depends(require_permission("apps.secrets.read")),
+) -> SecretRevealResponse:
+    app = catalog.get_application(db, context.current_tenant_id, application_id)
+    deployment = (
+        db.get(Deployment, app.active_deployment_id)
+        if app.active_deployment_id else None
+    )
+    manifest = deployment.manifest if deployment is not None else None
+    if not isinstance(manifest, dict):
+        raise AppError(
+            "Managed secret not found", status_code=404, code="apps.secret_not_found"
+        )
+    environments = manifest.get("service_environment") or {}
+    services = sorted(
+        str(service)
+        for service, names in environments.items()
+        if isinstance(names, list) and name in names
+    )
+    if not services or name not in MANAGED_DATABASE_NAMES:
+        raise AppError(
+            "Managed secret not found", status_code=404, code="apps.secret_not_found"
+        )
+    values = managed_environment_values(app, _resources(request).cipher())
+    if values is None or name not in values:
+        raise AppError(
+            "Managed secret not found", status_code=404, code="apps.secret_not_found"
+        )
+    audit(
+        db, "apps.secret.revealed", tenant_id=app.tenant_id, actor=user.id,
+        entity_id=app.id,
+        details={"name": name, "services": services, "reason": body.reason},
+    )
+    db.commit()
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Pragma"] = "no-cache"
+    return SecretRevealResponse(name=name, value=values[name])
 
 
 @router.delete("/applications/{application_id}", response_model=OperationView, status_code=202)

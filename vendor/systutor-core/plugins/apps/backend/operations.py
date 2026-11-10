@@ -48,8 +48,10 @@ def create_operation(
         raise AppError("Idempotency-Key is required", status_code=422, code="apps.idempotency_required")
     if application is not None:
         tenant_id = application.tenant_id
-        subject_type = "application"
-        subject_id = application.id
+        if subject_type is None:
+            subject_type = "application"
+        if subject_id is None:
+            subject_id = application.id
     if not tenant_id or not subject_type or not subject_id:
         raise AppError(
             "Operation subject is required", status_code=422, code="apps.subject_required"

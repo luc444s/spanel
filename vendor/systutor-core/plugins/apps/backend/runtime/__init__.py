@@ -11,6 +11,7 @@ from .deployment import (
     _verify_containers,
     deploy,
     render_report,
+    runtime_snapshot,
     validate_env_file,
 )
 from .docker_audit import _is_root_user
@@ -57,5 +58,6 @@ __all__ = [
     "discover_compose",
     "lifecycle",
     "render_report",
+    "runtime_snapshot",
     "validate_env_file",
 ]

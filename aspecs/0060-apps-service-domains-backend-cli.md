@@ -395,6 +395,7 @@ change_surface:
     - aspecs/0060-apps-service-domains-backend-cli.md
     - vendor/systutor-core/plugins/apps/backend/**
     - vendor/systutor-core/plugins/apps/permissions/**
+    - vendor/systutor-core/plugins/apps/plugin.json
     - vendor/systutor-core/plugins/domains/backend/**
     - vendor/systutor-core/plugins/domains/migrations/**
     - vendor/systutor-core/plugins/domains/frontend/api.ts

@@ -83,17 +83,27 @@ def lifecycle(options: LifecycleOptions, runner: Runner) -> LifecycleResult:
     command = _compose_command(
         release, manifest["compose"], options.project, bool(manifest.get("has_env"))
     )
+    containers = manifest.get("containers") or {}
+    if options.service is not None:
+        if options.service not in containers:
+            raise AppDeployError("service does not belong to the active deployment")
+        if options.command in {"down", "delete"}:
+            raise AppDeployError("down and delete always affect the whole application")
+    service_args = [options.service] if options.service else []
     if options.command == "status":
-        result = runner.run([*command, "ps", "--format", "json"], check=False)
+        result = runner.run(
+            [*command, "ps", "--format", "json", *service_args], check=False
+        )
         return LifecycleResult(result.returncode, result.stdout)
     if options.command == "logs":
         result = runner.run(
-            [*command, "logs", "--no-color", "--tail", str(options.tail)], check=False
+            [*command, "logs", "--no-color", "--tail", str(options.tail), *service_args],
+            check=False,
         )
         output = _redact(result.stdout, _redaction_values(runner, release))
         return LifecycleResult(result.returncode, output)
     if options.command in {"start", "stop", "restart"}:
-        runner.run([*command, options.command])
+        runner.run([*command, options.command, *service_args])
         manifest["status"] = "running" if options.command != "stop" else "stopped"
         _write_manifest(runner, release, manifest)
         return LifecycleResult(0)
