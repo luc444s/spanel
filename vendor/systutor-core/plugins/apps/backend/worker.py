@@ -20,7 +20,7 @@ from .catalog import audit as record_catalog_audit
 from .catalog import mark_installation_suspended, require_source
 from .crypto import EncryptedValue, TokenCipher
 from .github import GithubClient, UrllibGithubClient, app_jwt_for
-from .managed_environment import clear_managed_environment
+from .managed_environment import MANAGED_DATABASE_NAMES, clear_managed_environment
 from .models import (
     Application,
     Deployment,
@@ -166,6 +166,19 @@ class AppsWorker:
             provider.last_used_at = datetime.now(UTC)
             db.commit()
             token = token_value.token
+            operation = db.get(Operation, operation_id)
+            reported_names = (
+                (operation.report or {}).get("tenant_environment_names")
+                if operation is not None else []
+            )
+            if not isinstance(reported_names, list):
+                reported_names = []
+            tenant_names = tuple(
+                sorted({
+                    str(name) for name in reported_names
+                    if str(name) not in MANAGED_DATABASE_NAMES
+                })
+            )
             source = (
                 repository.full_name, app.branch, app.compose_file, app.runtime_project,
                 app.ingress_service, app.ingress_port, app.domain,
@@ -207,6 +220,7 @@ class AppsWorker:
                             env_file=env_file if env_file.exists() else None,
                             release_id=operation_id,
                             publish_state=False,
+                            tenant_environment_names=tenant_names,
                         ),
                         audit,
                         runner,

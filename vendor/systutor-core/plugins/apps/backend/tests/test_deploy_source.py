@@ -134,6 +134,9 @@ def test_deploy_prepends_stable_managed_database_environment(tmp_path: Path) -> 
     assert lines[-1] == "DATABASE_URL=scheme://${APP_DB_USER}@database"
     app = db.get(Application, "a1")
     assert app.managed_env_ciphertext is not None
+    stored = db.get(Operation, operation.operation_id)
+    assert stored.report["tenant_environment_names"] == ["DATABASE_URL"]
+    assert "scheme://" not in str(stored.report)
 
 
 def test_deploy_rejects_managed_database_override(tmp_path: Path) -> None:

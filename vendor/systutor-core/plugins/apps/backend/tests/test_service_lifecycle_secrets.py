@@ -72,8 +72,9 @@ def database(tmp_path: Path):
                 "images": {"web": "app:web", "db": "postgres:16"},
                 "service_environment": {
                     "web": ["APP_DB_PASSWORD", "JWT_SECRET_KEY"],
-                    "db": ["POSTGRES_PASSWORD"],
+                    "db": ["POSTGRES_PASSWORD", "PGDATA"],
                 },
+                "tenant_environment_names": ["JWT_SECRET_KEY"],
                 "service_ports": {"web": [8000], "db": [5432]},
                 "service_runtime": {
                     "web": {
@@ -213,11 +214,39 @@ def test_service_details_are_dynamic_and_never_include_values(tmp_path: Path) ->
         "ports": [8000],
         "restart_count": 2,
         "environment_names": ["APP_DB_PASSWORD", "JWT_SECRET_KEY"],
+        "environment": [
+            {
+                "name": "APP_DB_PASSWORD",
+                "source": "managed",
+                "secret": True,
+                "revealable": True,
+            },
+            {
+                "name": "JWT_SECRET_KEY",
+                "source": "tenant",
+                "secret": True,
+                "revealable": False,
+            },
+        ],
         "created_at": "2026-11-09T00:00:00Z",
     }
     assert db_service["health"] == "unknown"
     assert db_service["restart_count"] == 0
     assert db_service["ports"] == [5432]
+    assert db_service["environment"] == [
+        {
+            "name": "POSTGRES_PASSWORD",
+            "source": "image",
+            "secret": True,
+            "revealable": False,
+        },
+        {
+            "name": "PGDATA",
+            "source": "image",
+            "secret": False,
+            "revealable": False,
+        },
+    ]
     assert "JWT_SECRET_KEY" in web["environment_names"]
     assert "canary-secret" not in str(view)
 
@@ -233,6 +262,7 @@ def test_legacy_manifest_keeps_compatible_empty_fields(tmp_path: Path) -> None:
     assert detail["health"] == "unknown"
     assert detail["restart_count"] == 0
     assert detail["environment_names"] == []
+    assert detail["environment"] == []
 
 
 def test_secret_reveal_returns_no_store_audits_without_value(tmp_path: Path) -> None:
@@ -380,3 +410,29 @@ def test_domains_sites_use_stable_ids_and_container_names(tmp_path: Path) -> Non
         ("a1:web", "app-demo-web-1"),
     ]
     assert all(":" in site.site_id for site in sites)
+
+
+def test_deploy_manifest_persists_tenant_names_but_never_values(tmp_path: Path) -> None:
+    from plugins.apps.backend.runtime.deployment import _manifest_data
+    from plugins.apps.backend.runtime.types import DeployOptions
+
+    result = SimpleNamespace(
+        root=tmp_path,
+        compose=tmp_path / "docker-compose.yml",
+        data={"services": {"web": {"environment": ["JWT_SECRET_KEY"]}}},
+    )
+    manifest = _manifest_data(
+        DeployOptions(
+            repo="acme/repo",
+            tenant_environment_names=("JWT_SECRET_KEY",),
+        ),
+        result,
+        "app-demo",
+        {"web": "app:web"},
+        "building",
+        "local",
+        tmp_path / "release",
+    )
+    assert manifest["tenant_environment_names"] == ["JWT_SECRET_KEY"]
+    assert "canary-value" not in str(manifest)
+    assert manifest["service_environment"] == {"web": ["JWT_SECRET_KEY"]}

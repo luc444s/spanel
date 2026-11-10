@@ -156,6 +156,13 @@ class OperationDetail(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class EnvironmentVariable(BaseModel):
+    name: str
+    source: Literal["managed", "tenant", "image"]
+    secret: bool
+    revealable: bool
+
+
 class ServiceDetail(BaseModel):
     name: str
     image: str | None = None
@@ -164,6 +171,7 @@ class ServiceDetail(BaseModel):
     ports: list[int] = Field(default_factory=list)
     restart_count: int = 0
     environment_names: list[str] = Field(default_factory=list)
+    environment: list[EnvironmentVariable] = Field(default_factory=list)
     created_at: datetime | None = None
 
 

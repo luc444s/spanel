@@ -110,16 +110,33 @@ runtime real y necesaria para el modal:
   "ports": [8000],
   "restart_count": 0,
   "environment_names": ["DATABASE_URL", "JWT_SECRET_KEY"],
+  "environment": [
+    {"name": "DATABASE_URL", "source": "tenant", "secret": false, "revealable": false},
+    {"name": "JWT_SECRET_KEY", "source": "tenant", "secret": true, "revealable": false}
+  ],
   "created_at": "2026-11-09T23:55:00Z"
 }
 ```
+
+`environment` es metadata no secreta por variable:
+
+- `source=managed`: nombre generado y cifrado por Apps; `revealable=true`
+  porque el endpoint de reveal puede devolverlo.
+- `source=tenant`: nombre suministrado por el tenant en el deploy. Sólo se
+  persiste el nombre en el manifiesto; el valor nunca se guarda en Apps y
+  `revealable=false`.
+- `source=image`: nombre declarado por el servicio/Compose y no suministrado
+  por el tenant ni administrado por Apps; `revealable=false`.
+- `secret` usa la clasificación backend existente por nombre; no es una
+  heurística del frontend.
 
 Reglas:
 
 - `name` proviene del servicio Compose persistido, no del cliente;
 - `ports` son puertos internos, nunca bindings secretos del host;
 - no devolver IP interna ni Docker ID salvo una necesidad demostrada;
-- no devolver valores de entorno;
+- no devolver valores de entorno ni persistir valores tenant adicionales;
+- `environment_names` se conserva por compatibilidad;
 - servicios y contenedores son dinámicos: no asumir frontend/backend/database;
 - manifiestos antiguos siguen serializando valores vacíos compatibles.
 

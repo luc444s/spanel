@@ -594,6 +594,7 @@ def _manifest_data(
         "compose": result.compose.relative_to(result.root).as_posix(),
         "services": sorted(result.data["services"]),
         "service_environment": _service_environment_names(result.data),
+        "tenant_environment_names": sorted(set(options.tenant_environment_names)),
         "service_ports": _service_internal_ports(result.data),
         "images": images,
         "host": host,

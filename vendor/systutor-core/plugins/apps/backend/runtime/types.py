@@ -72,6 +72,9 @@ class DeployOptions:
     wait: int = 180
     release_id: str | None = None
     publish_state: bool = True
+    # Nombres suministrados por el tenant, nunca sus valores. Se persisten en
+    # el manifiesto para clasificar la metadata del modal sin adivinar.
+    tenant_environment_names: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

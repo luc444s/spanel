@@ -137,6 +137,11 @@ según patrones existentes y sigue la operación mediante polling existente.
 Esta spec no añade edición de variables ni botón **Desplegar cambios**. Sólo
 lista metadata existente y revela valores permitidos por A.SPEC 0060.
 
+La columna **ORIGEN** usa exactamente `service_details[].environment[].source`:
+`managed` → **Administrada**, `tenant` → **Tenant**, `image` → **Imagen**.
+**Ver** sólo aparece cuando `revealable=true`; `secret` sólo controla el
+enmascarado inicial. No se infiere ninguna de las dos cosas en el frontend.
+
 Confirmación exacta:
 
 ```text

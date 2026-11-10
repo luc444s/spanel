@@ -15,6 +15,7 @@ from systutor.kernel.audit.service import record_audit
 from systutor.kernel.auth.models import User
 from systutor.kernel.tenants.context import TenantContext
 
+from .managed_environment import MANAGED_DATABASE_NAMES
 from .models import (
     Application,
     Deployment,
@@ -24,6 +25,7 @@ from .models import (
     Operation,
 )
 from .operations import ACTIVE
+from .runtime.types import SECRET_NAME_RE
 from .schemas import ApplicationCreate, SourceUpdate
 from .settings import AppsSettings
 
@@ -419,6 +421,31 @@ def application_detail(db: Session, tenant_id: str, application_id: str) -> dict
     }
 
 
+def _environment_metadata(manifest: dict, service: str) -> list[dict]:
+    """Non-secret variable metadata; values are never stored here."""
+    environments = manifest.get("service_environment") or {}
+    names = environments.get(service) or []
+    if not isinstance(names, list):
+        return []
+    tenant_names = set(manifest.get("tenant_environment_names") or [])
+    result: list[dict] = []
+    for raw in names:
+        name = str(raw)
+        if name in MANAGED_DATABASE_NAMES:
+            source, revealable = "managed", True
+        elif name in tenant_names:
+            source, revealable = "tenant", False
+        else:
+            source, revealable = "image", False
+        result.append({
+            "name": name,
+            "source": source,
+            "secret": bool(SECRET_NAME_RE.search(name)),
+            "revealable": revealable,
+        })
+    return result
+
+
 def _deployment_view(row: Deployment) -> dict:
     manifest = row.manifest or {}
     services = sorted(manifest.get("containers", {}).keys())
@@ -431,6 +458,7 @@ def _deployment_view(row: Deployment) -> dict:
         state = runtime.get(service) if isinstance(runtime, dict) else {}
         state = state if isinstance(state, dict) else {}
         health = state.get("health")
+        names = environments.get(service, [])
         details.append({
             "name": service,
             "image": images.get(service),
@@ -438,7 +466,8 @@ def _deployment_view(row: Deployment) -> dict:
             "health": "unknown" if health in (None, "none") else health,
             "ports": ports.get(service) or [],
             "restart_count": state.get("restart_count") or 0,
-            "environment_names": environments.get(service, []),
+            "environment_names": names,
+            "environment": _environment_metadata(manifest, service),
             "created_at": state.get("created_at") or row.created_at,
         })
     return {

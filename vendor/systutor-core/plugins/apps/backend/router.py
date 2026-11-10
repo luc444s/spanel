@@ -103,7 +103,14 @@ def _queue(
             pending_path, names, fingerprint = write_pending_env(
                 _resources(request).settings.state_root, operation.id, pending
             )
-            operation.report = {"environment_names": names, "environment_fingerprint": fingerprint}
+            operation.report = {
+                "environment_names": names,
+                "environment_fingerprint": fingerprint,
+                "tenant_environment_names": sorted({
+                    name for name, _value in pending
+                    if name not in MANAGED_DATABASE_NAMES
+                }),
+            }
             db.commit()
         audit(db, "operation.queue", tenant_id=app.tenant_id, actor=user.id,
               entity_id=app.id, details={"operation_id": operation.id, "kind": kind})
