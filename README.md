@@ -55,6 +55,13 @@ Sistema de administración multi-tenant de correo electrónico, dominios web y s
 - **PostgreSQL** 16+ (base de datos)
 - **Redis** 7+ (caché y colas)
 
+## Scripts operativos
+
+El catálogo de herramientas de operador, su nivel de riesgo, contexto de
+ejecución y ejemplos seguros está en [`scripts/README.md`](scripts/README.md).
+Consúltalo antes de ejecutar scripts sobre Docker, Hosting, Apps, dominios,
+certificados o tenants.
+
 ## Instalación Rápida
 
 ### Con Docker (Recomendado)
