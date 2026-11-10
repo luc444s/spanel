@@ -59,6 +59,15 @@ def test_route_only_document_has_no_base_router_and_keeps_tls() -> None:
     assert redirect["entryPoints"] == ["web"]
 
 
+def test_http_redirect_router_lets_acme_http01_answer() -> None:
+    doc = rendered(PathRoute("/", "app-container", 80, route_id="r1"))
+    redirect = doc["http"]["routers"]["spanel-api-example-com-route-r1-http"]
+    assert redirect["rule"] == (
+        "(Host(`api.example.com`)) && "
+        "!PathPrefix(`/.well-known/acme-challenge/`)"
+    )
+
+
 def test_route_without_https_uses_http_entrypoint_only() -> None:
     doc = rendered(PathRoute("/", "app-container", 80, https=False, route_id="r1"))
     router = doc["http"]["routers"]["spanel-api-example-com-route-r1"]

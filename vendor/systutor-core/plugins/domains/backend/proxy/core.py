@@ -110,6 +110,14 @@ def router_rule(domains: Iterable[str]) -> str:
     return " || ".join(f"Host(`{host}`)" for host in hosts)
 
 
+ACME_CHALLENGE_PREFIX = "/.well-known/acme-challenge/"
+
+
+def redirect_rule(rule: str) -> str:
+    """HTTP redirect rule that lets the ACME HTTP-01 handler answer first."""
+    return f"({rule}) && !PathPrefix(`{ACME_CHALLENGE_PREFIX}`)"
+
+
 @dataclass(frozen=True)
 class PathRoute:
     prefix: str
@@ -236,7 +244,7 @@ def render_site_yaml(
     middlewares: dict[str, dict] = {}
     if include_base:
         routers[f"{service}-http"] = {
-            "rule": rule,
+            "rule": redirect_rule(rule),
             "entryPoints": [entrypoint_http],
             "middlewares": [f"{service}-redirect"],
             "service": service,
@@ -286,7 +294,7 @@ def render_site_yaml(
                 "redirectScheme": {"scheme": "https", "permanent": True},
             }
             routers[f"{route_service}-http"] = {
-                "rule": route_rule,
+                "rule": redirect_rule(route_rule),
                 "entryPoints": redirect_eps,
                 "middlewares": [redirect_name],
                 "service": route_service,
