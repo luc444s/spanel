@@ -1,8 +1,10 @@
 services:
   app:
     build: .
-    ports:
-      - "3000:3000"
+    # SPANEL-SEC-2026-001: sin publicar 3000 en el host (ni IPv4 ni IPv6).
+    # El panel solo debe entrar por Traefik a través de la red proxy.
+    # No volver a agregar `ports:` aquí: el puerto queda accesible desde
+    # cualquier contenedor conectado a las mismas redes (ver README).
     env_file:
       - .env.docker
     environment:
@@ -23,9 +25,13 @@ services:
       - "traefik.docker.network=proxy"
       - "traefik.http.routers.spanel-http.entrypoints=web"
       - "traefik.http.routers.spanel-http.rule=Host(`spanel.systutor.com`)"
+      - "traefik.http.routers.spanel-http.middlewares=spanel-https-redirect"
       - "traefik.http.routers.spanel.entrypoints=websecure"
       - "traefik.http.routers.spanel.rule=Host(`spanel.systutor.com`)"
       - "traefik.http.routers.spanel.tls=true"
+      # Ningún formulario de login debe viajar por HTTP plano.
+      - "traefik.http.middlewares.spanel-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.spanel-https-redirect.redirectscheme.permanent=true"
     depends_on:
       postgres:
         condition: service_healthy
