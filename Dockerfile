@@ -44,10 +44,11 @@ RUN find plugins/ -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null; \
     true
 
 COPY scripts/site_backup.py scripts/site_backup_link.py scripts/site_restore.py \
-    scripts/e2e_apps_software_editores.py scripts/e2e_apps_api.py /app/scripts/
+    scripts/e2e_apps_software_editores.py scripts/e2e_apps_api.py \
+    scripts/migrate_env.py /app/scripts/
 RUN chmod 755 /app/scripts/site_backup.py /app/scripts/site_backup_link.py \
     /app/scripts/site_restore.py /app/scripts/e2e_apps_software_editores.py \
-    /app/scripts/e2e_apps_api.py
+    /app/scripts/e2e_apps_api.py /app/scripts/migrate_env.py
 
 COPY --from=frontend-build /app/apps/web/dist/ ./static/
 
@@ -55,7 +56,7 @@ COPY entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
 ENV PYTHONUNBUFFERED=1
-ENV PYTHONPATH=/app/vendor/systutor-core
+ENV PYTHONPATH=/app/vendor/systutor-core:/app
 ENV SYSTUTOR_PLUGINS_DIR=/app/plugins
 ENV SYSTUTOR_STATIC_DIR=/app/static
 
