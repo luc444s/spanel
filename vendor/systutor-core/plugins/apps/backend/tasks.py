@@ -24,14 +24,17 @@ session_factory = build_session_factory(core_settings)
 cipher = TokenCipher.from_text(
     settings.read_secret(settings.encryption_key_file), settings.key_version
 )
+route_cleanup = None
 try:
     from app.main import app
 
     publisher = get_site_domain_publisher(app)
+    route_cleanup = getattr(app.state, "domain_routes_cleanup", None)
 except Exception:
     publisher = None
 worker = AppsWorker(
-    session_factory, cipher, publisher=publisher, github=UrllibGithubClient()
+    session_factory, cipher, publisher=publisher, github=UrllibGithubClient(),
+    route_cleanup=route_cleanup,
 )
 
 

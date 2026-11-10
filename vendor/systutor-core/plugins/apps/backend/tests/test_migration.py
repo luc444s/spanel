@@ -82,6 +82,11 @@ def test_legacy_oauth_table_is_preserved_by_migrations(tmp_path: Path) -> None:
         )
         migration_003.upgrade(db)
         migration_003.upgrade(db)
+        migration_004 = load(
+            MIGRATIONS / "004_expand_operation_subject_id.py", "apps_migration_004"
+        )
+        migration_004.upgrade(db)
+        migration_004.upgrade(db)
         db.commit()
     tables = set(inspect(engine).get_table_names())
     assert "apps_github_connections" in tables

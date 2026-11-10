@@ -58,12 +58,14 @@ class AppsWorker:
         runner_factory: Callable[..., Runner] = Runner,
         publisher: Any = None,
         github: GithubClient | None = None,
+        route_cleanup: Callable[[Session, str, str], None] | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.cipher = cipher
         self.runner_factory = runner_factory
         self.publisher = publisher
         self.github = github or UrllibGithubClient()
+        self.route_cleanup = route_cleanup
 
     def run(self, operation_id: str) -> None:
         with self.session_factory() as db:
@@ -384,6 +386,7 @@ class AppsWorker:
             if deployment is None or not deployment.manifest:
                 raise RuntimeError("Owned deployment manifest not found")
             project, domain = app.runtime_project, app.domain
+            tenant_id = app.tenant_id
             operation = db.get(Operation, operation_id)
             purge_data = bool((operation.report or {}).get("purge_data")) if operation else False
             service = (operation.report or {}).get("service") if operation else None
@@ -417,6 +420,9 @@ class AppsWorker:
                             "service_runtime": snapshot,
                         }
                         db.commit()
+        if kind == "delete" and self.route_cleanup is not None:
+            with self.session_factory() as db:
+                self.route_cleanup(db, tenant_id, application_id)
         if domain and self.publisher is not None and kind == "delete":
             self.publisher.unpublish(domain)
         if kind == "delete":

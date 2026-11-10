@@ -158,7 +158,7 @@ class Operation(Base):
     tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
     actor_user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
     subject_type: Mapped[str | None] = mapped_column(String(32))
-    subject_id: Mapped[str | None] = mapped_column(String(36), index=True)
+    subject_id: Mapped[str | None] = mapped_column(String(255), index=True)
     kind: Mapped[str] = mapped_column(String(32))
     status: Mapped[str] = mapped_column(String(32), default="queued")
     phase: Mapped[str] = mapped_column(String(64), default="queued")
