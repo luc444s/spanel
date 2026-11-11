@@ -2,7 +2,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FormEvent, useState } from "react";
 
 import { useAuthStore } from "../../../../../../apps/web/src/features/auth/store";
-import { apiRequest } from "@systutor/shell/api/client";
 import {
   createDomain,
   domainsKeys,
@@ -84,37 +83,16 @@ function CertificateCell({
   );
 }
 
-function countMailboxes(domain: string, accounts: string[] | undefined, tenantDomain: string) {
-  if (!accounts) return "—";
-  if (tenantDomain !== "all" && domain.toLowerCase() !== tenantDomain.toLowerCase()) {
-    return "—";
-  }
-  return String(
-    accounts.filter((email) => email.toLowerCase().endsWith(`@${domain.toLowerCase()}`)).length
-  );
-}
-
 export default function DomainsPage() {
   const queryClient = useQueryClient();
   const permissions = useAuthStore((state) => state.permissions);
   const currentTenant = useAuthStore((state) => state.currentTenant);
   const platform = permissions.includes("core.platform.admin");
   const canManage = permissions.includes("domains.domains.manage");
-  const canReadMail = permissions.includes("mail.accounts.read");
 
   const domainsQuery = useQuery({
     queryKey: [...domainsKeys.list, platform ? "all" : "tenant"],
     queryFn: () => listDomains(platform),
-  });
-  const mailQuery = useQuery({
-    queryKey: ["mail", "accounts"],
-    queryFn: () =>
-      apiRequest<{ domain: string; accounts: string[] }>(
-        "/api/v1/plugins/mail/mail/accounts"
-      ),
-    enabled: canReadMail,
-    staleTime: 60_000,
-    retry: false,
   });
 
   const [addOpen, setAddOpen] = useState(false);
@@ -230,16 +208,14 @@ export default function DomainsPage() {
         </p>
       ) : (
         <div className="overflow-x-auto rounded-md border border-border">
-          <table className="w-full min-w-[760px] border-collapse text-sm">
+          <table className="w-full min-w-[640px] border-collapse text-sm">
             <thead className="bg-muted text-left text-xs uppercase text-muted-foreground">
               <tr>
                 <th className="px-3 py-2">{t("Domain")}</th>
                 {platform && <th className="px-3 py-2">{t("Tenant")}</th>}
-                <th className="px-3 py-2">{t("Site")}</th>
                 <th className="px-3 py-2">{t("Status")}</th>
                 <th className="px-3 py-2">{t("Owner")}</th>
                 <th className="px-3 py-2">{t("Certificate")}</th>
-                {canReadMail && <th className="px-3 py-2">{t("Mailboxes")}</th>}
                 <th className="px-3 py-2 text-right">{t("Actions")}</th>
               </tr>
             </thead>
@@ -266,9 +242,6 @@ export default function DomainsPage() {
                         {item.tenant_name ?? item.tenant_id ?? "—"}
                       </td>
                     )}
-                    <td className="px-3 py-2 text-muted-foreground">
-                      {item.container ?? "—"}
-                    </td>
                     <td className="px-3 py-2">
                       {published ? (
                         <span className="text-muted-foreground">{t("Published")}</span>
@@ -294,23 +267,6 @@ export default function DomainsPage() {
                         readable={isOwned}
                       />
                     </td>
-                    {canReadMail && (
-                      <td
-                        className="px-3 py-2 text-muted-foreground"
-                        title={
-                          mailQuery.data && mailQuery.data.domain !== "all" &&
-                          item.domain.toLowerCase() !== mailQuery.data.domain.toLowerCase()
-                            ? t("Mail also exists in tenant domains")
-                            : undefined
-                        }
-                      >
-                        {countMailboxes(
-                          item.domain,
-                          mailQuery.data?.accounts,
-                          mailQuery.data?.domain ?? ""
-                        )}
-                      </td>
-                    )}
                     <td className="px-3 py-2 text-right">
                       {item.owner === "domains" && canManage && isOwned && item.editable && (
                         <span className="inline-flex gap-2">
