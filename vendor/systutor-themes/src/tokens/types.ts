@@ -1,4 +1,4 @@
-export type ThemeName = "light" | "dark" | "retro" | "catpuccin_mocha" | "nord" | "nord_dark";
+export type ThemeName = "light" | "dark" | "retro" | "catpuccin_mocha" | "nord" | "nord_dark" | "tutora";
 
 export type ThemeTokens = {
   // ----- Palette (26 vars) -----

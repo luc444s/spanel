@@ -11,6 +11,7 @@ const THEME_LABELS: Record<string, string> = {
   catpuccin_mocha: "Catppuccin Mocha",
   nord: "Nord",
   nord_dark: "Nord Dark",
+  tutora: "Tutora Business",
 };
 
 export function ThemeToggle() {
