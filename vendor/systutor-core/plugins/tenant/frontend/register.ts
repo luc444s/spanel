@@ -18,7 +18,7 @@ export function registerPlugin(): PluginFrontendRegistration {
         to: "/app/tenants",
         label: "Tenants",
         requiredPermissions: ["tenant.tenants.read"],
-        group: "Administración",
+        group: "Administration",
       },
     ],
     widgets: [],

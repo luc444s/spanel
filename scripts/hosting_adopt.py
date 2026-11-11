@@ -75,7 +75,7 @@ def _domain_claimed_by_extra(domain: str) -> bool:
         needle = domain.strip().lower()
         return any(row.domain.lower() == needle for row in operations.managed_domains())
     except Exception as exc:  # noqa: BLE001 - el aviso es visible para el operador
-        print(f"aviso: no se pudo verificar dominios extra: {exc}", file=sys.stderr)
+        print(f"warning: could not verify extra domains: {exc}", file=sys.stderr)
         return False
 
 
@@ -101,18 +101,18 @@ def _assert_wordpress(container_name: str) -> None:
         timeout=hosting_settings.command_timeout,
     )
     if info is None:
-        raise AdoptionError(f"el contenedor {container_name} no existe o no responde")
+        raise AdoptionError(f"container {container_name} does not exist or is not responding")
     candidato = candidato_de(info)
     if not candidato.es_sitio:
         raise AdoptionError(
-            f"el contenedor {container_name} no es un sitio WordPress ({candidato.por_que})"
+            f"container {container_name} is not a WordPress site ({candidato.por_que})"
         )
 
 
 def _tenant_by_slug(db: Session, slug: str) -> Tenant:
     tenant = db.scalar(select(Tenant).where(Tenant.slug == slug))
     if tenant is None:
-        raise AdoptionError(f"no existe ningun tenant con slug {slug!r}")
+        raise AdoptionError(f"no tenant exists with slug {slug!r}")
     return tenant
 
 
@@ -144,12 +144,12 @@ def adopt_container(
         owner = db.get(Tenant, existing.tenant_id)
         owner_label = f"{owner.slug} ({owner.id})" if owner is not None else existing.tenant_id
         raise AlreadyOwnedError(
-            f"el contenedor {container_name} ya pertenece al tenant {owner_label}"
+            f"container {container_name} already belongs to tenant {owner_label}"
         )
 
     if domain and _domain_claimed_by_extra(domain):
         raise AlreadyOwnedError(
-            f"el dominio {domain} ya esta publicado como dominio extra del proxy"
+            f"domain {domain} is already published as a proxy extra domain"
         )
 
     if dry_run:
@@ -174,7 +174,7 @@ def adopt_container(
     except IntegrityError as exc:
         db.rollback()
         raise AlreadyOwnedError(
-            f"el contenedor {container_name} ya esta adoptado (restriccion unica)"
+            f"container {container_name} is already adopted (unique constraint)"
         ) from exc
 
     record_audit(
@@ -211,13 +211,13 @@ def main(argv: list[str] | None = None) -> int:
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--container", required=True, help="nombre del contenedor WordPress")
-    parser.add_argument("--tenant", required=True, help="slug del tenant que sera el dueno")
-    parser.add_argument("--domain", default=None, help="dominio publico del sitio (opcional)")
+    parser.add_argument("--container", required=True, help="WordPress container name")
+    parser.add_argument("--tenant", required=True, help="slug of the tenant that will own it")
+    parser.add_argument("--domain", default=None, help="public domain of the site (optional)")
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="verifica y resuelve, pero no escribe ninguna fila",
+        help="verify and resolve, but do not write any row",
     )
     args = parser.parse_args(argv)
 
@@ -233,27 +233,27 @@ def main(argv: list[str] | None = None) -> int:
                 dry_run=args.dry_run,
             )
         except AlreadyOwnedError as exc:
-            print(f"FALLO: {exc}")
+            print(f"FAILED: {exc}")
             return 2
         except AdoptionError as exc:
-            print(f"FALLO: {exc}")
+            print(f"FAILED: {exc}")
             return 1
         except Exception as exc:  # noqa: BLE001 - explained to the operator
-            print(f"FALLO: no se pudo adoptar: {exc}")
+            print(f"FAILED: could not adopt: {exc}")
             return 1
 
         if result.dry_run:
             print(
                 f"dry-run: {result.container_name} -> tenant {result.tenant_slug} "
-                f"({result.tenant_id}); no se escribio nada"
+                f"({result.tenant_id}); nothing was written"
             )
             return 0
 
         db.commit()
 
     print(
-        f"adoptado: {result.container_name} -> tenant {result.tenant_slug} "
-        f"({result.tenant_id}), sitio {result.site_id}"
+        f"adopted: {result.container_name} -> tenant {result.tenant_slug} "
+        f"({result.tenant_id}), site {result.site_id}"
     )
     return 0
 

@@ -2,6 +2,7 @@ import { Alert } from "@systutor/shell/ui/alert";
 import { Button } from "@systutor/shell/ui/button";
 import { Dialog } from "@systutor/shell/ui/dialog";
 
+import { useT } from "@/i18n/use-i18n";
 import type { MailCertificate } from "../../api";
 
 export function ForceIssueDialog({
@@ -17,32 +18,37 @@ export function ForceIssueDialog({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const t = useT();
+
   return (
     <Dialog
       open={Boolean(target)}
-      title="Forzar reemisión"
+      title={t("Force reissue")}
       description={target?.hostname}
       onClose={onCancel}
       zIndexClassName="z-[1250]"
       maxWidthClassName="max-w-md"
     >
       <div className="space-y-4 text-sm text-foreground">
-        <Alert title="Advertencia de rate limit">
-          Let’s Encrypt limita los certificados duplicados por dominio. Forzar una
-          emisión innecesaria puede bloquear nuevas solicitudes durante una semana.
+        <Alert title={t("Rate limit warning")}>
+          {t(
+            "Let’s Encrypt limits duplicate certificates per domain. Forcing an unnecessary issuance can block new requests for a week."
+          )}
         </Alert>
         <p>
-          Se pedirá a Certbot que reemplace el certificado de{" "}
-          <span className="break-all font-mono text-xs">{target?.hostname}</span>.
-          El correo sigue funcionando con el certificado actual hasta que el nuevo se
-          valide e instale.
+          {t("Certbot will be asked to replace the certificate for")}{" "}
+          <span className="break-all font-mono text-xs">{target?.hostname}</span>
+          {". "}
+          {t(
+            "Mail keeps working with the current certificate until the new one is validated and installed."
+          )}
         </p>
         <div className="flex justify-end gap-2">
           <Button type="button" variant="secondary" onClick={onCancel} disabled={pending}>
-            Cancelar
+            {t("Cancel")}
           </Button>
           <Button type="button" onClick={onConfirm} disabled={pending || disabled}>
-            {pending ? "Solicitando..." : "Forzar emisión"}
+            {pending ? t("Requesting...") : t("Force issuance")}
           </Button>
         </div>
       </div>

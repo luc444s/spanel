@@ -137,14 +137,14 @@ def _site_by_container(db: Session, container_name: str) -> HostingSite | None:
 def _tenant_by_slug(db: Session, slug: str) -> Tenant:
     tenant = db.scalar(select(Tenant).where(Tenant.slug == slug))
     if tenant is None:
-        raise SyncError(f"no existe el tenant con slug {slug!r}")
+        raise SyncError(f"no tenant exists with slug {slug!r}")
     return tenant
 
 
 def _tenant_by_id(db: Session, tenant_id: str) -> Tenant:
     tenant = db.get(Tenant, tenant_id)
     if tenant is None:
-        raise SyncError(f"el tenant {tenant_id} no existe")
+        raise SyncError(f"tenant {tenant_id} does not exist")
     return tenant
 
 
@@ -166,13 +166,13 @@ def _resolve_tenant(db: Session, domain: str, explicit: str | None) -> Tenant:
         return next(iter(matches.values()))
     if not matches:
         raise SyncError(
-            f"{domain}: ningún tenant tiene ese dominio ni un site_suffix que lo "
-            "cubra; creá el tenant o pasá --assign <contenedor>=<slug>"
+            f"{domain}: no tenant owns that domain or has a site_suffix that "
+            "covers it; create the tenant or pass --assign <container>=<slug>"
         )
     names = ", ".join(sorted(t.slug for t in matches.values()))
     raise SyncError(
-        f"{domain}: varios tenants lo cubren ({names}); elegí con "
-        "--assign <contenedor>=<slug>"
+        f"{domain}: several tenants cover it ({names}); choose with "
+        "--assign <container>=<slug>"
     )
 
 
@@ -189,18 +189,18 @@ def _check_domain(
         conditions.append(HostingSite.id != site_id)
     other = db.scalar(select(HostingSite).where(*conditions))
     if other is not None:
-        raise SyncError(f"{domain}: ya pertenece al contenedor {other.container_name}")
+        raise SyncError(f"{domain}: already belongs to container {other.container_name}")
 
     extra_owner = _domain_is_extra(domain)
     if extra_owner is not None:
-        raise SyncError(f"{domain}: ya está publicado como extra por {extra_owner}")
+        raise SyncError(f"{domain}: already published as an extra by {extra_owner}")
 
     suffix = _tenant_suffix(db, tenant.id)
     if suffix and not _inside_suffix(domain, suffix):
-        message = f"{domain}: fuera del sufijo {suffix} del tenant {tenant.slug}"
+        message = f"{domain}: outside the tenant suffix {suffix} of tenant {tenant.slug}"
         if not allow_outside:
-            raise SyncError(message + " (usá --allow-outside para forzarlo)")
-        print(f"aviso: {message}")
+            raise SyncError(message + " (use --allow-outside to force it)")
+        print(f"warning: {message}")
 
 
 def _audit(db: Session, *, tenant_id: str, action: str, entity_id: str, details: dict) -> None:
@@ -230,7 +230,7 @@ def _docker_containers() -> list[dict]:
     )
     if result.returncode != 0:
         raise SyncError(
-            f"docker ps falló: {result.stderr.strip() or f'exit {result.returncode}'}"
+            f"docker ps failed: {result.stderr.strip() or f'exit {result.returncode}'}"
         )
     rows: list[dict] = []
     for line in result.stdout.splitlines():
@@ -283,7 +283,7 @@ def _kind_for(container_name: str, image: str, labels: dict[str, str]) -> str:
         return "wordpress"
     info = inspect_container(docker_env(), container_name, timeout=60)
     if info is None:
-        raise SyncError(f"{container_name}: no se pudo inspeccionar para decidir el tipo")
+        raise SyncError(f"{container_name}: could not inspect it to determine the kind")
     candidato = candidato_de(info)
     return "wordpress" if candidato.senal in {"etiqueta", "entorno"} else "static"
 
@@ -307,7 +307,7 @@ def _detect(
             continue
         row = _site_by_container(db, name)
         if name in ignore:
-            notes.append(f"{name}: ignorado por --ignore")
+            notes.append(f"{name}: ignored by --ignore")
             continue
         if row is None and _is_ignored(name):
             notes.append(f"{name}: infraestructura ignorada")
@@ -315,7 +315,7 @@ def _detect(
 
         labels = parse_labels(payload.get("Labels"))
         if labels.get("traefik.enable", "").strip().lower() == "false":
-            notes.append(f"{name}: traefik.enable=false, no está publicado")
+            notes.append(f"{name}: traefik.enable=false, not published")
             continue
 
         hosts = _hosts_from_labels(labels)
@@ -324,7 +324,7 @@ def _detect(
             domain = normalize_domain(override)
             if domain not in hosts and hosts:
                 notes.append(
-                    f"{name}: --domain {domain} no está en los labels ({', '.join(hosts)})"
+                    f"{name}: --domain {domain} is not in the labels ({', '.join(hosts)})"
                 )
         else:
             domain, ambiguous = _primary(hosts)
@@ -332,12 +332,12 @@ def _detect(
                 if ambiguous:
                     notes.append(
                         f"{name}: sirve varios dominios ({', '.join(ambiguous)}); "
-                        f"elegí uno con --domain {name}=<dominio>"
+                        f"choose one with --domain {name}=<domain>"
                     )
                 elif row is not None:
-                    notes.append(f"{name}: sin Host en labels; pasá --domain {name}=<dominio>")
+                    notes.append(f"{name}: no Host in labels; pass --domain {name}=<domain>")
                 else:
-                    notes.append(f"{name}: sin Host en labels, no se adopta")
+                    notes.append(f"{name}: no Host in labels, not adopting")
                 continue
 
         kind = kind_overrides.get(name)
@@ -370,12 +370,12 @@ def _sync_one(
                 allow_outside=allow_outside,
             )
             changes.append(
-                f"dominio {site.domain or '(sin dominio)'} -> {item.domain}"
+                f"domain {site.domain or '(no domain)'} -> {item.domain}"
             )
         if item.kind and site.kind != item.kind:
-            changes.append(f"tipo {site.kind} -> {item.kind}")
+            changes.append(f"type {site.kind} -> {item.kind}")
         if not changes:
-            return f"sin cambios: {item.container} ({item.domain}, {site.kind})"
+            return f"no changes: {item.container} ({item.domain}, {site.kind})"
         if apply:
             previous = site.domain
             site.domain = item.domain
@@ -404,9 +404,9 @@ def _sync_one(
             tenant=tenant,
             allow_outside=allow_outside,
         )
-        changes.append(f"adoptar en tenant {tenant.slug} con dominio {item.domain}")
+        changes.append(f"adopt into tenant {tenant.slug} with domain {item.domain}")
         if item.kind:
-            changes.append(f"tipo {item.kind}")
+            changes.append(f"type {item.kind}")
         if apply:
             site = HostingSite(
                 id=new_uuid(),
@@ -421,7 +421,7 @@ def _sync_one(
             except IntegrityError as exc:
                 db.rollback()
                 raise SyncError(
-                    f"{item.container}: no se pudo adoptar (dominio o contenedor duplicado)"
+                    f"{item.container}: could not be adopted (duplicate domain or container)"
                 ) from exc
             _audit(
                 db,
@@ -448,10 +448,10 @@ def _retire_old(db: Session, *, apply: bool) -> list[str]:
         if old_row is None:
             continue
         if _site_by_container(db, replacement) is None:
-            lines.append(f"no retiro {old}: {replacement} todavía no está adoptado")
+            lines.append(f"not retiring {old}: {replacement} is not yet adopted")
             continue
         if not apply:
-            lines.append(f"dry-run: retiraría la fila {old} (contenedor intacto)")
+            lines.append(f"dry-run: would retire row {old} (container untouched)")
             continue
         _audit(
             db,
@@ -466,7 +466,7 @@ def _retire_old(db: Session, *, apply: bool) -> list[str]:
         )
         db.delete(old_row)
         db.commit()
-        lines.append(f"retirada la fila {old}; el contenedor sigue intacto")
+        lines.append(f"removed row {old}; the container is untouched")
     return lines
 
 
@@ -485,41 +485,41 @@ def main(argv: list[str] | None = None) -> int:
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--only", action="append", default=[], metavar="CONTENEDOR")
+    parser.add_argument("--only", action="append", default=[], metavar="CONTAINER")
     parser.add_argument(
-        "--ignore", action="append", default=[], metavar="CONTENEDOR",
-        help="no adoptar este contenedor (repetible)",
+        "--ignore", action="append", default=[], metavar="CONTAINER",
+        help="do not adopt this container (repeatable)",
     )
     parser.add_argument(
-        "--assign", action="append", default=[], metavar="CONTENEDOR=SLUG",
-        help="forzar el tenant de un contenedor (repetible)",
+        "--assign", action="append", default=[], metavar="CONTAINER=SLUG",
+        help="force a container's tenant (repeatable)",
     )
     parser.add_argument(
-        "--domain", action="append", default=[], metavar="CONTENEDOR=DOMINIO",
-        help="forzar el dominio primario (útil para contenedores con varios)",
+        "--domain", action="append", default=[], metavar="CONTAINER=DOMAIN",
+        help="force the primary domain (useful for containers with several)",
     )
     parser.add_argument(
-        "--kind", action="append", default=[], metavar="CONTENEDOR=TIPO",
-        help="forzar el tipo: wordpress o static (repetible)",
+        "--kind", action="append", default=[], metavar="CONTAINER=KIND",
+        help="force the kind: wordpress or static (repeatable)",
     )
     parser.add_argument(
         "--allow-outside", action="store_true",
-        help="permitir dominios fuera del sufijo del tenant",
+        help="allow domains outside the tenant suffix",
     )
     parser.add_argument(
         "--retire-old", action="store_true",
-        help="borrar filas viejas cuando el contenedor bueno ya está adoptado",
+        help="delete old rows when the good container is already adopted",
     )
     parser.add_argument(
         "--apply", action="store_true",
-        help="escribir cambios (sin esto es dry-run)",
+        help="write changes (without this it is a dry-run)",
     )
     args = parser.parse_args(argv)
 
     kind_overrides = _pairs(args.kind, "--kind", parser)
     for container, kind in kind_overrides.items():
         if kind not in {"wordpress", "static"}:
-            parser.error(f"--kind {container}={kind}: usá wordpress o static")
+            parser.error(f"--kind {container}={kind}: use wordpress or static")
 
     assign = _pairs(args.assign, "--assign", parser)
     domains = _pairs(args.domain, "--domain", parser)
@@ -537,13 +537,13 @@ def main(argv: list[str] | None = None) -> int:
                 kind_overrides=kind_overrides,
             )
         except SyncError as exc:
-            print(f"FALLO: {exc}")
+            print(f"FAILED: {exc}")
             return 1
 
         for note in notes:
-            print(f"omitido: {note}")
+            print(f"skipped: {note}")
         if not detected:
-            print("no hay sitios para reconciliar")
+            print("there are no sites to reconcile")
             return 2
 
         for item in detected:
@@ -560,14 +560,14 @@ def main(argv: list[str] | None = None) -> int:
             except (SyncError, SetDomainError) as exc:
                 db.rollback()
                 failures += 1
-                print(f"FALLO: {exc}")
+                print(f"FAILED: {exc}")
 
         if args.retire_old:
             for line in _retire_old(db, apply=args.apply):
                 print(line)
 
     if not args.apply:
-        print("\ndry-run: no se escribió nada. Repetí con --apply para confirmar.")
+        print("\ndry-run: nothing was written. Repeat with --apply to confirm.")
     return 1 if failures else 0
 
 

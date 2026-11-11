@@ -325,7 +325,7 @@ def test_r2_dns_mismatch_no_restart(tmp_path):
     args = sr.build_parser().parse_args(["--config-dir", str(tmp_path)])
     findings = sr.rule_r2(path, SERVER_A_SITE, tooling, sr.public_ip_value(tooling, args))
     assert not docker.calls or docker.calls[-1][0] != "restart"
-    pendings = [f for f in findings if f.status == "pendiente" and f.rule == "R2"]
+    pendings = [f for f in findings if f.status == "pending" and f.rule == "R2"]
     assert pendings and "A record" in pendings[0].action
 
 
@@ -367,7 +367,7 @@ def test_r3_no_resolver_available_is_pendiente(tmp_path):
     path.write_text(SERVER_B_SITE, encoding="utf-8")
     findings, patched = sr.rule_r3(path, SERVER_B_SITE, None, fix=True)
     assert patched == []
-    assert all(f.status == "pendiente" for f in findings)
+    assert all(f.status == "pending" for f in findings)
 
 
 def test_r3_dry_run(tmp_path):

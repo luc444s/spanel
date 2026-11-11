@@ -186,7 +186,7 @@ def test_segunda_ejecucion_no_cambia_filas(tmp_path, factory, capsys) -> None:
 
     assert code == 0
     assert _state(factory) == before
-    assert "aplicado: 0 cambios" in capsys.readouterr().out
+    assert "applied: 0 changes" in capsys.readouterr().out
 
 
 def test_rollback_restaura_solo_lo_aplicado(tmp_path, factory) -> None:

@@ -94,19 +94,19 @@ VALID_SLUG = re.compile(r"^[a-z][a-z0-9]{2,30}$")
 
 def _plain_index() -> str:
     return """<!doctype html>
-<html lang="es" data-spanel-profile="plain">
+<html lang="en" data-spanel-profile="plain">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Perfil plain (nginx)</title>
+  <title>Plain profile (nginx)</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
   <main class="wrap">
-    <p class="kicker">SPanel · perfil plain</p>
-    <h1>Sitio estático vanilla</h1>
-    <p class="lead">nginx:alpine + HTML/CSS/JS escritos a mano, el seed de la A.SPEC 0031.</p>
-    <button id="counter" type="button">Probar JavaScript <span id="count">0</span></button>
+    <p class="kicker">SPanel · plain profile</p>
+    <h1>Vanilla static site</h1>
+    <p class="lead">nginx:alpine + hand-written HTML/CSS/JS, the seed from A.SPEC 0031.</p>
+    <button id="counter" type="button">Try JavaScript <span id="count">0</span></button>
   </main>
   <script src="/app.js" defer></script>
 </body>
@@ -116,11 +116,11 @@ def _plain_index() -> str:
 
 def _react_index() -> str:
     return """<!doctype html>
-<html lang="es" data-spanel-profile="react">
+<html lang="en" data-spanel-profile="react">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Perfil react (Caddy)</title>
+  <title>React profile (Caddy)</title>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
 </head>
@@ -141,12 +141,12 @@ def _react_index() -> str:
           background: "#0b1020",
         }
       },
-        e("p", { style: { letterSpacing: ".2em", textTransform: "uppercase", color: "#087f8c" } }, "SPanel \u00b7 perfil react"),
-        e("h1", null, "SPA React 18 en Caddy"),
+        e("p", { style: { letterSpacing: ".2em", textTransform: "uppercase", color: "#087f8c" } }, "SPanel \u00b7 react profile"),
+        e("h1", null, "React 18 SPA on Caddy"),
         e("button", {
           onClick: () => setN(n + 1),
           style: { padding: ".7rem 1rem", border: 0, borderRadius: ".7rem", background: "#087f8c", color: "#fff", cursor: "pointer", fontWeight: 700 }
-        }, "Clics: " + n));
+        }, "Clicks: " + n));
     }
     ReactDOM.createRoot(document.getElementById("root")).render(e(App));
   </script>
@@ -157,29 +157,29 @@ def _react_index() -> str:
 
 def _boot_index() -> str:
     return """<!doctype html>
-<html lang="es" data-spanel-profile="boot">
+<html lang="en" data-spanel-profile="boot">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Perfil boot (Apache)</title>
+  <title>Bootstrap profile (Apache)</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body class="bg-dark text-white">
   <nav class="navbar navbar-expand navbar-dark bg-black px-3">
     <span class="navbar-brand">SPanel</span>
     <div class="navbar-nav">
-      <a class="nav-link active" href="#">Inicio</a>
-      <a class="nav-link" href="#cta">Empieza</a>
+      <a class="nav-link active" href="#">Home</a>
+      <a class="nav-link" href="#cta">Get started</a>
     </div>
   </nav>
   <main class="py-5 text-center">
     <div class="container py-5">
-      <span class="badge text-bg-info text-uppercase mb-3">SPanel \u00b7 perfil boot</span>
-      <h1 class="display-4">Landing con Bootstrap 5</h1>
+      <span class="badge text-bg-info text-uppercase mb-3">SPanel \u00b7 bootstrap profile</span>
+      <h1 class="display-4">Bootstrap 5 landing page</h1>
       <p class="lead col-md-7 mx-auto text-body-secondary">
-        httpd:alpine + Bootstrap 5 por CDN: otro motor, otro stack de UI.
+        httpd:alpine + Bootstrap 5 from a CDN: another engine, another UI stack.
       </p>
-      <a id="cta" class="btn btn-info btn-lg mt-3" href="https://spanel">Probar el hosting</a>
+      <a id="cta" class="btn btn-info btn-lg mt-3" href="https://spanel">Try the hosting</a>
     </div>
   </main>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
@@ -217,14 +217,14 @@ def _astro_config(domain: str) -> str:
 
 def _astro_index() -> str:
     return """---
-const marco = "SPanel · perfil astro";
+const marco = "SPanel · astro profile";
 ---
 <!doctype html>
-<html lang="es" data-spanel-profile="astro">
+<html lang="en" data-spanel-profile="astro">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Perfil astro (Node 20)</title>
+    <title>Astro profile (Node 20)</title>
   </head>
   <body
     style="font-family: ui-sans-serif, system-ui; background: #0b1020; color: #e8edf7;
@@ -232,8 +232,8 @@ const marco = "SPanel · perfil astro";
   >
     <main>
       <p style="letter-spacing:.2em; text-transform:uppercase; color:#ff5d01;">{marco}</p>
-      <h1>Sitio Astro compilado</h1>
-      <p>node:20-alpine + npm install + astro build + astro preview en el puerto 80.</p>
+      <h1>Compiled Astro site</h1>
+      <p>node:20-alpine + npm install + astro build + astro preview on port 80.</p>
     </main>
   </body>
 </html>
@@ -333,7 +333,7 @@ def get_profiles(only: list[str] | None = None) -> dict[str, ProfileSpec]:
     unknown = [slug for slug in only if not VALID_SLUG.fullmatch(slug) or slug not in all_profiles]
     if unknown:
         raise ValueError(
-            f"perfiles desconocidos: {', '.join(unknown)}; "
-            f"válidos: {', '.join(all_profiles)}"
+            f"unknown profiles: {', '.join(unknown)}; "
+            f"valid: {', '.join(all_profiles)}"
         )
     return {slug: all_profiles[slug] for slug in only}

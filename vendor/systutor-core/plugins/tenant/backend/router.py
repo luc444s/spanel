@@ -85,7 +85,7 @@ def create_new_tenant(
     except IntegrityError as exc:
         db.rollback()
         raise AppError(
-            "El dominio, el slug o el email ya están en uso",
+            "The domain, slug, or email is already in use",
             status_code=409,
             code="tenant_conflict",
         ) from exc
@@ -106,7 +106,7 @@ def update_tenant(
     fields = body.model_fields_set
     if not fields:
         raise AppError(
-            "No hay nada que actualizar",
+            "There is nothing to update",
             status_code=422,
             code="tenant_update_empty",
         )
@@ -124,12 +124,12 @@ def update_tenant(
         db.rollback()
         if "site_suffix" in fields:
             raise AppError(
-                "El sufijo ya está asignado a otro tenant",
+                "The suffix is already assigned to another tenant",
                 status_code=409,
                 code="tenant_site_suffix_conflict",
             ) from exc
         raise AppError(
-            "El dominio ya está asignado a otro tenant",
+            "The domain is already assigned to another tenant",
             status_code=409,
             code="tenant_domain_conflict",
         ) from exc
@@ -169,7 +169,7 @@ def add_tenant_domain(
     except IntegrityError as exc:
         db.rollback()
         raise AppError(
-            "El dominio ya está asignado a otro tenant",
+            "The domain is already assigned to another tenant",
             status_code=409,
             code="tenant_domain_conflict",
         ) from exc

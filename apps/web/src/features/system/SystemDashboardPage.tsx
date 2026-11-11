@@ -2,11 +2,14 @@ import { useQuery } from "@tanstack/react-query";
 
 import { usePluginFrontendRuntime } from "../plugins/runtime";
 import { getSystemHealth, getSystemReady } from "./api";
+import { t } from "@/i18n";
+import { useT } from "@/i18n/use-i18n";
 import { Alert } from "@systutor/shell/ui/alert";
 import { Badge } from "@systutor/shell/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@systutor/shell/ui/card";
 
 export function SystemDashboardPage() {
+  const t = useT();
   const healthQuery = useQuery({
     queryKey: ["system", "health"],
     queryFn: getSystemHealth,
@@ -23,43 +26,43 @@ export function SystemDashboardPage() {
   return (
     <section className="space-y-6">
       <div className="space-y-2">
-        <h1 className="text-2xl font-semibold text-foreground">Dashboard</h1>
+        <h1 className="text-2xl font-semibold text-foreground">{t("Dashboard")}</h1>
         <p className="text-sm text-muted-foreground">
-          Estado del sistema, salud del backend y servicios conectados.
+          {t("System status, backend health, and connected services.")}
         </p>
       </div>
 
       {hasError ? (
-        <Alert title="No se pudo cargar el estado del sistema">
-          Revisa que el backend este levantado y que la API este disponible.
+        <Alert title={t("Could not load system status")}>
+          {t("Check that the backend is running and the API is available.")}
         </Alert>
       ) : null}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>API</CardTitle>
-            <CardDescription>Estado basico de la API.</CardDescription>
+            <CardTitle>{t("API")}</CardTitle>
+            <CardDescription>{t("Basic API status.")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <MetricRow label="Estado" value={healthQuery.data?.status ?? "cargando"} />
-            <MetricRow label="Servicio" value={healthQuery.data?.service ?? "-"} />
-            <MetricRow label="Version" value={healthQuery.data?.version ?? "-"} />
-            <MetricRow label="Entorno" value={healthQuery.data?.env ?? "-"} />
+            <MetricRow label={t("Status")} value={healthQuery.data?.status ?? t("Loading")} />
+            <MetricRow label={t("Service")} value={healthQuery.data?.service ?? "-"} />
+            <MetricRow label={t("Version")} value={healthQuery.data?.version ?? "-"} />
+            <MetricRow label={t("Environment")} value={healthQuery.data?.env ?? "-"} />
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Backend</CardTitle>
-            <CardDescription>Conectividad y runtime del core.</CardDescription>
+            <CardTitle>{t("Backend")}</CardTitle>
+            <CardDescription>{t("Core connectivity and runtime.")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <MetricRow label="Base de datos" value={boolLabel(readyQuery.data?.database_connected)} />
-            <MetricRow label="Redis" value={boolLabel(readyQuery.data?.redis_configured)} />
-            <MetricRow label="Plugins" value={String(readyQuery.data?.plugins_loaded ?? 0)} />
+            <MetricRow label={t("Database")} value={boolLabel(readyQuery.data?.database_connected)} />
+            <MetricRow label={t("Redis")} value={boolLabel(readyQuery.data?.redis_configured)} />
+            <MetricRow label={t("Plugins")} value={String(readyQuery.data?.plugins_loaded ?? 0)} />
             <MetricRow
-              label="BD configurada"
+              label={t("DB configured")}
               value={boolLabel(readyQuery.data?.database_configured)}
             />
           </CardContent>
@@ -69,9 +72,9 @@ export function SystemDashboardPage() {
       {pluginRuntime.widgets.length > 0 ? (
         <div className="space-y-3">
           <div className="space-y-1">
-            <h2 className="text-lg font-semibold text-foreground">Widgets de plugins</h2>
+            <h2 className="text-lg font-semibold text-foreground">{t("Plugin widgets")}</h2>
             <p className="text-sm text-muted-foreground">
-              Componentes habilitados por estado del runtime y permisos del usuario.
+              {t("Components enabled by runtime status and user permissions.")}
             </p>
           </div>
 
@@ -109,8 +112,8 @@ function MetricRow({ label, value }: { label: string; value: string }) {
 
 function boolLabel(value: boolean | undefined) {
   if (value === undefined) {
-    return "cargando";
+    return t("Loading");
   }
 
-  return value ? "ok" : "no";
+  return value ? t("ok") : t("no");
 }

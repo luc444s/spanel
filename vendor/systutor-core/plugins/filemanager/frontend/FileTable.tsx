@@ -1,5 +1,6 @@
 import { useRef, type MouseEvent, type TouchEvent } from "react";
 
+import { useT } from "@/i18n/use-i18n";
 import { formatDate, formatSize, formatType, type SortKey, type SortState } from "./format";
 import type { Entry } from "./types";
 
@@ -15,10 +16,10 @@ type Props = {
 };
 
 const COLUMNS: Array<{ key: SortKey | null; label: string; className: string }> = [
-  { key: "name", label: "Nombre", className: "" },
-  { key: "type", label: "Tipo", className: "hidden sm:table-cell" },
-  { key: "size", label: "Tamaño", className: "hidden sm:table-cell" },
-  { key: "modified", label: "Modificado", className: "hidden lg:table-cell" },
+  { key: "name", label: "Name", className: "" },
+  { key: "type", label: "Type", className: "hidden sm:table-cell" },
+  { key: "size", label: "Size", className: "hidden sm:table-cell" },
+  { key: "modified", label: "Modified", className: "hidden lg:table-cell" },
 ];
 
 export function FileTable({
@@ -31,6 +32,7 @@ export function FileTable({
   onOpen,
   onContext,
 }: Props) {
+  const t = useT();
   const timer = useRef<number | null>(null);
   const longPressed = useRef(false);
 
@@ -52,7 +54,7 @@ export function FileTable({
     <table className="w-full table-fixed text-left text-sm">
       <thead className="sticky top-0 z-10 bg-muted text-xs uppercase tracking-wide text-muted-foreground">
         <tr>
-          <th className="w-10 p-2" aria-label="Seleccionar" />
+          <th className="w-10 p-2" aria-label={t("Select")} />
           {COLUMNS.map((column) => (
             <th key={column.label || "actions"} className={`p-2 font-medium ${column.className}`}>
               {column.key ? (
@@ -61,7 +63,7 @@ export function FileTable({
                   className="flex items-center gap-1 hover:text-foreground"
                   onClick={() => onSort(column.key as SortKey)}
                 >
-                  {column.label}
+                  {t(column.label)}
                   {sort.key === column.key ? (sort.direction === "asc" ? "▲" : "▼") : ""}
                 </button>
               ) : null}
@@ -73,7 +75,7 @@ export function FileTable({
         {entries.length === 0 ? (
           <tr>
             <td colSpan={5} className="p-8 text-center text-muted-foreground">
-              Esta carpeta está vacía.
+              {t("This folder is empty.")}
             </td>
           </tr>
         ) : entries.map((entry, index) => {
@@ -105,7 +107,7 @@ export function FileTable({
               <td className="p-2">
                 <input
                   type="checkbox"
-                  aria-label={`Seleccionar ${entry.name}`}
+                  aria-label={t("Select {name}", { name: entry.name })}
                   checked={isSelected}
                   onClick={(event) => event.stopPropagation()}
                   onChange={(event) => onToggle(entry, event.target.checked)}

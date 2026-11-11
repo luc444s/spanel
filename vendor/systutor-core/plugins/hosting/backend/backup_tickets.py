@@ -15,7 +15,7 @@ def _redis() -> RedisCacheBackend:
     backend = cache()
     if not isinstance(backend, RedisCacheBackend):
         raise AppError(
-            "El almacén de enlaces temporales no está disponible",
+            "The temporary link store is not available",
             status_code=503,
             code="hosting_backup_ticket_store_unavailable",
         )
@@ -34,7 +34,7 @@ def issue(payload: dict[str, str], ttl: int) -> str:
         backend.set(_PREFIX + ticket, json.dumps(payload, separators=(",", ":")), ttl)
     except Exception as exc:
         raise AppError(
-            "El almacén de enlaces temporales no está disponible",
+            "The temporary link store is not available",
             status_code=503,
             code="hosting_backup_ticket_store_unavailable",
         ) from exc

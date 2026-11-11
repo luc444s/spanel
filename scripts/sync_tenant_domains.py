@@ -191,8 +191,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("--apply", action="store_true", help="escribir cambios; sin esto es dry-run")
-    parser.add_argument("--report", help="ruta del informe JSON")
+    parser.add_argument("--apply", action="store_true", help="write changes; without this it is a dry-run")
+    parser.add_argument("--report", help="path to the JSON report")
     return parser
 
 
@@ -206,32 +206,32 @@ def _run(db: Session, args: argparse.Namespace) -> int:
         **changes.as_dict(),
     }
     _write_report(report_path, payload)
-    print(f"informe: {report_path}")
+    print(f"report: {report_path}")
 
     if changes.invalid:
         for item in changes.invalid:
-            print(f"dominio inválido en {item['slug']}: {item['domain']!r} (omitido)")
+            print(f"invalid domain in {item['slug']}: {item['domain']!r} (skipped)")
 
     if not args.apply:
         print(
-            f"dry-run: {changes.changes} filas redundantes a eliminar, "
-            f"{len(changes.conflicts)} conflictos, {len(changes.invalid)} inválidos"
+            f"dry-run: {changes.changes} redundant rows to delete, "
+            f"{len(changes.conflicts)} conflicts, {len(changes.invalid)} invalid"
         )
         return 1 if changes.conflicts else 0
 
     if changes.conflicts:
         for item in changes.conflicts:
             print(
-                f"CONFLICTO: {item['domain']} está en tenant_domains de "
-                f"{item['slug']} pero es el primario de {item['primary_tenant_slug']}"
+                f"CONFLICT: {item['domain']} is in tenant_domains of "
+                f"{item['slug']} but is the primary of {item['primary_tenant_slug']}"
             )
-        print("no se escribe nada hasta resolver los conflictos")
+        print("nothing is written until the conflicts are resolved")
         db.rollback()
         return 1
 
     if changes.remove:
         _apply(db, changes)
-    print(f"aplicado: {changes.changes} filas eliminadas")
+    print(f"applied: {changes.changes} rows deleted")
     return 0
 
 
@@ -251,7 +251,7 @@ def run(
         try:
             return _run(db, args)
         except SyncError as exc:
-            print(f"FALLO: {exc}")
+            print(f"FAILED: {exc}")
             db.rollback()
             return 1
 

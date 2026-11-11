@@ -1,5 +1,6 @@
 import type { PluginFrontendRegistration } from "@systutor/sdk/frontend";
 
+import { t } from "@/i18n";
 import MailAccountsPage from "./pages/MailAccountsPage";
 
 export function registerPlugin(): PluginFrontendRegistration {
@@ -8,7 +9,7 @@ export function registerPlugin(): PluginFrontendRegistration {
     routes: [
       {
         path: "mail",
-        title: "Correos",
+        title: t("Mail"),
         component: MailAccountsPage,
         requiredPermissions: ["mail.accounts.read"],
       },
@@ -16,7 +17,7 @@ export function registerPlugin(): PluginFrontendRegistration {
     navigation: [
       {
         to: "/app/mail",
-        label: "Correos",
+        label: t("Mail"),
         requiredPermissions: ["mail.accounts.read"],
       },
     ],

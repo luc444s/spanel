@@ -10,7 +10,7 @@ export function registerPlugin(): PluginFrontendRegistration {
       requiredPermissions: ["apps.applications.read"],
     }],
     navigation: [{
-      to: "/app/apps", label: "Apps", group: "Administración",
+      to: "/app/apps", label: "Apps", group: "Administration",
       requiredPermissions: ["apps.applications.read"],
     }],
     widgets: [],

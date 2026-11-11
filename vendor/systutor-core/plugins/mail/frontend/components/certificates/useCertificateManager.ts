@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { toast } from "@systutor/shell/ui/toast";
 
+import { t } from "@/i18n";
 import {
   certificateHealthKeys,
   certificateKeys,
@@ -68,23 +69,23 @@ export function useCertificateManager(open: boolean) {
         ...current,
         [data.hostname]: { jobId: data.job_id, state: "queued" },
       }));
-      toast.success(`Solicitud encolada para ${data.hostname}`);
+      toast.success(t("Request queued for {hostname}", { hostname: data.hostname }));
       void queryClient.invalidateQueries({ queryKey: certificateKeys.list });
     },
     onError: (error: Error) => {
       setForceTarget(null);
-      setActionError(error.message || "No se pudo encolar la solicitud");
+      setActionError(error.message || t("Could not queue the request"));
     },
   });
 
   const refreshMutation = useMutation({
     mutationFn: refreshMailCertificates,
     onSuccess: () => {
-      toast.success("Refresco de estado solicitado al agente");
+      toast.success(t("Status refresh requested from the agent"));
       void queryClient.invalidateQueries({ queryKey: certificateKeys.list });
       void queryClient.invalidateQueries({ queryKey: certificateHealthKeys.health });
     },
-    onError: (error: Error) => setActionError(error.message || "No se pudo solicitar el refresco"),
+    onError: (error: Error) => setActionError(error.message || t("Could not request the refresh")),
   });
 
   const adminMutation = useMutation({
@@ -101,11 +102,16 @@ export function useCertificateManager(open: boolean) {
         ...current,
         [data.hostname]: { jobId: data.job_id, state: "queued" },
       }));
-      toast.success(`Acción ${variables.action} encolada para ${data.hostname}`);
+      toast.success(
+        t("Action {action} queued for {hostname}", {
+          action: variables.action,
+          hostname: data.hostname,
+        })
+      );
       void queryClient.invalidateQueries({ queryKey: certificateHealthKeys.health });
     },
     onError: (error: Error) => {
-      setActionError(error.message || "No se pudo ejecutar la acción administrativa");
+      setActionError(error.message || t("Could not run the administrative action"));
     },
   });
 
@@ -126,7 +132,7 @@ export function useCertificateManager(open: boolean) {
                 delete next[hostname];
                 return next;
               });
-              toast.success(`Certificado actualizado: ${hostname}`);
+              toast.success(t("Certificate updated: {hostname}", { hostname }));
               void queryClient.invalidateQueries({ queryKey: certificateKeys.list });
             } else if (job.state === "failed") {
               setPending((current) => {
@@ -134,7 +140,9 @@ export function useCertificateManager(open: boolean) {
                 delete next[hostname];
                 return next;
               });
-              setActionError(job.error || `El agente no pudo procesar ${hostname}`);
+              setActionError(
+                job.error || t("The agent could not process {hostname}", { hostname })
+              );
               void queryClient.invalidateQueries({ queryKey: certificateKeys.list });
             } else {
               setPending((current) => {
@@ -163,11 +171,11 @@ export function useCertificateManager(open: boolean) {
     listQuery.isError ||
     (!listQuery.isLoading && !data);
   const unavailableMessage = data?.error
-    ? "Estado no disponible"
+    ? t("Status unavailable")
     : listQuery.isError
-      ? "Estado no disponible"
+      ? t("Status unavailable")
       : data?.stale
-        ? "Estado no disponible: el agente no publicó estado reciente"
+        ? t("Status unavailable: the agent has not published recent status")
         : null;
   const busy =
     requestMutation.isPending || refreshMutation.isPending || adminMutation.isPending;

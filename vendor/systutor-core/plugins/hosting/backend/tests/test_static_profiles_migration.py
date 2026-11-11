@@ -81,7 +81,7 @@ def test_migration_creates_builtin_and_backfills_statics(seed) -> None:
                 )
             ).one()
             assert row[0] == "nginx"
-            assert row[1] == "Nginx (estático)"
+            assert row[1] == "Nginx (static)"
             # The image is the SAME value the settings resolve from the env.
             assert row[2] == "nginx:alpine-lab"
             assert row[3] == "/usr/share/nginx/html"
@@ -225,7 +225,7 @@ def test_004_up_inserts_the_three_lab_rows_next_to_nginx(seed) -> None:
         # I4: the builtin nginx survives 004, plus exactly the three rows.
         assert set(rows) == {"nginx", *SEED_IDS}
         assert rows["nginx"] == (
-            "Nginx (estático)", "nginx:alpine-lab", "/usr/share/nginx/html",
+            "Nginx (static)", "nginx:alpine-lab", "/usr/share/nginx/html",
             80, "marker", None, None,
         )
         for seed_id in SEED_IDS:

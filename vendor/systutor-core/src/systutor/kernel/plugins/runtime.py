@@ -420,7 +420,7 @@ def load_plugin_backend(
     register = getattr(module, function_name, None)
     if register is None or not callable(register):
         raise PluginRuntimeError(
-            f"entrypoint invalido para plugin {manifest.id}: {manifest.backend_entrypoint}"
+            f"invalid entrypoint for plugin {manifest.id}: {manifest.backend_entrypoint}"
         )
 
     context = context_builder(manifest)

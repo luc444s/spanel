@@ -10,6 +10,7 @@ import { Button } from "@systutor/shell/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@systutor/shell/ui/card";
 import { Input } from "@systutor/shell/ui/input";
 import { GithubLink } from "../../shared/layout/GithubLink";
+import { useT } from "../../i18n/use-i18n";
 
 type LocationState = {
   from?: {
@@ -18,6 +19,7 @@ type LocationState = {
 };
 
 export function LoginPage() {
+  const t = useT();
   const token = useAuthStore((state) => state.token);
   const setSession = useAuthStore((state) => state.setSession);
   const navigate = useNavigate();
@@ -61,7 +63,7 @@ export function LoginPage() {
     loginMutation.error instanceof ApiError
       ? loginMutation.error.message
       : loginMutation.error
-        ? "No fue posible iniciar sesion."
+        ? t("Unable to sign in.")
         : null;
 
   return (
@@ -72,11 +74,11 @@ export function LoginPage() {
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={handleSubmit}>
-            {errorMessage ? <Alert title="Login fallido">{errorMessage}</Alert> : null}
+            {errorMessage ? <Alert title={t("Login failed")}>{errorMessage}</Alert> : null}
 
             <div className="space-y-2">
               <label className="text-sm font-medium text-foreground" htmlFor="email">
-                Correo electrónico
+                {t("Email")}
               </label>
               <Input
                 id="email"
@@ -89,7 +91,7 @@ export function LoginPage() {
 
             <div className="space-y-2">
               <label className="text-sm font-medium text-foreground" htmlFor="password">
-                Contraseña
+                {t("Password")}
               </label>
               <Input
                 id="password"
@@ -101,7 +103,7 @@ export function LoginPage() {
             </div>
 
             <Button className="w-full" disabled={loginMutation.isPending} type="submit">
-              {loginMutation.isPending ? "Ingresando..." : "Ingresar"}
+              {loginMutation.isPending ? t("Signing in...") : t("Sign in")}
             </Button>
           </form>
         </CardContent>

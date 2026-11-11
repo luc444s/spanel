@@ -41,7 +41,7 @@ def _require_managed(path: Path, text: str | None = None) -> None:
         validate_managed_path(path)
         if text is not None and not is_managed_document(text):
             raise ProxyError(
-                f"{path.name} no tiene el marcador de propiedad de spanel",
+                f"{path.name} does not have the spanel ownership marker",
                 EXIT_VALIDATION,
             )
 
@@ -83,9 +83,9 @@ class LocalFiles:
     def writable(self) -> tuple[bool, str]:
         directory = self.config_dir
         if not directory.exists():
-            return False, f"no existe {directory}"
+            return False, f"{directory} does not exist"
         if not os.access(directory, os.W_OK):
-            return False, f"sin permiso de escritura en {directory}"
+            return False, f"no write permission on {directory}"
         return True, str(directory)
 
 
@@ -126,14 +126,14 @@ class SshFiles:
         result = self.runner.run(["sh", "-c", script], stdin=text)
         if not result.ok:
             raise ProxyError(
-                f"no se pudo escribir {path}: {result.text().strip()}", EXIT_TRANSPORT
+                f"could not write {path}: {result.text().strip()}", EXIT_TRANSPORT
             )
 
     def delete(self, path: Path) -> None:
         _require_managed(path)
         result = self.runner.run(["rm", "-f", "--", str(path)])
         if not result.ok:
-            raise ProxyError(f"no se pudo borrar {path.name}", EXIT_TRANSPORT)
+            raise ProxyError(f"could not delete {path.name}", EXIT_TRANSPORT)
 
     def writable(self) -> tuple[bool, str]:
         result = self.runner.run(["test", "-w", str(self.config_dir)])
@@ -158,7 +158,7 @@ class DockerFiles:
             return self.runner.run(argv, stdin=stdin)
         except OSError as exc:
             raise ProxyError(
-                f"docker exec en {self.container} no está disponible: {exc}",
+                f"docker exec in {self.container} is not available: {exc}",
                 EXIT_TRANSPORT,
             ) from exc
 
@@ -168,7 +168,7 @@ class DockerFiles:
             return self.runner.run(argv, stdin=text)
         except OSError as exc:
             raise ProxyError(
-                f"docker exec en {self.container} no está disponible: {exc}",
+                f"docker exec in {self.container} is not available: {exc}",
                 EXIT_TRANSPORT,
             ) from exc
 
@@ -178,21 +178,21 @@ class DockerFiles:
             relative = target.relative_to(self.config_dir)
         except ValueError as exc:
             raise ProxyError(
-                f"{target.name} cae fuera del directorio del file provider",
+                f"{target.name} falls outside the file provider directory",
                 EXIT_TRANSPORT,
             ) from exc
         if not relative.parts or any(part in ("", "..") for part in relative.parts):
             raise ProxyError(
-                f"{target.name} cae fuera del directorio del file provider",
+                f"{target.name} falls outside the file provider directory",
                 EXIT_TRANSPORT,
             )
         validate_managed_path(target)
         return str(target)
 
     def _fail(self, action: str, result) -> ProxyError:
-        detail = result.text().strip() or "sin detalle"
+        detail = result.text().strip() or "no details"
         return ProxyError(
-            f"docker exec ({action}) en {self.container} falló: {detail}",
+            f"docker exec ({action}) in {self.container} failed: {detail}",
             EXIT_TRANSPORT,
         )
 
@@ -244,7 +244,7 @@ class DockerFiles:
             raise self._fail("write", result)
         if self.read_text(Path(target)) != text:
             raise ProxyError(
-                f"la relectura de {Path(target).name} en {self.container} no coincide",
+                f"rereading {Path(target).name} in {self.container} does not match",
                 EXIT_TRANSPORT,
             )
 
@@ -256,8 +256,8 @@ class DockerFiles:
     def writable(self) -> tuple[bool, str]:
         result = self._exec("test", "-w", str(self.config_dir))
         if result.ok:
-            return True, f"{self.config_dir} dentro de {self.container}"
-        return False, f"{self.config_dir} no es escribible dentro de {self.container}"
+            return True, f"{self.config_dir} inside {self.container}"
+        return False, f"{self.config_dir} is not writable inside {self.container}"
 
 
 def build_files(runner, detection) -> ProxyFiles:

@@ -209,7 +209,7 @@ def build_settings(
         or "internal"
     ).lower()
     if resolved_profile not in {"internal", "public"}:
-        raise ValueError(f"Perfil desconocido: {resolved_profile}")
+        raise ValueError(f"Unknown profile: {resolved_profile}")
 
     internal = resolved_profile == "internal"
     resolved_transport = (
@@ -219,7 +219,7 @@ def build_settings(
         or "auto"
     ).lower()
     if resolved_transport not in {"auto", "local", "docker", "ssh"}:
-        raise ValueError(f"Transporte desconocido: {resolved_transport}")
+        raise ValueError(f"Unknown transport: {resolved_transport}")
 
     default_network = "spanel-traefik-lab" if internal else "proxy"
 

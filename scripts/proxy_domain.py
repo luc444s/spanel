@@ -43,12 +43,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--profile",
         choices=PROFILES,
         default=argparse.SUPPRESS,
-        help="internal (laboratorio, default) o public (Let's Encrypt real)",
+        help="internal (lab, default) or public (real Let's Encrypt)",
     )
 
     parser = argparse.ArgumentParser(
         prog="proxy_domain.py",
-        description="Gestiona dominios y certificados del proxy de SPanel.",
+        description="Manage SPanel proxy domains and certificates.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
@@ -56,47 +56,47 @@ def build_parser() -> argparse.ArgumentParser:
         "--profile",
         choices=PROFILES,
         default="internal",
-        help="internal (laboratorio, default) o public (Let's Encrypt real)",
+        help="internal (lab, default) or public (real Let's Encrypt)",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    sub.add_parser("doctor", parents=[common], help="verifica proxy, CA y directorios")
-    sub.add_parser("list", parents=[common], help="lista los dominios gestionados")
+    sub.add_parser("doctor", parents=[common], help="check proxy, CA and directories")
+    sub.add_parser("list", parents=[common], help="list managed domains")
 
-    add = sub.add_parser("add", parents=[common], help="agrega un dominio a un sitio")
-    add.add_argument("--site", required=True, help="contenedor del sitio (ej. spanel-lucas-wp)")
-    add.add_argument("--domain", required=True, help="FQDN a agregar (ej. lucas.spanel)")
-    add.add_argument("--site-port", type=int, help="puerto interno del sitio (default 80)")
-    add.add_argument("--path-prefix", help="prefijo same-origin (ej. /api)")
-    add.add_argument("--path-site", help="contenedor que atiende el prefijo")
-    add.add_argument("--path-port", type=int, help="puerto interno del contenedor de ruta")
-    add.add_argument("--www", action="store_true", help="agregar también www.<dominio>")
-    add.add_argument("--dry-run", action="store_true", help="imprime el YAML sin escribir")
+    add = sub.add_parser("add", parents=[common], help="add a domain to a site")
+    add.add_argument("--site", required=True, help="site container (e.g. spanel-lucas-wp)")
+    add.add_argument("--domain", required=True, help="FQDN to add (e.g. lucas.spanel)")
+    add.add_argument("--site-port", type=int, help="site internal port (default 80)")
+    add.add_argument("--path-prefix", help="same-origin path prefix (e.g. /api)")
+    add.add_argument("--path-site", help="container serving the prefix")
+    add.add_argument("--path-port", type=int, help="internal port of the route container")
+    add.add_argument("--www", action="store_true", help="also add www.<domain>")
+    add.add_argument("--dry-run", action="store_true", help="print the YAML without writing")
     add.add_argument(
         "--set-wordpress-url",
         action="store_true",
-        help="actualiza home y siteurl de WordPress con wp-cli",
+        help="update WordPress home and siteurl with wp-cli",
     )
     add.add_argument(
         "--open",
         action="store_true",
-        help="abre el link en el navegador del host al terminar",
+        help="open the link in the host browser when done",
     )
     add.add_argument(
         "--wait",
         type=int,
         default=None,
-        help="segundos de espera al certificado (0 = no esperar)",
+        help="seconds to wait for the certificate (0 = do not wait)",
     )
 
     status = sub.add_parser(
-        "status", parents=[common], help="muestra el estado del certificado de un dominio"
+        "status", parents=[common], help="show the certificate status of a domain"
     )
     status.add_argument("--domain", required=True)
 
-    remove = sub.add_parser("remove", parents=[common], help="quita un dominio gestionado")
+    remove = sub.add_parser("remove", parents=[common], help="remove a managed domain")
     remove.add_argument("--domain", required=True)
-    remove.add_argument("--dry-run", action="store_true", help="no escribe ni borra")
+    remove.add_argument("--dry-run", action="store_true", help="does not write or delete")
 
     return parser
 
@@ -124,7 +124,7 @@ def main(argv: list[str] | None = None) -> int:
             if any(value is not None for value in route_values) and not all(
                 value is not None for value in route_values
             ):
-                parser.error("--path-prefix, --path-site y --path-port deben usarse juntos")
+                parser.error("--path-prefix, --path-site and --path-port must be used together")
             routes = (
                 [PathRoute(args.path_prefix, args.path_site, args.path_port)]
                 if all(value is not None for value in route_values)
@@ -149,10 +149,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return exc.exit_code
     except KeyboardInterrupt:
-        print("interrumpido", file=sys.stderr)
+        print("interrupted", file=sys.stderr)
         return 130
 
-    parser.error(f"comando desconocido: {args.command}")
+    parser.error(f"unknown command: {args.command}")
     return 2
 
 

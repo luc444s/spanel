@@ -21,6 +21,7 @@ import { Dialog } from "@systutor/shell/ui/dialog";
 import { toast } from "@systutor/shell/ui/toast";
 import { Input } from "@systutor/shell/ui/input";
 import { useAuthStore } from "../../../../../../apps/web/src/features/auth/store";
+import { useT } from "@/i18n/use-i18n";
 import { SiteCard, kindLabel, stateLabel } from "../components/SiteCard";
 import { CreateSiteDialog } from "../components/CreateSiteDialog";
 import { ProfilesDialog } from "../components/ProfilesDialog";
@@ -34,7 +35,7 @@ type GeneratedPassword = {
   password: string;
 };
 
-const OPERATE_LABELS = { start: "Iniciar", stop: "Detener", restart: "Reiniciar" } as const;
+const OPERATE_LABELS = { start: "Start", stop: "Stop", restart: "Restart" } as const;
 
 
 /** Only the action that makes sense for the current state stays enabled. */
@@ -44,6 +45,7 @@ function actionAllowed(status: string, action: "start" | "stop" | "restart") {
 }
 
 export default function HostingPage() {
+  const t = useT();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const permissions = useAuthStore((state) => state.permissions);
@@ -126,9 +128,13 @@ export default function HostingPage() {
   function submitOperate(siteId: string, action: "start" | "stop" | "restart") {
     setOperateTarget(null);
     toast.promise(operateMutation.mutateAsync({ siteId, action }), {
-      loading: `Aplicando ${OPERATE_LABELS[action]}…`,
-      success: `Sitio ${OPERATE_LABELS[action].toLowerCase()} ejecutado`,
-      error: (error: Error) => error.message || `No se pudo aplicar ${OPERATE_LABELS[action]}`,
+      loading: t("Applying {action}…", { action: t(OPERATE_LABELS[action]) }),
+      success: t("Site {action} executed", {
+        action: t(OPERATE_LABELS[action]).toLowerCase(),
+      }),
+      error: (error: Error) =>
+        error.message ||
+        t("Could not apply {action}", { action: t(OPERATE_LABELS[action]) }),
     });
   }
 
@@ -165,7 +171,7 @@ export default function HostingPage() {
       if (data.password) {
         setGenerated({ login: data.login, password: data.password });
       }
-      toast.success("Contraseña restablecida");
+      toast.success(t("Password reset"));
     },
     onError: (error: Error) => {
       setResetTarget(null);
@@ -177,22 +183,22 @@ export default function HostingPage() {
     if (!generated) return;
     try {
       await navigator.clipboard.writeText(generated.password);
-      toast.success("Contraseña copiada");
+      toast.success(t("Password copied"));
     } catch {
-      toast.error("No se pudo copiar la contraseña");
+      toast.error(t("Could not copy the password"));
     }
   }
 
   if (sitesQuery.isLoading) {
     return (
       <div className="flex min-h-[200px] items-center justify-center text-sm text-muted-foreground">
-        Cargando...
+        {t("Loading...")}
       </div>
     );
   }
 
   if (sitesQuery.error) {
-    return <Alert title="Error">No se pudieron cargar los sitios.</Alert>;
+    return <Alert title={t("Error")}>{t("Could not load sites.")}</Alert>;
   }
 
   const sites = sitesQuery.data?.sites ?? [];
@@ -206,20 +212,20 @@ export default function HostingPage() {
   return (
     <section className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-foreground">Hosting</h1>
+        <h1 className="text-lg font-semibold text-foreground">{t("Hosting")}</h1>
         <div className="flex gap-2">
           {canManageProfiles ? (
             <Button variant="secondary" onClick={() => setProfilesOpen(true)}>
-              Perfiles
+              {t("Profiles")}
             </Button>
           ) : null}
-          {canCreate ? <Button onClick={() => setCreateOpen(true)}>Crear sitio</Button> : null}
+          {canCreate ? <Button onClick={() => setCreateOpen(true)}>{t("Create site")}</Button> : null}
         </div>
       </div>
 
       {sites.length === 0 ? (
         <p className="rounded-md border border-border bg-card px-3 py-4 text-sm text-muted-foreground">
-          No hay sitios asignados a este tenant.
+          {t("No sites are assigned to this tenant.")}
         </p>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -232,7 +238,7 @@ export default function HostingPage() {
       <Dialog
         open={Boolean(detail)}
         title={detail?.container_name ?? ""}
-        description={detail?.domain ?? "Sin dominio"}
+        description={detail?.domain ?? t("No domain")}
         onClose={() => {
           setDetailSite(null);
           setDatabaseAccess(null);
@@ -242,25 +248,25 @@ export default function HostingPage() {
           <div className="space-y-4">
             <dl className="grid grid-cols-2 gap-3 text-sm">
               <div>
-                <dt className="text-xs text-muted-foreground">Tipo</dt>
+                <dt className="text-xs text-muted-foreground">{t("Type")}</dt>
                 <dd className="text-foreground">{kindLabel(detail.kind)}</dd>
               </div>
               <div>
-                <dt className="text-xs text-muted-foreground">Estado</dt>
+                <dt className="text-xs text-muted-foreground">{t("Status")}</dt>
                 <dd className="text-foreground">{stateLabel(detail.status)}</dd>
               </div>
               <div>
-                <dt className="text-xs text-muted-foreground">Gestionable</dt>
-                <dd className="text-foreground">{detail.managed ? "Sí" : "No"}</dd>
+                <dt className="text-xs text-muted-foreground">{t("Managed")}</dt>
+                <dd className="text-foreground">{detail.managed ? t("Yes") : t("No")}</dd>
               </div>
               {isStatic && detail.profile ? (
                 <div>
-                  <dt className="text-xs text-muted-foreground">Perfil</dt>
+                  <dt className="text-xs text-muted-foreground">{t("Profile")}</dt>
                   <dd className="font-mono text-foreground">{detail.profile}</dd>
                 </div>
               ) : null}
               <div className="col-span-2">
-                <dt className="text-xs text-muted-foreground">ID</dt>
+                <dt className="text-xs text-muted-foreground">{t("ID")}</dt>
                 <dd className="break-all font-mono text-xs text-foreground">{detail.id}</dd>
               </div>
             </dl>
@@ -268,15 +274,15 @@ export default function HostingPage() {
             <div className="grid grid-cols-2 gap-2">
               {canReadUsers && !isStatic ? (
                 <Button variant="secondary" onClick={() => setSelectedSite(detail)}>
-                  Ver usuarios
+                  {t("View users")}
                 </Button>
               ) : null}
               <Button variant="secondary" onClick={() => setLogsTarget(detail)}>
-                Logs
+                {t("Logs")}
               </Button>
               {canBrowseFiles && detail.status === "running" ? (
                 <Button variant="secondary" onClick={() => navigate(`/app/filemanager/hosting/${encodeURIComponent(detail.id)}`)}>
-                  Gestor de archivos
+                  {t("File manager")}
                 </Button>
               ) : null}
               {!isStatic ? (
@@ -285,7 +291,7 @@ export default function HostingPage() {
                   disabled={detail.status === "missing"}
                   onClick={() => setConfigTarget(detail)}
                 >
-                  Configuración
+                  {t("Configuration")}
                 </Button>
               ) : null}
               {canManage && !isStatic ? (
@@ -294,7 +300,7 @@ export default function HostingPage() {
                   disabled={detail.status === "missing" || databaseMutation.isPending}
                   onClick={() => databaseMutation.mutate(detail.id)}
                 >
-                  {databaseMutation.isPending ? "Leyendo..." : "Base de datos"}
+                  {databaseMutation.isPending ? t("Reading...") : t("Database")}
                 </Button>
               ) : null}
               {canManage ? <BackupDialogs site={detail} /> : null}
@@ -310,7 +316,7 @@ export default function HostingPage() {
                       }
                       onClick={() => setOperateTarget({ site: detail, action })}
                     >
-                      {OPERATE_LABELS[action]}
+                      {t(OPERATE_LABELS[action])}
                     </Button>
                   ))
                 : null}
@@ -321,7 +327,7 @@ export default function HostingPage() {
                   className="border-destructive/60 text-destructive hover:bg-destructive/10"
                   onClick={() => setDeleteTarget(detail)}
                 >
-                  Eliminar
+                  {t("Delete")}
                 </Button>
               ) : null}
             </div>
@@ -351,20 +357,20 @@ export default function HostingPage() {
 
       <Dialog
         open={Boolean(createdUrl)}
-        title="Sitio creado"
+        title={t("Site created")}
         description={createdUrl ?? undefined}
         onClose={() => setCreatedUrl(null)}
         zIndexClassName="z-[1300]"
         maxWidthClassName="max-w-md"
       >
         <div className="space-y-3">
-          <p className="text-sm text-foreground">El sitio estático ya está disponible en:</p>
+          <p className="text-sm text-foreground">{t("The static site is now available at:")}</p>
           <code className="block overflow-x-auto rounded-md border border-border bg-muted px-3 py-2 font-mono text-sm">
             {createdUrl ?? ""}
           </code>
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" size="sm" onClick={() => setCreatedUrl(null)}>
-              Cerrar
+              {t("Close")}
             </Button>
             <Button
               type="button"
@@ -373,7 +379,7 @@ export default function HostingPage() {
                 if (createdUrl) window.open(createdUrl, "_blank", "noopener,noreferrer");
               }}
             >
-              Abrir sitio
+              {t("Open site")}
             </Button>
           </div>
         </div>
@@ -381,7 +387,11 @@ export default function HostingPage() {
 
       <Dialog
         open={Boolean(operateTarget)}
-        title={operateTarget ? `${OPERATE_LABELS[operateTarget.action]} sitio` : ""}
+        title={
+          operateTarget
+            ? t("{action} site", { action: t(OPERATE_LABELS[operateTarget.action]) })
+            : ""
+        }
         description={operateTarget?.site.container_name}
         onClose={() => setOperateTarget(null)}
         zIndexClassName="z-[1100]"
@@ -390,10 +400,10 @@ export default function HostingPage() {
         <div className="space-y-4 text-sm text-foreground">
           <p>
             {operateTarget?.action === "stop"
-              ? "Se detendrán los contenedores del sitio. Los datos no se pierden."
+              ? t("The site containers will be stopped. Data is not lost.")
               : operateTarget?.action === "restart"
-                ? "Se reiniciarán los contenedores del sitio."
-                : "Se arrancarán los contenedores del sitio."}
+                ? t("The site containers will be restarted.")
+                : t("The site containers will be started.")}
           </p>
           <div className="flex justify-end gap-2">
             <Button
@@ -401,7 +411,7 @@ export default function HostingPage() {
               disabled={operateMutation.isPending}
               onClick={() => setOperateTarget(null)}
             >
-              Cancelar
+              {t("Cancel")}
             </Button>
             <Button
               disabled={operateMutation.isPending}
@@ -411,22 +421,21 @@ export default function HostingPage() {
               }}
             >
               {operateMutation.isPending
-                ? "Procesando..."
+                ? t("Processing...")
                 : operateTarget
-                  ? OPERATE_LABELS[operateTarget.action]
+                  ? t(OPERATE_LABELS[operateTarget.action])
                   : ""}
             </Button>
           </div>
         </div>
       </Dialog>
 
-      <Dialog open={Boolean(deleteTarget && canDelete)} title="Eliminar sitio definitivamente"
+      <Dialog open={Boolean(deleteTarget && canDelete)} title={t("Delete site permanently")}
         onClose={() => setDeleteTarget(null)} zIndexClassName="z-[1100]" maxWidthClassName="max-w-md">
-        <p className="text-sm">Se eliminarán los contenedores y los datos sin posibilidad de recuperación.
-          Escribí {deleteTarget?.container_name} para confirmar.</p>
+        <p className="text-sm">{t("The containers and data will be deleted with no possibility of recovery. Type {name} to confirm.", { name: deleteTarget?.container_name ?? "" })}</p>
         <Input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} />
         <Button disabled={!deleteTarget || confirmation !== deleteTarget.container_name || deleteMutation.isPending}
-          onClick={() => { if (deleteTarget) deleteMutation.mutate(deleteTarget.id); }}>Eliminar</Button>
+          onClick={() => { if (deleteTarget) deleteMutation.mutate(deleteTarget.id); }}>{t("Delete")}</Button>
       </Dialog>
 
       <LogsDialog site={logsTarget} onClose={() => setLogsTarget(null)} />
@@ -441,10 +450,14 @@ export default function HostingPage() {
 
       <Dialog
         open={Boolean(resetTarget)}
-        title="Restablecer contraseña"
+        title={t("Reset password")}
         description={
           resetTarget
-            ? `${resetTarget.login} (ID ${resetTarget.id}) en ${selectedSite?.container_name ?? ""}`
+            ? t("{login} (ID {id}) on {site}", {
+                login: resetTarget.login,
+                id: resetTarget.id,
+                site: selectedSite?.container_name ?? "",
+              })
             : undefined
         }
         onClose={() => setResetTarget(null)}
@@ -453,12 +466,11 @@ export default function HostingPage() {
       >
         <div className="space-y-3 text-sm text-foreground">
           <p>
-            Se generará una contraseña nueva y se mostrará una sola vez. El usuario
-            perderá la contraseña anterior.
+            {t("A new password will be generated and shown only once. The user will lose their previous password.")}
           </p>
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" size="sm" onClick={() => setResetTarget(null)}>
-              Cancelar
+              {t("Cancel")}
             </Button>
             <Button
               type="button"
@@ -469,7 +481,7 @@ export default function HostingPage() {
                 resetMutation.mutate({ siteId: selectedSite.id, userId: resetTarget.id });
               }}
             >
-              {resetMutation.isPending ? "..." : "Restablecer"}
+              {resetMutation.isPending ? "..." : t("Reset")}
             </Button>
           </div>
         </div>
@@ -477,28 +489,27 @@ export default function HostingPage() {
 
       <Dialog
         open={Boolean(generated)}
-        title="Contraseña generada"
-        description={generated ? `Usuario ${generated.login}` : undefined}
+        title={t("Generated password")}
+        description={generated ? t("User {login}", { login: generated.login }) : undefined}
         onClose={() => setGenerated(null)}
         zIndexClassName="z-[1300]"
         maxWidthClassName="max-w-md"
       >
         <div className="space-y-3">
-          <Alert title="Se muestra una sola vez">
-            Copiá esta contraseña ahora. Al cerrar este cuadro no se puede volver a
-            consultar.
+          <Alert title={t("Shown only once")}>
+            {t("Copy this password now. Once this dialog is closed, it cannot be viewed again.")}
           </Alert>
           <div className="flex items-center gap-2">
             <code className="flex-1 overflow-x-auto rounded-md border border-border bg-muted px-3 py-2 font-mono text-sm">
               {generated?.password ?? ""}
             </code>
             <Button type="button" size="sm" onClick={() => void copyPassword()}>
-              Copiar
+              {t("Copy")}
             </Button>
           </div>
           <div className="flex justify-end">
             <Button type="button" variant="secondary" size="sm" onClick={() => setGenerated(null)}>
-              Cerrar
+              {t("Close")}
             </Button>
           </div>
         </div>

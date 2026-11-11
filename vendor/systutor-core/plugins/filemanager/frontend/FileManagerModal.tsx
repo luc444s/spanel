@@ -1,6 +1,8 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
+import { useT } from "@/i18n/use-i18n";
+
 type Props = {
   title: string;
   subtitle: string;
@@ -26,6 +28,7 @@ export function FileManagerModal({
   onClose,
   children,
 }: Props) {
+  const t = useT();
   const closeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -53,7 +56,7 @@ export function FileManagerModal({
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Gestor de archivos"
+        aria-label={t("File manager")}
         className="relative flex h-[100dvh] w-full flex-col overflow-hidden border-border bg-card shadow-2xl sm:h-[90vh] sm:w-[96vw] sm:max-w-[1600px] sm:rounded-xl sm:border"
         onMouseDown={(event) => event.stopPropagation()}
       >
@@ -67,7 +70,7 @@ export function FileManagerModal({
             ref={closeRef}
             type="button"
             onClick={onClose}
-            aria-label="Cerrar"
+            aria-label={t("Close")}
             className="rounded px-2 py-1 text-lg leading-none text-chrome-muted hover:bg-chrome-foreground/10 hover:text-chrome-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             ✕

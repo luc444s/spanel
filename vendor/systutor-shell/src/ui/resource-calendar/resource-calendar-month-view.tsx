@@ -85,7 +85,7 @@ export function ResourceCalendarMonthView({
                   </ResourceCalendarEventBlock>
                 ))}
                 {dayItems.length > 3 ? (
-                  <div className="px-1 text-[10px] text-muted-foreground">+{dayItems.length - 3} más</div>
+                  <div className="px-1 text-[10px] text-muted-foreground">+{dayItems.length - 3} more</div>
                 ) : null}
               </div>
             </div>

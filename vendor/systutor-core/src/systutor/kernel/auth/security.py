@@ -93,7 +93,7 @@ def create_access_token(
 def decode_access_token(token: str, settings: Settings) -> dict[str, Any]:
     parts = token.split(".")
     if len(parts) != 3:
-        raise AuthenticationError("Token invalido")
+        raise AuthenticationError("Invalid token")
 
     encoded_header, encoded_payload, encoded_signature = parts
     signing_input = f"{encoded_header}.{encoded_payload}".encode()
@@ -104,12 +104,12 @@ def decode_access_token(token: str, settings: Settings) -> dict[str, Any]:
     ).digest()
 
     if not hmac.compare_digest(_b64url_decode(encoded_signature), expected_signature):
-        raise AuthenticationError("Firma de token invalida")
+        raise AuthenticationError("Invalid token signature")
 
     payload = json.loads(_b64url_decode(encoded_payload).decode("utf-8"))
     exp = payload.get("exp")
     if not isinstance(exp, int):
-        raise AuthenticationError("Token sin expiracion valida")
+        raise AuthenticationError("Token is missing a valid expiration")
     if datetime.now(UTC).timestamp() >= exp:
-        raise AuthenticationError("Token expirado")
+        raise AuthenticationError("Token expired")
     return payload

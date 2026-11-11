@@ -162,7 +162,7 @@ def detect_traefik_container(
         return override
     out = tooling.docker(["ps", "--format", "{{.Names}}\t{{.Image}}\t{{.Command}}"])
     if out.returncode != 0:
-        raise RepairError(f"docker ps falló: {out.stderr.strip() or out.stdout.strip()}")
+        raise RepairError(f"docker ps failed: {out.stderr.strip() or out.stdout.strip()}")
     for line in out.stdout.splitlines():
         parts = [p.strip() for p in line.split("\t")]
         while len(parts) < 3:
@@ -209,11 +209,11 @@ def resolvers_from_traefik_yml(text: str) -> list[str]:
 def inspect_traefik(tooling: Tooling, container: str) -> dict:
     out = tooling.docker(["inspect", container])
     if out.returncode != 0:
-        raise RepairError(f"docker inspect {container} falló: {out.stderr.strip()}")
+        raise RepairError(f"docker inspect {container} failed: {out.stderr.strip()}")
     try:
         return json.loads(out.stdout)[0]
     except (json.JSONDecodeError, IndexError, KeyError, TypeError) as exc:
-        raise RepairError(f"docker inspect no devolvió JSON válido: {exc}") from exc
+        raise RepairError(f"docker inspect did not return valid JSON: {exc}") from exc
 
 
 def traefik_yml_text(tooling: Tooling, container: str, ins: dict) -> str:
@@ -293,9 +293,9 @@ def detect(
     )
     if not config_dir:
         raise RepairError(
-            "no se detectó el dynamic-config dir (ni --providers.file.directory "
-            "en el contenedor, ni providers.file.directory en su traefik.yml); "
-            "usá --config-dir o SPANEL_DYNAMIC_DIR"
+            "the dynamic-config dir was not detected (neither --providers.file.directory "
+            "on the container, nor providers.file.directory in its traefik.yml); "
+            "use --config-dir or SPANEL_DYNAMIC_DIR"
         )
 
     # El dir detectado vive en el SISTEMA DE ARCHIVOS DEL CONTENEDOR; el script
@@ -520,7 +520,7 @@ class Finding:
 
 
 def findings_exit(findings: list[Finding]) -> int:
-    if any(f.status in ("pendiente", "planned", "fixed") for f in findings):
+    if any(f.status in ("pending", "planned", "fixed") for f in findings):
         return EXIT_PENDING
     return EXIT_OK
 
@@ -563,14 +563,14 @@ def maybe_restart(
         return Finding(
             "RESTART",
             container,
-            "pendiente",
-            "skip: cooldown activo",
-            f"faltan {remaining}s (reason: {reason})",
+            "pending",
+            "skip: cooldown active",
+            f"{remaining}s left (reason: {reason})",
         )
     out = tooling.docker(["restart", container])
     if out.returncode != 0:
         return Finding(
-            "RESTART", container, "pendiente", "docker restart falló", out.stderr.strip()
+            "RESTART", container, "pending", "docker restart failed", out.stderr.strip()
         )
     save_state(state_file, {**data, **state, "last_restart_ts": tooling.now(), "last_reason": reason})
     return Finding("RESTART", container, "fixed", f"docker restart {container}", reason)
@@ -628,7 +628,7 @@ def rule_r1(path: Path, text: str, fix: bool) -> tuple[list[Finding], list[Path]
                     "R1",
                     f"{path.name}:{router.name}",
                     "fixed" if changed else "ok",
-                    "patch rule con exclusión acme-challenge (atomic, .bak)",
+                    "patch rule with acme-challenge exclusion (atomic, .bak)",
                     f"rule: {new_value}",
                 )
             )
@@ -638,7 +638,7 @@ def rule_r1(path: Path, text: str, fix: bool) -> tuple[list[Finding], list[Path]
                     "R1",
                     f"{path.name}:{router.name}",
                     "planned",
-                    "patch rule con exclusión acme-challenge (necesita --fix)",
+                    "patch rule with acme-challenge exclusion (needs --fix)",
                     f"rule: {new_value}",
                 )
             )
@@ -667,10 +667,10 @@ def rule_r2(
         try:
             issuer = tooling.tls_issuer(host) or ""
         except Exception as exc:  # noqa: BLE001 - openssl puede fallar de muchas formas
-            findings.append(Finding("R2", target, "pendiente", "probe TLS falló", repr(exc)))
+            findings.append(Finding("R2", target, "pending", "TLS probe failed", repr(exc)))
             continue
         if "TRAEFIK DEFAULT CERT" not in issuer.upper():
-            findings.append(Finding("R2", target, "ok", "-", f"issuer real: {issuer[:80]}"))
+            findings.append(Finding("R2", target, "ok", "-", f"real issuer: {issuer[:80]}"))
             continue
         resolved = tooling.dns(host)
         if not resolved or (public_ip and resolved != public_ip):
@@ -678,11 +678,11 @@ def rule_r2(
                 Finding(
                     "R2",
                     target,
-                    "pendiente",
-                    "PENDIENTE: arreglar el A record (no se reinicia)",
+                    "pending",
+                    "PENDING: fix the A record (no restart)",
                     (
-                        f"cert default sirviendo; DNS de '{host}' -> {resolved!r}, "
-                        f"IP pública del server -> {public_ip!r}"
+                        f"default cert serving; DNS for '{host}' -> {resolved!r}, "
+                        f"server public IP -> {public_ip!r}"
                     ),
                 )
             )
@@ -692,8 +692,8 @@ def rule_r2(
                     "RESTART",
                     target,
                     "ok",
-                    "restart de traefik en cola con cooldown",
-                    f"DNS '{host}' -> {resolved} == IP pública (default cert)",
+                    "traefik restart queued with cooldown",
+                    f"DNS '{host}' -> {resolved} == public IP (default cert)",
                 )
             )
     return findings
@@ -712,9 +712,9 @@ def rule_r3(
                 Finding(
                     "R3",
                     f"{path.name}:{router.name}",
-                    "pendiente",
-                    "PENDIENTE: no hay certificatesResolvers en traefik.yml; "
-                    "definir uno es trabajo humano",
+                    "pending",
+                    "PENDING: no certificatesResolvers in traefik.yml; "
+                    "defining one is human work",
                 )
             )
             continue
@@ -754,7 +754,7 @@ def rule_r4(
     if not container:
         return None
     if any(name == container for name in running):
-        return Finding("R4", f"{path.name}:{container}", "ok", "-", "container existe")
+        return Finding("R4", f"{path.name}:{container}", "ok", "-", "container exists")
     if fix:
         orphans = config_dir / ".orphans"
         orphans.mkdir(parents=True, exist_ok=True)
@@ -762,10 +762,10 @@ def rule_r4(
         try:
             path.replace(dest)
         except OSError as exc:
-            return Finding("R4", f"{path.name}:{container}", "pendiente", "mover falló", str(exc))
-        return Finding("R4", f"{path.name}:{container}", "fixed", f"movido a {dest} (no borrado)")
+            return Finding("R4", f"{path.name}:{container}", "pending", "move failed", str(exc))
+        return Finding("R4", f"{path.name}:{container}", "fixed", f"moved to {dest} (not deleted)")
     return Finding(
-        "R4", f"{path.name}:{container}", "planned", "mover a .orphans/ (necesita --fix)"
+        "R4", f"{path.name}:{container}", "planned", "move to .orphans/ (needs --fix)"
     )
 
 
@@ -812,16 +812,16 @@ def check_host(
             config_dir_override=args.config_dir,
         )
     except RepairError as exc:
-        return [Finding("ENV", "traefik", "pendiente", str(exc))], EXIT_PENDING
+        return [Finding("ENV", "traefik", "pending", str(exc))], EXIT_PENDING
 
     if det is None:
         findings.append(
             Finding(
                 "ENV",
                 "traefik",
-                "pendiente",
-                "PENDIENTE: no se encontró contenedor traefik (docker ps). "
-                "usá --traefik-container o SPANEL_TRAEFIK_CONTAINER",
+                "pending",
+                "PENDING: no traefik container found (docker ps). "
+                "use --traefik-container or SPANEL_TRAEFIK_CONTAINER",
             )
         )
         return findings, EXIT_PENDING
@@ -832,8 +832,8 @@ def check_host(
             Finding(
                 "ENV",
                 det.config_dir,
-                "pendiente",
-                "PENDIENTE: el dynamic-config dir detectado no existe en este host",
+                "pending",
+                "PENDING: the detected dynamic-config dir does not exist on this host",
                 f"{config_dir}",
             )
         )
@@ -893,7 +893,7 @@ def check_host(
 def docker_ps_names(tooling: Tooling) -> list[str]:
     out = tooling.docker(["ps", "--format", "{{.Names}}"])
     if out.returncode != 0:
-        raise RepairError(f"docker ps falló: {out.stderr.strip() or out.stdout.strip()}")
+        raise RepairError(f"docker ps failed: {out.stderr.strip() or out.stdout.strip()}")
     return [line.strip() for line in out.stdout.splitlines() if line.strip()]
 
 
@@ -904,7 +904,7 @@ def docker_ps_names(tooling: Tooling) -> list[str]:
 
 def format_table(findings: list[Finding]) -> str:
     if not findings:
-        return "sin hallazgos: todo OK"
+        return "no findings: all OK"
     width = max(len(f.target) for f in findings)
     out = ["RULE    STATUS    TARGET" + " " * max(width - 6, 1) + "ACTION"]
     for f in findings:
@@ -955,20 +955,20 @@ def write_log(path: Path | None, findings: list[Finding], json_mode: bool) -> No
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="spanel-repair.py",
-        description="Auto-reparación TLS/rutas de Traefik de SPanel (A.SPEC 0044).",
+        description="SPanel Traefik TLS/route auto-repair (A.SPEC 0044).",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
-    parser.add_argument("--fix", action="store_true", help="ejecutar acciones (default: dry-run)")
-    parser.add_argument("--json", action="store_true", help="salida máquina-parsable")
+    parser.add_argument("--fix", action="store_true", help="execute actions (default: dry-run)")
+    parser.add_argument("--json", action="store_true", help="machine-parsable output")
     parser.add_argument("--traefik-container", default=None, help="override (auto: imagen/command)")
-    parser.add_argument("--config-dir", default=None, help="override del dynamic-config dir")
-    parser.add_argument("--resolver", default=None, help="override del certResolver para R3")
-    parser.add_argument("--public-ip", default=None, help="override de la IP pública")
-    parser.add_argument("--only-host", default=None, help="enfocar una falla por host")
-    parser.add_argument("--cooldown", type=int, default=DEFAULT_COOLDOWN, help="s entre restarts (default 3600)")
-    parser.add_argument("--state-file", default=None, help="estado del cooldown")
-    parser.add_argument("--log-file", default=None, help="log único (default /var/log/spanel-repair.log)")
+    parser.add_argument("--config-dir", default=None, help="override the dynamic-config dir")
+    parser.add_argument("--resolver", default=None, help="override the certResolver for R3")
+    parser.add_argument("--public-ip", default=None, help="override the public IP")
+    parser.add_argument("--only-host", default=None, help="focus a failure by host")
+    parser.add_argument("--cooldown", type=int, default=DEFAULT_COOLDOWN, help="seconds between restarts (default 3600)")
+    parser.add_argument("--state-file", default=None, help="cooldown state")
+    parser.add_argument("--log-file", default=None, help="single log (default /var/log/spanel-repair.log)")
     return parser
 
 
@@ -977,15 +977,15 @@ def main(argv: list[str] | None = None, tooling: Tooling | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     if args.cooldown < 0:
-        parser.error("--cooldown debe ser >= 0")
+        parser.error("--cooldown must be >= 0")
 
     try:
         findings, code = check_host(args, tooling)
     except RepairError as exc:
-        findings = [Finding("ENV", "error", "pendiente", str(exc))]
+        findings = [Finding("ENV", "error", "pending", str(exc))]
         code = EXIT_ERROR
     except Exception as exc:  # noqa: BLE001 - nunca crash
-        findings = [Finding("ENV", "error", "pendiente", "error inesperado", repr(exc))]
+        findings = [Finding("ENV", "error", "pending", "unexpected error", repr(exc))]
         code = EXIT_ERROR
 
     if args.json:

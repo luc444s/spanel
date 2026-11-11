@@ -4,6 +4,8 @@ import { Alert } from "@systutor/shell/ui/alert";
 import { Dialog } from "@systutor/shell/ui/dialog";
 import { Tabs } from "@systutor/shell/ui/tabs";
 
+import { useT } from "@/i18n/use-i18n";
+
 import type { AppAction, Operation, ServiceDetail } from "../types";
 import { ServiceDomains } from "./ServiceDomains";
 import { ServiceEnvironment } from "./ServiceEnvironment";
@@ -30,6 +32,7 @@ export function ServiceDialog({ applicationId, applicationName, service, operati
   onClose: () => void;
   onAction: (action: ServiceAction) => void;
 }) {
+  const t = useT();
   const [tab, setTab] = useState<Tab>("overview");
   const subject = `${applicationId}:${service.name}`;
   const scoped = useMemo(() => operations.filter((operation) =>
@@ -44,40 +47,40 @@ export function ServiceDialog({ applicationId, applicationName, service, operati
   const tabs = [
     {
       value: "overview" as const,
-      label: "Overview",
+      label: t("Overview"),
       content: <ServiceOverview service={service} canManage={canManage}
         pending={pending} updatedAt={updatedAt} onAction={onAction} />,
     },
     {
       value: "variables" as const,
-      label: "Variables",
+      label: t("Variables"),
       content: <ServiceEnvironment applicationId={applicationId}
         service={service} canReveal={canReveal} />,
     },
     {
       value: "domains" as const,
-      label: "Dominios",
+      label: t("Domains"),
       content: canReadDomains
         ? <ServiceDomains applicationId={applicationId} service={service}
           canManage={canManage && canManageDomains} />
-        : <Alert title="Sin permiso">Necesitás dominios.domains.read para consultar las rutas de este servicio.</Alert>,
+        : <Alert title={t("No permission")}>{t("You need dominios.domains.read to view the routes for this service.")}</Alert>,
     },
     {
       value: "logs" as const,
-      label: "Logs",
+      label: t("Logs"),
       content: <ServiceLogs operation={lastLogs} canManage={canManage}
         pending={pending} onRequest={() => onAction("logs")} />,
     },
     {
       value: "operations" as const,
-      label: "Operaciones",
+      label: t("Operations"),
       content: <ServiceOperations operations={scoped}
-        emptyMessage="No hay operaciones para este servicio." />,
+        emptyMessage={t("No operations for this service.")} />,
     },
   ];
 
   return <Dialog open title={`${applicationName} / ${service.name}`}
-    description={`Servicio Compose: ${service.name}`} onClose={onClose}
+    description={t("Compose service: {name}", { name: service.name })} onClose={onClose}
     maxWidthClassName="max-w-[900px]" zIndexClassName="z-[1100]">
     <Tabs value={tab} onChange={(value) => setTab(value as Tab)} tabs={tabs} />
   </Dialog>;

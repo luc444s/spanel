@@ -33,11 +33,11 @@ class WordPressMixin:
         result = self.runner.run(["sh", "-c", script])
         if not result.ok:
             raise ProxyError(
-                f"no se pudo actualizar WordPress: {result.text().strip()}",
+                f"could not update WordPress: {result.text().strip()}",
                 EXIT_WORDPRESS,
             )
         self.audit("wordpress", site, domain, "updated")
-        self.say(f"wordpress: home y siteurl = {url}")
+        self.say(f"wordpress: home and siteurl = {url}")
 
     # ---- DNS interno ------------------------------------------------------
 

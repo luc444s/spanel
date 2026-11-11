@@ -64,7 +64,7 @@ def validate_url(value: str) -> str:
         _ = parsed.port
     except ValueError as exc:
         raise AppError(
-            "URL interna inválida", status_code=409, code="hosting_phpmyadmin_unavailable"
+            "Invalid internal URL", status_code=409, code="hosting_phpmyadmin_unavailable"
         ) from exc
     if (
         parsed.scheme not in ("http", "https")
@@ -75,7 +75,7 @@ def validate_url(value: str) -> str:
         or parsed.fragment
     ):
         raise AppError(
-            "phpMyAdmin interno no configurado",
+            "Internal phpMyAdmin is not configured",
             status_code=409,
             code="hosting_phpmyadmin_unavailable",
         )
@@ -233,7 +233,9 @@ class PmaClient:
         except (OSError, http.client.HTTPException) as exc:
             conn.close()
             raise AppError(
-                "phpMyAdmin no responde", status_code=502, code="hosting_phpmyadmin_login_failed"
+                "phpMyAdmin is not responding",
+                status_code=502,
+                code="hosting_phpmyadmin_login_failed",
             ) from exc
 
     def login(self, username: str, password: str, server: str | None = None) -> dict[str, str]:
@@ -289,7 +291,7 @@ class PmaClient:
             return cookies
         except (ValueError, UnicodeError) as exc:
             raise AppError(
-                "No se pudo iniciar sesión en phpMyAdmin",
+                "Could not sign in to phpMyAdmin",
                 status_code=502,
                 code="hosting_phpmyadmin_login_failed",
             ) from exc
@@ -344,7 +346,7 @@ def _proxy_response_with_connection(
             if is_login(data):
                 return (
                     Response(
-                        "La sesión de phpMyAdmin expiró; volvé a abrir phpMyAdmin",
+                        "The phpMyAdmin session expired; reopen phpMyAdmin",
                         status_code=401,
                         media_type="text/html",
                     ),

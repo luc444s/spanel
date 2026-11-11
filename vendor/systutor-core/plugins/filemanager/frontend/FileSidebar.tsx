@@ -1,4 +1,5 @@
 import { cn } from "@systutor/shell/ui/cn";
+import { useT } from "@/i18n/use-i18n";
 
 type Props = {
   folders: string[];
@@ -7,10 +8,11 @@ type Props = {
 };
 
 export function FileSidebar({ folders, current, onGo }: Props) {
+  const t = useT();
   return (
-    <nav aria-label="Accesos rápidos" className="space-y-1">
+    <nav aria-label={t("Quick access")} className="space-y-1">
       <p className="px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Accesos
+        {t("Access")}
       </p>
       <button
         type="button"
@@ -20,7 +22,7 @@ export function FileSidebar({ folders, current, onGo }: Props) {
           current === "" && "bg-accent font-medium",
         )}
       >
-        <span aria-hidden>🏠</span> Inicio
+        <span aria-hidden>🏠</span> {t("Home")}
       </button>
       {folders.map((name) => {
         const active = current === name;
@@ -40,7 +42,7 @@ export function FileSidebar({ folders, current, onGo }: Props) {
         );
       })}
       {folders.length === 0 ? (
-        <p className="px-2 py-1 text-xs text-muted-foreground">Sin carpetas en la raíz.</p>
+        <p className="px-2 py-1 text-xs text-muted-foreground">{t("No folders at the root.")}</p>
       ) : null}
     </nav>
   );

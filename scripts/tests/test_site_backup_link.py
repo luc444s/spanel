@@ -144,7 +144,7 @@ def test_invalid_or_tampered_zip_is_rejected_before_listen(tmp_path: Path, capsy
             target.writestr(name, b"alterado" if name.startswith("site/") else data)
 
     assert link.main(["--zip", str(broken), "--port", "0", "--ttl", "1"]) == link.EXIT_ERROR
-    assert "ZIP inválido" in capsys.readouterr().err
+    assert "invalid ZIP" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize("ttl", ["0", "3601"])
@@ -168,7 +168,7 @@ def test_public_origin_rejects_paths_or_credentials():
 
 
 def test_public_plain_http_requires_explicit_insecure_opt_in():
-    with pytest.raises(link.LinkError, match="HTTP público"):
+    with pytest.raises(link.LinkError, match="Public HTTP"):
         link._public_base("http://example.com:8765", "0.0.0.0", 8765)
     assert (
         link._public_base(
@@ -182,7 +182,7 @@ def test_public_plain_http_requires_explicit_insecure_opt_in():
 
 
 def test_public_https_requires_tls_server_mode():
-    with pytest.raises(link.LinkError, match="origen http"):
+    with pytest.raises(link.LinkError, match="origin http"):
         link._public_base("https://example.com", "0.0.0.0", 443)
     assert (
         link._public_base(

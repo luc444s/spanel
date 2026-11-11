@@ -35,7 +35,7 @@ class ProfileDocker:
         argv = ["docker", *args]
         result = self.runner.run(argv, stdin=stdin, timeout=timeout or self.timeout)
         if check and not result.ok:
-            raise DockerError(f"docker {args[0]} falló: {result.text().strip()[:400]}")
+            raise DockerError(f"docker {args[0]} failed: {result.text().strip()[:400]}")
         return result
 
     # ---- lectura ---------------------------------------------------------
@@ -134,7 +134,7 @@ class ProfileDocker:
                 break
             time.sleep(1)
         if check and not last.ok:
-            raise DockerError(f"docker exec falló: {last.text().strip()[:400]}")
+            raise DockerError(f"docker exec failed: {last.text().strip()[:400]}")
         return last
 
     def write_file(self, container: str, destination: str, content: str) -> None:
@@ -147,7 +147,7 @@ class ProfileDocker:
             check=False,
         )
         if not result.ok:
-            raise DockerError(f"no se pudo escribir {destination}: {result.text().strip()[:200]}")
+            raise DockerError(f"could not write {destination}: {result.text().strip()[:200]}")
 
     def read_file(self, container: str, path: str) -> str | None:
         result = self.exec_in(container, 'cat "$1"', path, check=False)
@@ -175,8 +175,8 @@ class ProfileDocker:
                 return
             time.sleep(2)
         raise DockerError(
-            f"El contenedor {spec.container} no sirvió el marcador del perfil "
-            f"en {seconds}s; revisá 'docker logs {spec.container}': "
+            f"Container {spec.container} did not serve the profile marker "
+            f"within {seconds}s; check 'docker logs {spec.container}': "
             f"{self.logs(spec.container)[-400:]}"
         )
 

@@ -14,6 +14,8 @@ import { toast } from "@systutor/shell/ui/toast";
 import { Input } from "@systutor/shell/ui/input";
 import { Select } from "@systutor/shell/ui/select";
 
+import { useT } from "@/i18n/use-i18n";
+
 type FormState = {
   id: string;
   name: string;
@@ -88,6 +90,7 @@ type ProfilesDialogProps = {
  * builtin `nginx*` shows image editable, but no Delete and a readonly name.
  */
 export function ProfilesDialog({ open, profiles, onClose }: ProfilesDialogProps) {
+  const t = useT();
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState<StaticProfile | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
@@ -119,7 +122,7 @@ export function ProfilesDialog({ open, profiles, onClose }: ProfilesDialogProps)
         if (!envIsUnchanged(form.env_json)) {
           const env = parseEnv(form.env_json);
           if (env === null) {
-            throw new Error("Cada línea debe ser VARIABLE=valor");
+            throw new Error(t("Each line must be VARIABLE=value"));
           }
           payload.env_json = env;
         }
@@ -127,7 +130,7 @@ export function ProfilesDialog({ open, profiles, onClose }: ProfilesDialogProps)
       } else {
         const env = parseEnv(form.env_json);
         if (env === null) {
-          throw new Error("Cada línea debe ser VARIABLE=valor (o no escribir nada)");
+          throw new Error(t("Each line must be VARIABLE=value (or leave it empty)"));
         }
         await createHostingProfile({
           id: form.id.trim(),
@@ -157,11 +160,10 @@ export function ProfilesDialog({ open, profiles, onClose }: ProfilesDialogProps)
     event.preventDefault();
     setForm(null);
     setEditing(null);
-    setEditError(null);
     toast.promise(saveMutation.mutateAsync(), {
-      loading: "Guardando perfil…",
-      success: "Perfil guardado",
-      error: (error: Error) => error.message || "No se pudo guardar el perfil",
+      loading: t("Saving profile…"),
+      success: t("Profile saved"),
+      error: (error: Error) => error.message || t("Could not save the profile"),
     });
   }
 
@@ -186,9 +188,9 @@ export function ProfilesDialog({ open, profiles, onClose }: ProfilesDialogProps)
     setDeleteTarget(null);
     setConfirmation("");
     toast.promise(deleteMutation.mutateAsync(id), {
-      loading: "Eliminando perfil…",
-      success: "Perfil eliminado",
-      error: (error: Error) => error.message || "No se pudo eliminar el perfil",
+      loading: t("Deleting profile…"),
+      success: t("Profile deleted"),
+      error: (error: Error) => error.message || t("Could not delete the profile"),
     });
   }
 
@@ -208,23 +210,23 @@ export function ProfilesDialog({ open, profiles, onClose }: ProfilesDialogProps)
     <>
       <Dialog
         open={open}
-        title="Perfiles de sitio estático"
-        description="Catálogo cerrado y curado por el admin de plataforma"
+        title={t("Static site profiles")}
+        description={t("Closed catalog curated by the platform admin")}
         maxWidthClassName="max-w-3xl"
         onClose={onClose}
       >
         <div className="space-y-3">
           {profiles.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No hay perfiles todavía.</p>
+            <p className="text-sm text-muted-foreground">{t("No profiles yet.")}</p>
           ) : (
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-xs text-muted-foreground">
-                  <th className="py-1">ID</th>
-                  <th className="py-1">Nombre</th>
-                  <th className="py-1">Imagen</th>
-                  <th className="py-1">Pu</th>
-                  <th className="py-1">Health</th>
+                  <th className="py-1">{t("ID")}</th>
+                  <th className="py-1">{t("Name")}</th>
+                  <th className="py-1">{t("Image")}</th>
+                  <th className="py-1">{t("Port")}</th>
+                  <th className="py-1">{t("Health")}</th>
                   <th className="py-1" />
                 </tr>
               </thead>
@@ -244,7 +246,7 @@ export function ProfilesDialog({ open, profiles, onClose }: ProfilesDialogProps)
                         size="sm"
                         onClick={() => openEdit(profile)}
                       >
-                        Editar
+                        {t("Edit")}
                       </Button>
                       {!isBuiltin(profile) ? (
                         <Button
@@ -256,7 +258,7 @@ export function ProfilesDialog({ open, profiles, onClose }: ProfilesDialogProps)
                             setConfirmation("");
                           }}
                         >
-                          Eliminar
+                          {t("Delete")}
                         </Button>
                       ) : null}
                     </td>
@@ -266,17 +268,17 @@ export function ProfilesDialog({ open, profiles, onClose }: ProfilesDialogProps)
             </table>
           )}
           <p className="text-xs text-muted-foreground">
-            * builtin: la imagen es editable; no se borra ni renombra.
+            {t("* builtin: the image is editable; it is not deleted or renamed.")}
           </p>
           <div className="flex justify-end">
-            <Button onClick={openCreate}>+ Nuevo perfil</Button>
+            <Button onClick={openCreate}>{t("+ New profile")}</Button>
           </div>
         </div>
       </Dialog>
 
       <Dialog
         open={form !== null}
-        title={editing ? "Editar perfil" : "Nuevo perfil"}
+        title={editing ? t("Edit profile") : t("New profile")}
         maxWidthClassName="max-w-2xl"
         onClose={() => {
           setForm(null);
@@ -290,7 +292,7 @@ export function ProfilesDialog({ open, profiles, onClose }: ProfilesDialogProps)
           >
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground">
-                ID {editing ? "(no se cambia)" : ""}
+                {t("ID")} {editing ? t("(not changed)") : ""}
               </label>
               <Input
                 required={!editing}
@@ -300,7 +302,7 @@ export function ProfilesDialog({ open, profiles, onClose }: ProfilesDialogProps)
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Nombre</label>
+              <label className="text-xs text-muted-foreground">{t("Name")}</label>
               <Input
                 required
                 disabled={editing !== null && isBuiltin(editing)}
@@ -309,7 +311,7 @@ export function ProfilesDialog({ open, profiles, onClose }: ProfilesDialogProps)
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Imagen</label>
+              <label className="text-xs text-muted-foreground">{t("Image")}</label>
               <Input
                 required
                 value={form.image}
@@ -318,7 +320,7 @@ export function ProfilesDialog({ open, profiles, onClose }: ProfilesDialogProps)
             </div>
             <div className="grid grid-cols-3 gap-2">
               <div className="col-span-2 space-y-1">
-                <label className="text-xs text-muted-foreground">Web root</label>
+                <label className="text-xs text-muted-foreground">{t("Web root")}</label>
                 <Input
                   required
                   value={form.web_root}
@@ -326,7 +328,7 @@ export function ProfilesDialog({ open, profiles, onClose }: ProfilesDialogProps)
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">Puerto</label>
+                <label className="text-xs text-muted-foreground">{t("Port")}</label>
                 <Input
                   required
                   inputMode="numeric"
@@ -338,25 +340,24 @@ export function ProfilesDialog({ open, profiles, onClose }: ProfilesDialogProps)
               </div>
             </div>
             <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Health check</label>
+              <label className="text-xs text-muted-foreground">{t("Health check")}</label>
               <Select
                 value={form.health_mode}
                 onChange={(value) =>
                   setForm({ ...form, health_mode: value as FormState["health_mode"] })
                 }
                 options={[
-                  { value: "marker", label: "marker (marcador propio)" },
+                  { value: "marker", label: t("marker (own marker)") },
                   { value: "http_200", label: "http_200" },
                 ]}
               />
             </div>
             <details className="rounded-md border border-border px-3 py-2">
               <summary className="text-xs text-muted-foreground">
-                Variables de entorno
+                {t("Environment variables")}
               </summary>
               <p className="mt-1 text-xs text-muted-foreground">
-                Una por línea, como NOMBRE=valor en un perfil nuevo. Tras guardar, la
-                tabla solo muestra NOMBRES de variables, nunca valores.
+                {t("One per line, as NAME=value in a new profile. After saving, the table only shows variable NAMES, never values.")}
               </p>
               <Input
                 className="mt-2"
@@ -366,11 +367,10 @@ export function ProfilesDialog({ open, profiles, onClose }: ProfilesDialogProps)
             </details>
             <details className="rounded-md border border-border px-3 py-2">
               <summary className="text-xs text-muted-foreground">
-                Comando de arranque (sh -c)
+                {t("Start command (sh -c)")}
               </summary>
               <p className="mt-1 text-xs text-muted-foreground">
-                El comando espera al ÚLTIMO archivo del seed antes de compilar/servir.
-                Vacío usa el CMD de la imagen.
+                {t("The command waits for the LAST file in the seed before building/serving. Empty uses the image CMD.")}
               </p>
               <Input
                 className="mt-2"
@@ -387,10 +387,10 @@ export function ProfilesDialog({ open, profiles, onClose }: ProfilesDialogProps)
                   setEditing(null);
                 }}
               >
-                Cancelar
+                {t("Cancel")}
               </Button>
               <Button type="submit" disabled={saveMutation.isPending}>
-                {saveMutation.isPending ? "Guardando..." : "Guardar"}
+                {saveMutation.isPending ? t("Saving...") : t("Save")}
               </Button>
             </div>
           </form>
@@ -399,7 +399,7 @@ export function ProfilesDialog({ open, profiles, onClose }: ProfilesDialogProps)
 
       <Dialog
         open={deleteTarget !== null}
-        title="Eliminar perfil"
+        title={t("Delete profile")}
         maxWidthClassName="max-w-md"
         onClose={() => {
           setDeleteTarget(null);
@@ -407,7 +407,9 @@ export function ProfilesDialog({ open, profiles, onClose }: ProfilesDialogProps)
         }}
       >
         <p className="text-sm">
-          Se eliminará el perfil &quot;{deleteTarget?.id}&quot;. Escriba su id para confirmar.
+          {t('The profile "{id}" will be deleted. Type its id to confirm.', {
+            id: deleteTarget?.id ?? "",
+          })}
         </p>
         <Input
           value={confirmation}
@@ -421,7 +423,7 @@ export function ProfilesDialog({ open, profiles, onClose }: ProfilesDialogProps)
               setConfirmation("");
             }}
           >
-            Cancelar
+            {t("Cancel")}
           </Button>
           <Button
             className="border-destructive/60 text-destructive hover:bg-destructive/10"
@@ -430,7 +432,7 @@ export function ProfilesDialog({ open, profiles, onClose }: ProfilesDialogProps)
             }
             onClick={submitDeleteProfile}
           >
-            {deleteMutation.isPending ? "..." : "Eliminar"}
+            {deleteMutation.isPending ? "..." : t("Delete")}
           </Button>
         </div>
       </Dialog>

@@ -332,8 +332,8 @@ def test_job_never_returns_private_key_material(tmp_path):
     )
     job = store.job("mail.systutor.com", job_id)
     assert job is not None
-    assert job.error == "Detalle no disponible"
-    assert job.message == "Detalle no disponible"
+    assert job.error == "Detail not available"
+    assert job.message == "Detail not available"
 
 
 def test_create_request_rejects_invalid_hostname(tmp_path):

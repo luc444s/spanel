@@ -181,7 +181,7 @@ function SearchControl({
       <Input
         value={query}
         onChange={(event) => handleSearch(event.target.value)}
-        placeholder={searchPlaceholder ?? "Buscar direcci\u00f3n..."}
+        placeholder={searchPlaceholder ?? "Search address..."}
         className={cn(loading && "opacity-60")}
       />
       {open ? (
@@ -296,14 +296,14 @@ export function LocationPicker({
             {value.lat.toFixed(6)}, {value.lng.toFixed(6)}
           </p>
           {resolving ? (
-            <p className="text-xs text-muted-foreground italic">Resolviendo direcci\u00f3n...</p>
+            <p className="text-xs text-muted-foreground italic">Resolving address...</p>
           ) : address ? (
             <p className="text-xs text-muted-foreground">{address}</p>
           ) : null}
         </div>
       ) : (
         <p className="text-xs text-muted-foreground">
-          {placeholder ?? "Haz clic en el mapa para seleccionar una ubicaci\u00f3n"}
+          {placeholder ?? "Click the map to select a location"}
         </p>
       )}
     </div>

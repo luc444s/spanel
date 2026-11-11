@@ -48,7 +48,7 @@ class DomainConflictError(ValueError):
     """El dominio ya pertenece a otro tenant."""
 
     def __init__(self, domain: str, owner: str) -> None:
-        super().__init__(f"El dominio {domain} pertenece al tenant {owner}")
+        super().__init__(f"Domain {domain} belongs to tenant {owner}")
         self.domain = domain
         self.owner = owner
 
@@ -67,13 +67,13 @@ def normalize_domain_name(value: str | None) -> str:
     (`mail.spanel.site`).
     """
     if value is None:
-        raise ValueError("dominio inválido: no puede estar vacío")
+        raise ValueError("invalid domain: cannot be empty")
     text = value.strip().lower().removesuffix(".")
     if not text:
-        raise ValueError("dominio inválido: no puede estar vacío")
+        raise ValueError("invalid domain: cannot be empty")
     if len(text) > 253 or _FORBIDDEN_RE.search(text) or _DOMAIN_RE.fullmatch(text) is None:
         raise ValueError(
-            "dominio inválido: sin esquema, puerto, ruta, espacios ni comodines"
+            "invalid domain: no scheme, port, path, spaces or wildcards allowed"
         )
     return text
 

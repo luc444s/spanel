@@ -18,7 +18,7 @@ export function registerPlugin(): PluginFrontendRegistration {
         to: "/app/hosting",
         label: "Hosting",
         requiredPermissions: ["hosting.sites.read"],
-        group: "Administración",
+        group: "Administration",
       },
     ],
     widgets: [],

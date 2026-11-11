@@ -155,17 +155,17 @@ def docker(*args: str, check: bool = True) -> str:
     proc = subprocess.run(["docker", *args], capture_output=True, text=True)
     if check and proc.returncode != 0:
         detail = (proc.stderr or proc.stdout).strip()
-        raise MailCertError(f"docker {args[0]} falló: {detail}", EXIT_TRANSPORT)
+        raise MailCertError(f"docker {args[0]} failed: {detail}", EXIT_TRANSPORT)
     return proc.stdout.strip()
 
 
 def inspect_container(name: str) -> dict:
     proc = subprocess.run(["docker", "inspect", name], capture_output=True, text=True)
     if proc.returncode != 0:
-        raise MailCertError(f"no existe el contenedor '{name}'", EXIT_TRANSPORT)
+        raise MailCertError(f"container does not exist: '{name}'", EXIT_TRANSPORT)
     data = json.loads(proc.stdout)
     if not data:
-        raise MailCertError(f"docker inspect vacío para '{name}'", EXIT_TRANSPORT)
+        raise MailCertError(f"empty docker inspect for '{name}'", EXIT_TRANSPORT)
     return data[0]
 
 
@@ -174,7 +174,7 @@ def image_config(info: dict) -> dict:
     try:
         return json.loads(raw) or {}
     except json.JSONDecodeError as exc:
-        raise MailCertError(f"no se pudo leer la imagen {info['Image']}", EXIT_TRANSPORT) from exc
+        raise MailCertError(f"could not read image {info['Image']}", EXIT_TRANSPORT) from exc
 
 
 def assert_supported(info: dict) -> None:
@@ -199,7 +199,7 @@ def assert_supported(info: dict) -> None:
         problems.append(f"networks={networks}")
     if problems:
         raise MailCertError(
-            "el contenedor tiene configuración que este script no reproduce: "
+            "the container has configuration this script does not reproduce: "
             + ", ".join(problems),
             EXIT_TRANSPORT,
         )
@@ -270,7 +270,7 @@ def mount_flags(info: dict, *, replace_destination: str | None = None) -> list[s
             source = mount.get("Source")
         if not source:
             raise MailCertError(
-                f"montaje sin origen en {mount.get('Destination')}", EXIT_TRANSPORT
+                f"mount without source at {mount.get('Destination')}", EXIT_TRANSPORT
             )
         spec = f"{source}:{mount['Destination']}"
         if not mount.get("RW", True):
@@ -311,8 +311,8 @@ def container_run_args(
     if entrypoint and entrypoint != (image.get("Entrypoint") or []):
         if len(entrypoint) != 1:
             raise MailCertError(
-                "entrypoint con argumentos que no se puede expresar con --entrypoint; "
-                "abortando para no cambiar el arranque",
+                "entrypoint with arguments cannot be expressed with --entrypoint; "
+                "aborting to avoid changing the startup",
                 EXIT_TRANSPORT,
             )
         argv += ["--entrypoint", entrypoint[0]]
@@ -357,7 +357,7 @@ def openssl(*args: str) -> str:
     proc = subprocess.run(["openssl", *args], capture_output=True)
     if proc.returncode != 0:
         detail = (proc.stderr or proc.stdout).decode("utf-8", "replace").strip()
-        raise MailCertError(f"openssl {args[0]} falló: {detail}", EXIT_CA)
+        raise MailCertError(f"openssl {args[0]} failed: {detail}", EXIT_CA)
     return proc.stdout.decode("utf-8", "replace")
 
 
@@ -403,7 +403,7 @@ def public_key_matches(leaf: Path, key: Path) -> bool:
 def verify_chain(settings: Settings, leaf: Path) -> None:
     for needed in (settings.ca_root, settings.ca_intermediate):
         if not needed.exists():
-            raise MailCertError(f"falta {needed}", EXIT_CA)
+            raise MailCertError(f"missing {needed}", EXIT_CA)
     proc = subprocess.run(
         [
             "openssl", "verify",
@@ -414,7 +414,7 @@ def verify_chain(settings: Settings, leaf: Path) -> None:
         capture_output=True, text=True,
     )
     if proc.returncode != 0:
-        raise MailCertError(f"la cadena no valida: {proc.stdout.strip()}", EXIT_CA)
+        raise MailCertError(f"chain does not validate: {proc.stdout.strip()}", EXIT_CA)
 
 
 def renew_needed(settings: Settings, leaf: Path, now: datetime | None = None) -> bool:
@@ -435,7 +435,7 @@ def emit(settings: Settings) -> None:
     """Emite con el contenedor efímero escribiendo en un directorio temporal."""
     for needed in (settings.ca_password_file, settings.ca_root):
         if not needed.exists():
-            raise MailCertError(f"falta {needed}", EXIT_CA)
+            raise MailCertError(f"missing {needed}", EXIT_CA)
     if not settings.ca_intermediate.exists():
         docker(
             "cp",
@@ -472,7 +472,7 @@ def emit(settings: Settings) -> None:
     if proc.returncode != 0:
         lines = (proc.stderr or proc.stdout).strip().splitlines()
         raise MailCertError(
-            "la CA rechazó la emisión: " + (lines[-1] if lines else "sin detalle"), EXIT_CA
+            "CA rejected the issuance: " + (lines[-1] if lines else "no detail"), EXIT_CA
         )
 
     leaf, key, chain = settings.cert_dir / "leaf.crt", settings.cert_dir / "privkey.key", (
@@ -527,9 +527,9 @@ def tls_check(settings: Settings, port: int) -> None:
     if "Verify return code: 0 (ok)" not in text:
         reason = next(
             (line.strip() for line in text.splitlines() if "Verify return code" in line),
-            "sin handshake",
+            "no handshake",
         )
-        raise MailCertError(f"puerto {port}: {reason}", EXIT_VERIFY)
+        raise MailCertError(f"port {port}: {reason}", EXIT_VERIFY)
 
 
 def tls_check_identity(settings: Settings, port: int, hostname: str) -> None:
@@ -548,9 +548,9 @@ def tls_check_identity(settings: Settings, port: int, hostname: str) -> None:
     if "Verify return code: 0 (ok)" not in text:
         reason = next(
             (line.strip() for line in text.splitlines() if "Verify return code" in line),
-            "sin handshake o identidad incorrecta",
+            "no handshake or wrong identity",
         )
-        raise MailCertError(f"puerto {port}: {reason}", EXIT_VERIFY)
+        raise MailCertError(f"port {port}: {reason}", EXIT_VERIFY)
 
 
 def wait_tls(settings: Settings, port: int = 993, timeout: int | None = None) -> None:
@@ -564,7 +564,7 @@ def wait_tls(settings: Settings, port: int = 993, timeout: int | None = None) ->
             last = exc
             time.sleep(3)
     raise MailCertError(
-        f"TLS no respondió en {timeout or settings.timeout}s ({last})", EXIT_VERIFY
+        f"TLS did not respond within {timeout or settings.timeout}s ({last})", EXIT_VERIFY
     )
 
 
@@ -663,11 +663,11 @@ def deliver(
     assert_supported(info)
     meta_path = settings.cert_dir / "meta.json"
     if not meta_path.exists():
-        raise MailCertError("no hay certificado emitido (falta meta.json)", EXIT_DELIVERY)
+        raise MailCertError("no certificate issued (missing meta.json)", EXIT_DELIVERY)
     meta = json.loads(meta_path.read_text())
     current = hashlib.sha256((settings.cert_dir / "fullchain.crt").read_bytes()).hexdigest()
     if meta.get("sha256_fullchain") != current:
-        raise MailCertError("meta.json no corresponde a fullchain.crt; reemitir", EXIT_DELIVERY)
+        raise MailCertError("meta.json does not match fullchain.crt; reissue", EXIT_DELIVERY)
 
     argv = container_run_args(info, settings)
     if dry_run:
@@ -686,10 +686,10 @@ def deliver(
                 except MailCertError:
                     verified = False
             _write_delivery_record(settings, info, meta, verified=verified)
-            return {"changed": False, "reason": "certificado ya en uso; registro actualizado"}
-        return {"changed": False, "reason": "el contenedor ya usa este certificado"}
+            return {"changed": False, "reason": "certificate already in use; record updated"}
+        return {"changed": False, "reason": "the container already uses this certificate"}
     if not assume_yes and not sys.stdin.isatty():
-        raise MailCertError("la entrega recrea el contenedor; repetir con --yes", EXIT_VALIDATION)
+        raise MailCertError("delivery recreates the container; repeat with --yes", EXIT_VALIDATION)
 
     stamp = now_utc().strftime("%Y%m%dT%H%M%SZ")
     backups = settings.cert_dir / "backups" / stamp
@@ -718,14 +718,14 @@ def deliver(
             wait_tls(settings, 993, 60)
         except MailCertError:
             return MailCertError(
-                f"{reason}. Rollback ejecutado pero el correo no responde; revisar a mano",
+                f"{reason}. Rollback completed but mail is not responding; check manually",
                 EXIT_VERIFY,
             )
-        return MailCertError(f"{reason}. Se restauró el contenedor anterior", EXIT_DELIVERY)
+        return MailCertError(f"{reason}. The previous container was restored", EXIT_DELIVERY)
 
     proc = subprocess.run(argv, capture_output=True, text=True)
     if proc.returncode != 0:
-        raise rollback(f"docker run falló: {(proc.stderr or proc.stdout).strip()}")
+        raise rollback(f"docker run failed: {(proc.stderr or proc.stdout).strip()}")
 
     try:
         wait_tls(settings, 993)
@@ -733,14 +733,14 @@ def deliver(
             tls_check(settings, port)
         after = snapshot(settings)
         if after["vhost"] != before["vhost"]:
-            raise MailCertError("cambió /etc/postfix/vhost", EXIT_VERIFY)
+            raise MailCertError("/etc/postfix/vhost changed", EXIT_VERIFY)
         missing = lost_files(before["maildir"], after["maildir"])
         if missing:
-            raise MailCertError(f"se perdieron {len(missing)} archivos del maildir", EXIT_VERIFY)
+            raise MailCertError(f"{len(missing)} maildir files were lost", EXIT_VERIFY)
         if not set(before["accounts"]) <= set(after["accounts"]):
-            raise MailCertError("se perdieron cuentas", EXIT_VERIFY)
+            raise MailCertError("accounts were lost", EXIT_VERIFY)
         if _presented_serial(settings) != meta["serial"]:
-            raise MailCertError("el contenedor no presenta el certificado nuevo", EXIT_VERIFY)
+            raise MailCertError("the container is not presenting the new certificate", EXIT_VERIFY)
     except MailCertError as exc:
         raise rollback(str(exc)) from exc
 
@@ -793,7 +793,7 @@ def _presented_serial(settings: Settings, attempts: int = 3) -> str:
             path.unlink(missing_ok=True)
         if attempt + 1 < attempts:
             time.sleep(2)
-    raise last or MailCertError("no se pudo leer el certificado presentado", EXIT_VERIFY)
+    raise last or MailCertError("could not read the presented certificate", EXIT_VERIFY)
 
 
 def _shell_lines(argv: list[str]) -> list[str]:
@@ -867,25 +867,25 @@ def audit_certificate(settings: Settings, directory: Path, container_info: dict 
                 "sans": meta.get("sans", []),
             }
         except (OSError, json.JSONDecodeError) as exc:
-            issue(f"meta.json inválido: {exc}")
+            issue(f"invalid meta.json: {exc}")
 
     if leaf.exists():
         try:
             serial = cert_serial(leaf)
             report["checks"]["serial"] = serial
             if meta.get("serial") and serial != meta["serial"]:
-                issue("el serial del certificado no coincide con meta.json")
+                issue("the certificate serial does not match meta.json")
         except (MailCertError, IndexError) as exc:
-            issue(f"no se pudo leer el serial: {exc}")
+            issue(f"could not read the serial: {exc}")
 
         try:
             sans = cert_sans(leaf)
             report["checks"]["sans"] = sans
             expected = sorted(meta.get("sans", []))
             if expected and sans != expected:
-                issue("los SAN del certificado no coinciden con meta.json")
+                issue("the certificate SANs do not match meta.json")
         except MailCertError as exc:
-            issue(f"no se pudieron leer los SAN: {exc}")
+            issue(f"could not read the SANs: {exc}")
 
         try:
             not_before, not_after = cert_dates(leaf)
@@ -897,37 +897,37 @@ def audit_certificate(settings: Settings, directory: Path, container_info: dict 
             report["checks"]["days_left"] = round(days, 1)
             report["checks"]["life_percent"] = round(pct, 1)
             if left <= 0:
-                issue("certificado vencido")
+                issue("certificate expired")
             elif renew_needed(scoped, leaf):
                 issue(
-                    f"certificado por debajo del umbral de renovación "
-                    f"({days:.1f} días, {pct:.0f}%)"
+                    f"certificate below the renewal threshold "
+                    f"({days:.1f} days, {pct:.0f}%)"
                 )
         except (MailCertError, IndexError, ValueError) as exc:
-            issue(f"no se pudieron leer las fechas: {exc}")
+            issue(f"could not read the dates: {exc}")
 
         try:
             verify_chain(scoped, leaf)
             report["checks"]["chain"] = True
         except MailCertError as exc:
             report["checks"]["chain"] = False
-            issue(f"cadena inválida: {exc}")
+            issue(f"invalid chain: {exc}")
 
     if leaf.exists() and key.exists():
         matches = public_key_matches(leaf, key)
         report["checks"]["key_matches"] = matches
         if not matches:
-            issue("la clave privada no corresponde al certificado")
+            issue("the private key does not match the certificate")
 
     if chain.exists() and meta.get("sha256_fullchain"):
         digest = hashlib.sha256(chain.read_bytes()).hexdigest()
         report["checks"]["sha256_fullchain"] = digest
         if digest != meta["sha256_fullchain"]:
-            issue("fullchain.crt no coincide con meta.json")
+            issue("fullchain.crt does not match meta.json")
     if key.exists() and meta.get("sha256_privkey"):
         digest = hashlib.sha256(key.read_bytes()).hexdigest()
         if digest != meta["sha256_privkey"]:
-            issue("privkey.key no coincide con meta.json")
+            issue("privkey.key does not match meta.json")
 
     deployment = {
         "mounted": False,
@@ -937,25 +937,25 @@ def audit_certificate(settings: Settings, directory: Path, container_info: dict 
     report["deployment"] = deployment
 
     if container_info is None:
-        issue(f"no se pudo inspeccionar el contenedor '{scoped.container}'")
+        issue(f"could not inspect container '{scoped.container}'")
     else:
         state = delivered_state(scoped, container_info)
         deployment["ssl_type"] = state["ssl_type"]
         deployment["mounted"] = state["mount"] == str(directory)
         if not deployment["mounted"]:
-            warn(f"no es el certificado montado en {scoped.source_dir}")
+            warn(f"the mounted certificate is not {scoped.source_dir}")
         if state["ssl_type"] != "manual":
-            issue(f"SSL_TYPE no es manual: {state['ssl_type']!r}")
+            issue(f"SSL_TYPE is not manual: {state['ssl_type']!r}")
         try:
             presented = _presented_serial(scoped)
             deployment["presented_serial"] = presented
             if meta.get("serial") and presented != meta["serial"]:
                 issue(
-                    f"el puerto 993 presenta {presented}, "
-                    f"en disco {meta.get('serial')}"
+                    f"port 993 presents {presented}, "
+                    f"on disk {meta.get('serial')}"
                 )
         except MailCertError as exc:
-            issue(f"no se pudo leer el certificado presentado: {exc}")
+            issue(f"could not read the presented certificate: {exc}")
 
         for port in scoped.ports:
             try:
@@ -982,10 +982,10 @@ def cmd_audit(settings: Settings, args: argparse.Namespace) -> int:
 
     if not targets and container_error is None:
         if args.json:
-            print(json.dumps({"ok": False, "certificates": [], "error": "sin certificados"},
+            print(json.dumps({"ok": False, "certificates": [], "error": "no certificates"},
                              indent=2))
         else:
-            print(f"no hay certificados gestionados en {settings.certs_dir}")
+            print(f"no managed certificates in {settings.certs_dir}")
         return EXIT_VERIFY
 
     reports = [audit_certificate(settings, directory, container_info) for directory in targets]
@@ -1005,10 +1005,10 @@ def cmd_audit(settings: Settings, args: argparse.Namespace) -> int:
 
     print(f"audit: {settings.container}")
     if container_error:
-        print(f"  contenedor: FALLA ({container_error})")
+        print(f"  container: FAIL ({container_error})")
     for report in reports:
         print(f"\n{report['domain']}")
-        print(f"  ruta      {report['path']}")
+        print(f"  path      {report['path']}")
         checks = report["checks"]
         if "serial" in checks:
             print(f"  serial    {checks['serial']}")
@@ -1016,36 +1016,36 @@ def cmd_audit(settings: Settings, args: argparse.Namespace) -> int:
             print(f"  sans      {', '.join(checks['sans'])}")
         if "not_after" in checks:
             print(
-                f"  vigencia  {checks['not_after']} "
-                f"({checks['days_left']} días, {checks['life_percent']:.0f}%)"
+                f"  validity  {checks['not_after']} "
+                f"({checks['days_left']} days, {checks['life_percent']:.0f}%)"
             )
-        print(f"  clave     {'coincide' if checks.get('key_matches') else 'FALLA'}")
-        print(f"  cadena    {'ok' if checks.get('chain') else 'FALLA'}")
+        print(f"  key       {'matches' if checks.get('key_matches') else 'FAIL'}")
+        print(f"  chain     {'ok' if checks.get('chain') else 'FAIL'}")
         deployment = report["deployment"]
         if deployment["presented_serial"]:
-            print(f"  servido   serial {deployment['presented_serial']}")
-        print(f"  montaje   {'sí' if deployment['mounted'] else 'no'}")
+            print(f"  served    serial {deployment['presented_serial']}")
+        print(f"  mount     {'yes' if deployment['mounted'] else 'no'}")
         for port in settings.ports:
             result = checks.get(f"tls_{port}")
             if result is not None:
-                print(f"  tls {port:<4}  {'ok' if result else 'FALLA'}")
+                print(f"  tls {port:<4}  {'ok' if result else 'FAIL'}")
         for warning in report["warnings"]:
-            print(f"  aviso     {warning}")
+            print(f"  warning   {warning}")
         for problem in report["issues"]:
-            print(f"  falla     {problem}")
+            print(f"  issue     {problem}")
 
     total_issues = sum(len(report["issues"]) for report in reports)
     if ok:
-        print("\nresultado: OK")
+        print("\nresult: OK")
     else:
-        print(f"\nresultado: {total_issues} falla(s)")
+        print(f"\nresult: {total_issues} failure(s)")
     return EXIT_OK if ok else EXIT_VERIFY
 
 
 def cmd_status(settings: Settings) -> int:
     meta_path = settings.cert_dir / "meta.json"
     if not meta_path.exists():
-        print(f"{settings.domain}: sin certificado en {settings.cert_dir}")
+        print(f"{settings.domain}: no certificate in {settings.cert_dir}")
         return EXIT_OK
     meta = json.loads(meta_path.read_text())
     leaf = settings.cert_dir / "leaf.crt"
@@ -1059,70 +1059,70 @@ def cmd_status(settings: Settings) -> int:
     print(f"  sans      {', '.join(meta['sans'])}")
     print(f"  issuer    {meta['issuer']}")
     print(f"  serial    {meta['serial']}")
-    print(f"  not_after {not_after.isoformat(timespec='seconds')} ({left:.1f} días, {pct:.0f}%)")
+    print(f"  not_after {not_after.isoformat(timespec='seconds')} ({left:.1f} days, {pct:.0f}%)")
     print(f"  sha256    {meta['sha256_fullchain'][:16]}…")
     print(f"  state     {state}")
     record = settings.cert_dir / "deliveries" / "mail.json"
     if record.exists():
         data = json.loads(record.read_text())
-        print(f"  entrega   {data['container']} ({data['container_id'][:12]}) "
+        print(f"  delivery  {data['container']} ({data['container_id'][:12]}) "
               f"el {data['delivered_at']}")
     else:
-        print("  entrega   not_delivered")
+        print("  delivery  not_delivered")
     return EXIT_OK
 
 
 def cmd_check(settings: Settings) -> int:
     leaf = settings.cert_dir / "leaf.crt"
     if not leaf.exists():
-        print(f"FALLA: no hay certificado en {settings.cert_dir}")
+        print(f"FAIL: no certificate in {settings.cert_dir}")
         return EXIT_VERIFY
     problems: list[str] = []
     try:
         verify_chain(settings, leaf)
-        print("ok   cadena válida contra la CA local")
+        print("ok   chain valid against the local CA")
     except MailCertError as exc:
         problems.append(str(exc))
     meta_path = settings.cert_dir / "meta.json"
     if not meta_path.exists():
-        problems.append("falta meta.json")
+        problems.append("missing meta.json")
     else:
         meta = json.loads(meta_path.read_text())
         if cert_sans(leaf) != sorted(meta["sans"]):
-            problems.append("los SAN del archivo no coinciden con meta.json")
+            problems.append("the file SANs do not match meta.json")
         else:
             print(f"ok   SAN {', '.join(meta['sans'])}")
         if renew_needed(settings, leaf):
-            print("aviso certificado por debajo del umbral de renovación")
+            print("warning: certificate below the renewal threshold")
     try:
         info = inspect_container(settings.container)
         if delivery_matches(settings, info, meta):
-            print(f"ok   {settings.container} sirve el certificado actual (serial {meta['serial']})")
+            print(f"ok   {settings.container} serves the current certificate (serial {meta['serial']})")
         else:
-            presented = "desconocido"
+            presented = "unknown"
             try:
                 presented = _presented_serial(settings)
             except MailCertError:
                 pass
             problems.append(
-                f"{settings.container} no sirve el certificado actual: "
-                f"presenta serial {presented}, en disco {meta['serial']} "
-                f"(re-ejecutar: issue --deliver mail --yes)"
+                f"{settings.container} is not serving the current certificate: "
+                f"presents serial {presented}, on disk {meta['serial']} "
+                f"(re-run: issue --deliver mail --yes)"
             )
     except MailCertError as exc:
         problems.append(str(exc))
     for port in settings.ports:
         try:
             tls_check(settings, port)
-            print(f"ok   TLS {port} valida con la CA local")
+            print(f"ok   TLS {port} validates against the local CA")
         except MailCertError as exc:
             problems.append(str(exc))
     if problems:
-        print("\nFALLAS:")
+        print("\nFAILURES:")
         for item in problems:
             print(f"  - {item}")
         return EXIT_VERIFY
-    print("\nresultado: OK")
+    print("\nresult: OK")
     return EXIT_OK
 
 
@@ -1136,10 +1136,10 @@ def cmd_issue(settings: Settings, args: argparse.Namespace) -> int:
         and (settings.cert_dir / "meta.json").exists()
     )
     if fresh and not args.force:
-        print(f"{settings.domain}: sin cambios (serial {cert_serial(leaf)})")
+        print(f"{settings.domain}: unchanged (serial {cert_serial(leaf)})")
     elif args.dry_run:
         print(
-            f"emitiría {settings.domain} --not-after {settings.not_after} "
+            f"would issue {settings.domain} --not-after {settings.not_after} "
             + " ".join(f"--san {san}" for san in settings.sans)
         )
     else:
@@ -1148,12 +1148,12 @@ def cmd_issue(settings: Settings, args: argparse.Namespace) -> int:
         previous_cert = snapshot_cert_files(settings)
         emit(settings)
         meta = json.loads((settings.cert_dir / "meta.json").read_text())
-        print(f"emitido {settings.domain} serial {meta['serial']} hasta {meta['not_after']}")
+        print(f"issued {settings.domain} serial {meta['serial']} until {meta['not_after']}")
 
     if args.deliver != "mail":
         return EXIT_OK
     if args.dry_run:
-        print("\nrecrearía el contenedor con:")
+        print("\nwould recreate the container with:")
         print("\n".join(_shell_lines(container_run_args(inspect_container(settings.container), settings))))
         return EXIT_OK
     try:
@@ -1167,15 +1167,15 @@ def cmd_issue(settings: Settings, args: argparse.Namespace) -> int:
         if previous_cert is not None:
             restore_cert_files(settings, previous_cert)
             raise MailCertError(
-                f"{exc}. Se restauró el certificado anterior "
+                f"{exc}. The previous certificate was restored "
                 f"(serial {cert_serial(leaf)})",
                 exc.code,
             ) from exc
         raise
     if result.get("changed"):
-        print(f"entregado a {settings.container} ({result['container_id'][:12]})")
+        print(f"delivered to {settings.container} ({result['container_id'][:12]})")
     else:
-        print(f"entrega sin cambios: {result.get('reason')}")
+        print(f"delivery unchanged: {result.get('reason')}")
     return EXIT_OK
 
 
@@ -1191,19 +1191,19 @@ def managed_cert_dirs(settings: Settings) -> list[Path]:
 def cmd_renew(settings: Settings, args: argparse.Namespace) -> int:
     targets = managed_cert_dirs(settings) if args.all else [settings.cert_dir]
     if not targets:
-        print("no hay certificados gestionados")
+        print("no managed certificates")
         return EXIT_OK
     for directory in targets:
         leaf = directory / "leaf.crt"
         if not leaf.exists():
-            print(f"{directory.name}: sin leaf.crt, se omite")
+            print(f"{directory.name}: no leaf.crt, skipped")
             continue
         if renew_needed(settings, leaf) or args.force:
             scoped = _scoped(settings, directory.name)
             ns = argparse.Namespace(deliver="mail", yes=args.yes, force=True, dry_run=args.dry_run)
             cmd_issue(scoped, ns)
         else:
-            print(f"{directory.name}: vigente, no se renueva")
+            print(f"{directory.name}: current, not renewed")
     return EXIT_OK
 
 
@@ -1217,24 +1217,24 @@ def _scoped(settings: Settings, domain: str) -> Settings:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mail_cert.py",
-        description="Certificado TLS interno para docker-mailserver (A.SPEC 0028).",
+        description="Internal TLS certificate for docker-mailserver (A.SPEC 0028).",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("status", help="estado del certificado y de la entrega")
-    sub.add_parser("check", help="verifica cadena, entrega y TLS en los tres puertos")
-    audit = sub.add_parser("audit", help="audita todos los certificados sin escribir nada")
-    audit.add_argument("--json", action="store_true", help="salida JSON para automatización")
+    sub.add_parser("status", help="certificate and delivery status")
+    sub.add_parser("check", help="verify chain, delivery and TLS on the three ports")
+    audit = sub.add_parser("audit", help="audit all certificates without writing anything")
+    audit.add_argument("--json", action="store_true", help="JSON output for automation")
 
-    issue = sub.add_parser("issue", help="emite (si hace falta) y entrega")
+    issue = sub.add_parser("issue", help="issue (if needed) and deliver")
     issue.add_argument("--deliver", choices=["mail", "none"], default="mail")
-    issue.add_argument("--force", action="store_true", help="reemitir aunque esté vigente")
-    issue.add_argument("--dry-run", action="store_true", help="muestra, no escribe")
-    issue.add_argument("--yes", action="store_true", help="confirma la recreación del contenedor")
+    issue.add_argument("--force", action="store_true", help="reissue even if current")
+    issue.add_argument("--dry-run", action="store_true", help="show, do not write")
+    issue.add_argument("--yes", action="store_true", help="confirm the container recreation")
 
-    renew = sub.add_parser("renew", help="renueva si está por debajo del umbral")
-    renew.add_argument("--all", action="store_true", help="todos los certificados gestionados")
+    renew = sub.add_parser("renew", help="renew if below the threshold")
+    renew.add_argument("--all", action="store_true", help="all managed certificates")
     renew.add_argument("--force", action="store_true")
     renew.add_argument("--dry-run", action="store_true")
     renew.add_argument("--yes", action="store_true")
@@ -1245,7 +1245,7 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     settings = Settings()
     if not DOMAIN_RE.match(settings.domain):
-        print(f"error: dominio inválido: {settings.domain}", file=sys.stderr)
+        print(f"error: invalid domain: {settings.domain}", file=sys.stderr)
         return EXIT_VALIDATION
     try:
         if args.command == "status":
@@ -1262,7 +1262,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return exc.code
     except KeyboardInterrupt:
-        print("interrumpido", file=sys.stderr)
+        print("interrupted", file=sys.stderr)
         return 130
     return EXIT_VALIDATION
 

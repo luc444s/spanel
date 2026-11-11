@@ -107,7 +107,7 @@ export function Select({ value, onChange, options, placeholder, className }: Sel
           className
         )}
       >
-        <span>{selected?.label ?? placeholder ?? "Seleccionar"}</span>
+        <span>{selected?.label ?? placeholder ?? "Select"}</span>
         <svg
           className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
           viewBox="0 0 24 24"

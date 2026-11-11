@@ -125,13 +125,13 @@ def detectar_capa1(container: object) -> Candidato:
     # wordpress:cli matches the image prefix and is the one-shot tool, not a
     # site: without this every provisioning leaves a ghost row.
     if image.startswith("wordpress:cli") or image.endswith("/wp-cli"):
-        return Candidato(False, False, SENAL_HERRAMIENTA, f"{image} es la herramienta wp-cli")
+        return Candidato(False, False, SENAL_HERRAMIENTA, f"{image} is the wp-cli tool")
     if image.startswith(PREFIXOS_DE_BASE_DATOS):
         return Candidato(
             False,
             False,
             SENAL_BASE_DATOS,
-            f"{image} es la base de datos del sitio de al lado",
+            f"{image} is the neighboring site's database",
         )
 
     # The label goes before the image: it is the strongest hint, because we
@@ -141,13 +141,13 @@ def detectar_capa1(container: object) -> Candidato:
             True,
             operable,
             SENAL_ETIQUETA,
-            f"tiene la etiqueta {ETIQUETA_SITIO} nuestra",
+            f"has our {ETIQUETA_SITIO} label",
         )
 
     # "wordpress" in any position: this is how bitnami/wordpress enters, which
     # does not have it at position 0 (rare case 6).
     if "wordpress" in image.lower():
-        return Candidato(True, operable, SENAL_IMAGEN, f"la imagen dice wordpress: {image}")
+        return Candidato(True, operable, SENAL_IMAGEN, f"the image says wordpress: {image}")
 
     return NADA
 
@@ -192,9 +192,13 @@ def detectar_capa2(container: object, detalle_inspect: object) -> Candidato:
     operable = es_operable(container)
     for destino in destinos_de_montaje(detalle_inspect):
         if destino == RUTA_WEB or destino.startswith(f"{RUTA_WEB}/"):
-            return Candidato(True, operable, SENAL_MONTAJE, f"monta {RUTA_WEB}, el sitio vive ahi")
+            return Candidato(
+                True, operable, SENAL_MONTAJE, f"mounts {RUTA_WEB}, the site lives there"
+            )
     if "WORDPRESS_DB_HOST" in entorno_de_inspect(detalle_inspect):
-        return Candidato(True, operable, SENAL_ENTORNO, "define WORDPRESS_DB_HOST en su entorno")
+        return Candidato(
+            True, operable, SENAL_ENTORNO, "declares WORDPRESS_DB_HOST in its environment"
+        )
     return base
 
 

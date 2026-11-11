@@ -169,7 +169,7 @@ class HostingService:
         info = self._inspect(site.container_name)
         if info is None:
             raise AppError(
-                f"El contenedor {site.container_name} no existe o no responde",
+                f"Container {site.container_name} does not exist or is not responding",
                 status_code=409,
                 code="hosting_site_unavailable",
             )
@@ -179,7 +179,7 @@ class HostingService:
         candidato = candidato_de(info)
         if not candidato.es_sitio:
             raise AppError(
-                f"El contenedor {site.container_name} ya no es un sitio WordPress",
+                f"Container {site.container_name} is no longer a WordPress site",
                 status_code=409,
                 code="hosting_site_unavailable",
             )
@@ -188,8 +188,8 @@ class HostingService:
     def _require_wordpress(self, site: HostingSite) -> None:
         if site.kind == "static":
             raise AppError(
-                f"El sitio {site.container_name} es estático; "
-                "esta operación es solo para WordPress",
+                f"Site {site.container_name} is static; "
+                "this operation is only for WordPress",
                 status_code=409,
                 code="hosting_site_wrong_kind",
             )
@@ -226,7 +226,7 @@ class HostingService:
         info, managed = self._require_site(site)
         if not managed:
             raise AppError(
-                f"El sitio {site.container_name} no es gestionable (spanel.managed=false)",
+                f"Site {site.container_name} is not manageable (spanel.managed=false)",
                 status_code=409,
                 code="hosting_site_not_managed",
             )
@@ -272,7 +272,7 @@ class HostingService:
             if row is None:
                 # BEFORE any Docker call, any volume or any row (I2/I3).
                 raise AppError(
-                    f"El perfil {profile} no existe",
+                    f"Profile {profile} does not exist",
                     status_code=404,
                     code="hosting_profile_unknown",
                 )
@@ -283,7 +283,7 @@ class HostingService:
         tenant = self._db.get(Tenant, tenant_id)
         if tenant is None or not tenant.is_active:
             raise AppError(
-                "Tenant inactivo o inexistente", status_code=409, code="hosting_tenant_inactive"
+                "Tenant inactive or nonexistent", status_code=409, code="hosting_tenant_inactive"
             )
         if self._db.scalar(
             select(HostingSite.id).where(
@@ -291,11 +291,11 @@ class HostingService:
             )
         ):
             raise AppError(
-                "Dominio o nombre ya registrado", status_code=409, code="hosting_site_conflict"
+                "Domain or name already registered", status_code=409, code="hosting_site_conflict"
             )
         if app is not None and is_extra_claimed(app, self._db, domain):
             raise AppError(
-                "El dominio ya está publicado como dominio extra por el plugin de dominios",
+                "The domain is already published as an extra domain by the domains plugin",
                 status_code=409,
                 code="hosting_site_conflict",
             )
@@ -304,7 +304,7 @@ class HostingService:
             owner = domain_owner(app, self._db, domain)
             if owner is not None and owner != tenant_id:
                 raise AppError(
-                    "El dominio lo administra otro tenant",
+                    "The domain is managed by another tenant",
                     status_code=409,
                     code="hosting_site_domain_conflict",
                 )
@@ -412,7 +412,7 @@ class HostingService:
             except Exception as exc:
                 failures = cleanup()
                 raise AppError(
-                    f"No se pudo publicar el dominio: {exc}; limpieza: {failures}",
+                    f"Could not publish the domain: {exc}; cleanup: {failures}",
                     status_code=409,
                     code="hosting_provision_failed",
                 ) from exc
@@ -442,7 +442,7 @@ class HostingService:
                     pass
             failures = cleanup()
             raise AppError(
-                f"El dominio lo administra otro tenant; limpieza: {failures}",
+                f"The domain is managed by another tenant; cleanup: {failures}",
                 status_code=409,
                 code="hosting_site_domain_conflict",
             ) from exc
@@ -458,12 +458,12 @@ class HostingService:
             failures = cleanup()
             if isinstance(exc, IntegrityError):
                 raise AppError(
-                    f"Dominio o nombre ya registrado; limpieza: {failures}",
+                    f"Domain or name already registered; cleanup: {failures}",
                     status_code=409,
                     code="hosting_site_conflict",
                 ) from exc
             raise AppError(
-                f"No se pudo registrar el sitio; limpieza: {failures}",
+                f"Could not register the site; cleanup: {failures}",
                 status_code=500,
                 code="hosting_provision_failed",
             ) from exc
@@ -535,7 +535,7 @@ class HostingService:
         names = SiteNames(site.container_name.removeprefix("spanel-").removesuffix("-wp"))
         if names.wp != site.container_name:
             raise AppError(
-                "Sitio externo: sin recursos gestionados",
+                "External site: no managed resources",
                 status_code=409,
                 code="hosting_site_not_managed",
             )
@@ -551,7 +551,7 @@ class HostingService:
                 kind, name, names, site.tenant_id
             ):
                 raise AppError(
-                    f"Recurso ajeno: {name}", status_code=409, code="hosting_site_not_managed"
+                    f"Foreign resource: {name}", status_code=409, code="hosting_site_not_managed"
                 )
         missing = [
             name
@@ -582,7 +582,7 @@ class HostingService:
         names = StaticNames(site.container_name.removeprefix("spanel-").removesuffix("-web"))
         if names.container != site.container_name:
             raise AppError(
-                "Sitio externo: sin recursos gestionados",
+                "External site: no managed resources",
                 status_code=409,
                 code="hosting_site_not_managed",
             )
@@ -594,7 +594,7 @@ class HostingService:
                 kind, name, names, site.tenant_id
             ):
                 raise AppError(
-                    f"Recurso ajeno: {name}", status_code=409, code="hosting_site_not_managed"
+                    f"Foreign resource: {name}", status_code=409, code="hosting_site_not_managed"
                 )
         missing = [name for kind, name in resources if not provisioner.exists(kind, name)]
         publisher = get_site_domain_publisher(app)
@@ -603,7 +603,7 @@ class HostingService:
                 publisher.unpublish(site.domain)
             except Exception as exc:
                 raise AppError(
-                    f"No se pudo quitar la ruta publicada: {exc}",
+                    f"Could not remove the published route: {exc}",
                     status_code=409,
                     code="hosting_delete_failed",
                 ) from exc
@@ -678,13 +678,13 @@ class HostingService:
         db_info = self._inspect(host)
         if db_info is None:
             raise AppError(
-                f"El contenedor {host} no existe o no responde",
+                f"Container {host} does not exist or is not responding",
                 status_code=409,
                 code="hosting_database_unavailable",
             )
         if estado_del_contenedor(db_info) != "running":
             raise AppError(
-                f"La base de datos {host} no está en marcha",
+                f"Database {host} is not running",
                 status_code=409,
                 code="hosting_database_stopped",
             )
@@ -717,7 +717,7 @@ class HostingService:
             argv = connect_args(network, host)
         except ValueError as exc:
             raise AppError(
-                "La red de bases de datos no es válida",
+                "The database network is invalid",
                 status_code=409,
                 code="hosting_phpmyadmin_unavailable",
             ) from exc
@@ -730,14 +730,14 @@ class HostingService:
             )
         except (OSError, ValueError) as exc:
             raise AppError(
-                "No se pudo preparar la red de la base de datos",
+                "Could not prepare the database network",
                 status_code=409,
                 code="hosting_phpmyadmin_unavailable",
             ) from exc
         if result.returncode:
             # The command names containers and a network, never a password.
             raise AppError(
-                f"No se pudo conectar {host} a la red {network}",
+                f"Could not connect {host} to network {network}",
                 status_code=409,
                 code="hosting_phpmyadmin_unavailable",
             )
@@ -753,18 +753,18 @@ class HostingService:
             _, host, database, user, password = self._database_binding_for(site, info)
         except AppError as exc:
             raise AppError(
-                "Sitio o base de datos no disponible",
+                "Site or database is not available",
                 status_code=409,
                 code="hosting_phpmyadmin_unavailable",
             ) from exc
         if estado_del_contenedor(info) != "running":
             raise AppError(
-                "Sitio no disponible", status_code=409, code="hosting_phpmyadmin_unavailable"
+                "Site not available", status_code=409, code="hosting_phpmyadmin_unavailable"
             )
         db_info = self._inspect(host)
         if db_info is None or estado_del_contenedor(db_info) != "running":
             raise AppError(
-                "Base de datos no disponible",
+                "Database not available",
                 status_code=409,
                 code="hosting_phpmyadmin_unavailable",
             )
@@ -777,7 +777,7 @@ class HostingService:
                 validate_network_name(network)
             except ValueError as exc:
                 raise AppError(
-                    "La red de bases de datos no es válida",
+                    "The database network is invalid",
                     status_code=409,
                     code="hosting_phpmyadmin_unavailable",
                 ) from exc
@@ -874,7 +874,7 @@ class HostingService:
             )
         except Fallo as exc:
             raise AppError(
-                f"No se pudieron leer los usuarios de {site.container_name}: {exc}",
+                f"Could not read users from {site.container_name}: {exc}",
                 status_code=409,
                 code="hosting_site_unavailable",
             ) from exc
@@ -910,7 +910,7 @@ class HostingService:
             # Visible but outside the operations scope. Nothing is written,
             # not even the audit row.
             raise AppError(
-                f"El sitio {site.container_name} no es gestionable (spanel.managed=false)",
+                f"Site {site.container_name} is not manageable (spanel.managed=false)",
                 status_code=409,
                 code="hosting_site_not_managed",
             )
@@ -962,14 +962,14 @@ class HostingService:
             )
         except Fallo as exc:
             raise AppError(
-                f"No se pudo restablecer la contraseña en {site.container_name}: {exc}",
+                f"Could not reset the password in {site.container_name}: {exc}",
                 status_code=409,
                 code="hosting_password_reset_failed",
             ) from exc
 
         if read_back != hash_nuevo:
             raise AppError(
-                f"La escritura en {site.container_name} no se pudo verificar por ID",
+                f"The write in {site.container_name} could not be verified by ID",
                 status_code=500,
                 code="hosting_password_readback_failed",
             )
@@ -1076,7 +1076,7 @@ class HostingService:
     ) -> StaticProfileSummary:
         if self._db.get(StaticProfile, data.id) is not None:
             raise AppError(
-                f"El perfil {data.id} ya existe",
+                f"Profile {data.id} already exists",
                 status_code=409,
                 code="hosting_profile_conflict",
             )
@@ -1105,7 +1105,7 @@ class HostingService:
             # The builtin keeps its curated name; the image stays editable.
             if row.id == "nginx" and data.name != row.name:
                 raise AppError(
-                    "El perfil builtin nginx no se puede renombrar",
+                    "The builtin nginx profile cannot be renamed",
                     status_code=409,
                     code="hosting_profile_builtin",
                 )
@@ -1147,14 +1147,14 @@ class HostingService:
             # The builtin is the backfill target of every migration; without
             # it, existing static rows would dangle.
             raise AppError(
-                "El perfil builtin nginx no se puede borrar",
+                "The builtin nginx profile cannot be deleted",
                 status_code=409,
                 code="hosting_profile_builtin",
             )
         in_use = self._db.scalar(select(HostingSite.id).where(HostingSite.profile_id == profile_id))
         if in_use:
             raise AppError(
-                f"El perfil {profile_id} está en uso por sitios existentes",
+                f"Profile {profile_id} is in use by existing sites",
                 status_code=409,
                 code="hosting_profile_in_use",
             )

@@ -14,7 +14,7 @@ export function CorePdfViewer({
   fileUrl,
   workerUrl,
   emptyMessage = "Sin PDF disponible.",
-  loadingMessage = "Cargando PDF...",
+  loadingMessage = "Loading PDF...",
   heightClassName = "h-[500px]",
 }: CorePdfViewerProps) {
   if (!fileUrl) {

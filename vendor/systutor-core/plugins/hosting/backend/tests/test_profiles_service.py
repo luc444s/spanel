@@ -28,7 +28,7 @@ def db(tmp_path):
         session.add(
             StaticProfile(
                 id="nginx",
-                name="Nginx (estático)",
+                name="Nginx (static)",
                 image="nginx:alpine",
                 web_root="/usr/share/nginx/html",
                 container_port=80,

@@ -81,14 +81,14 @@ def test_rechaza_secreto_como_si_fuera_config() -> None:
 
 
 def test_rechaza_valor_invalido() -> None:
-    with pytest.raises(AppError, match="no es valido"):
+    with pytest.raises(AppError, match="is not valid"):
         validate_env_updates({"PHP_MEMORY_LIMIT": "mucho"})
     with pytest.raises(AppError):
         validate_env_updates({"WP_DEBUG": "quizas"})
 
 
 def test_rechaza_saltos_de_linea() -> None:
-    with pytest.raises(AppError, match="saltos de linea"):
+    with pytest.raises(AppError, match="line breaks"):
         validate_env_updates({"TZ": "America/Bogota\nWORDPRESS_DB_HOST=x"})
 
 
@@ -156,5 +156,5 @@ def test_build_run_args_no_inventa_imagen() -> None:
     info = _inspect()
     del info["Config"]["Image"]
     info["Image"] = ""
-    with pytest.raises(Fallo, match="imagen"):
+    with pytest.raises(Fallo, match="image"):
         build_run_args(info, name="spanel-demo-wp", env_file="/x/wp.env")

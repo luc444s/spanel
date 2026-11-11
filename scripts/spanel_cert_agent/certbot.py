@@ -37,7 +37,7 @@ def _challenge_args(config: AgentConfig) -> list[str]:
         # El plugin DNS vive en Certbot; el agente solo nombra el autenticador
         # configurado. Se exige un nombre simple, sin flags.
         if not plugin or not plugin.replace("-", "").replace("_", "").isalnum():
-            raise CertbotError("challenge=dns-01 requiere un dns_plugin válido")
+            raise CertbotError("challenge=dns-01 requires a valid dns_plugin")
         return [f"--dns-{plugin}"]
     raise CertbotError(f"challenge desconocido: {challenge}")
 
@@ -70,4 +70,4 @@ def build_argv(config: AgentConfig, hostname: str, action: str) -> list[str]:
             hostname,
             *_challenge_args(config),
         ]
-    raise CertbotError("Acción inválida")
+    raise CertbotError("Invalid action")

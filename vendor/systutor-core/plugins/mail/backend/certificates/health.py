@@ -27,7 +27,7 @@ def _safe_text(value: object, limit: int = 500) -> str | None:
     if not isinstance(value, str) or not value.strip():
         return None
     if contains_secret_material(value):
-        return "Detalle no disponible"
+        return "Detail not available"
     return value.strip()[:limit]
 
 
@@ -207,7 +207,7 @@ def alert_view(
                 "code": _safe_text(item.get("code")) or "unknown_alert",
                 "severity": severity,
                 "hostname": hostname,
-                "message": _safe_text(item.get("message")) or "Alerta sin detalle",
+                "message": _safe_text(item.get("message")) or "Alert without details",
                 "created_at": _safe_text(item.get("created_at")),
             }
         )

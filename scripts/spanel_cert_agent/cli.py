@@ -31,39 +31,39 @@ from .state import read_json
 
 
 def _add_common(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--config", default=None, help="ruta de cert-agent.toml")
+    parser.add_argument("--config", default=None, help="path to cert-agent.toml")
     parser.add_argument("--json", action="store_true", dest="as_json")
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="spanel-cert-agent")
-    parser.add_argument("--config", default=None, help="ruta de cert-agent.toml")
+    parser.add_argument("--config", default=None, help="path to cert-agent.toml")
     parser.add_argument("--json", action="store_true", dest="as_json")
     sub = parser.add_subparsers(dest="command", required=True)
 
     run = sub.add_parser("run-once", help="procesa solicitudes pendientes y refresca estado")
     _add_common(run)
-    refresh = sub.add_parser("refresh", help="solo regenera state.json")
+    refresh = sub.add_parser("refresh", help="only regenerate state.json")
     _add_common(refresh)
-    status = sub.add_parser("status", help="muestra el estado publicado")
+    status = sub.add_parser("status", help="show the published state")
     _add_common(status)
 
-    verify = sub.add_parser("verify", help="probes TLS sin escribir estado")
+    verify = sub.add_parser("verify", help="TLS probes without writing state")
     _add_common(verify)
     verify.add_argument("--hostname", default=None)
 
-    audit = sub.add_parser("audit", help="verificación continua y alertas")
+    audit = sub.add_parser("audit", help="continuous verification and alerts")
     _add_common(audit)
 
-    sync = sub.add_parser("sync", help="instala si Certbot cambió la huella")
+    sync = sub.add_parser("sync", help="install if Certbot changed the fingerprint")
     _add_common(sync)
     sync.add_argument("--hostname", default=None)
 
-    install = sub.add_parser("install", help="instalación transaccional")
+    install = sub.add_parser("install", help="transactional installation")
     _add_common(install)
     install.add_argument("--hostname", required=True)
 
-    rollback = sub.add_parser("rollback", help="revierte a la generación anterior")
+    rollback = sub.add_parser("rollback", help="revert to the previous generation")
     _add_common(rollback)
     rollback.add_argument("--hostname", required=True)
     return parser
@@ -120,12 +120,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "status":
         state = read_json(Path(config.state_path))
         if state is None:
-            print(f"sin estado legible en {config.state_path}", file=sys.stderr)
+            print(f"no readable state in {config.state_path}", file=sys.stderr)
             return 1
         if as_json:
             print(json.dumps(state, ensure_ascii=False, sort_keys=True))
         else:
-            print(f"generado: {state.get('generated_at')}")
+            print(f"generated: {state.get('generated_at')}")
             for item in state.get("certificates", []):
                 print(f"{item.get('hostname')}: {item.get('status')} ({item.get('deployment')})")
         return 0
@@ -144,7 +144,7 @@ def main(argv: list[str] | None = None) -> int:
             if as_json:
                 print(json.dumps(report, ensure_ascii=False, sort_keys=True))
             else:
-                print(f"generado: {report['health'].get('generated_at')}")
+                print(f"generated: {report['health'].get('generated_at')}")
             return 0
         if args.command == "sync":
             outcomes = [

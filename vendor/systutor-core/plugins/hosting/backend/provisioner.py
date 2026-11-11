@@ -23,7 +23,7 @@ from .transport import (
 def slug_for(name: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", name.strip().lower()).strip("-")
     if not re.fullmatch(r"[a-z0-9-]{3,40}", slug):
-        raise ValueError("El nombre debe producir un slug de 3 a 40 caracteres")
+        raise ValueError("The name must produce a slug of 3 to 40 characters")
     return slug
 
 
@@ -57,7 +57,7 @@ class Provisioner:
             # Neither stdin nor the environment file's contents are reflected in errors.
             message = (result.stderr or result.stdout).strip()[:400]
             if input:
-                message = message.replace(input.strip(), "<oculto>")
+                message = message.replace(input.strip(), "<hidden>")
             raise Fallo(f"{command}: {message}")
         return result.stdout + (result.stderr if args and args[0] == "logs" else "")
 
@@ -73,10 +73,10 @@ class Provisioner:
 
     def preflight(self, names: SiteNames) -> None:
         if not self.exists("network", self.settings.network):
-            raise Fallo(f"No existe la red {self.settings.network}")
+            raise Fallo(f"Network {self.settings.network} does not exist")
         for name in (names.wp, names.db):
             if self.exists("container", name) or self.exists("volume", name):
-                raise Fallo(f"Ya existe un recurso con nombre {name}")
+                raise Fallo(f"A resource named {name} already exists")
 
     def _wait(self, action: Callable[[], object], label: str) -> None:
         deadline = time.monotonic() + self.settings.install_timeout
@@ -86,7 +86,7 @@ class Provisioner:
                 return
             except Fallo as exc:
                 if time.monotonic() >= deadline:
-                    raise Fallo(f"Tiempo agotado esperando {label}: {exc}") from exc
+                    raise Fallo(f"Timed out waiting for {label}: {exc}") from exc
                 time.sleep(2)
 
     def _labels(self, names: SiteNames, tenant_id: str) -> list[str]:
@@ -157,7 +157,7 @@ class Provisioner:
                 try:
                     self.command(*connect_args(db_network, names.db))
                 except ValueError as exc:
-                    raise Fallo(f"La red de bases de datos no es válida: {exc}") from exc
+                    raise Fallo(f"The database network is invalid: {exc}") from exc
 
             def ready() -> None:
                 self.command(

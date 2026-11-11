@@ -1,7 +1,8 @@
 import { cn } from "@systutor/shell/ui/cn";
 
+import { useT } from "@/i18n/use-i18n";
 import type { CertificateHealthItem, MailCertificate } from "../../api";
-import { STATUS_LABELS, deploymentLabel, expiryLabel, sourceLabel, statusTone } from "./format";
+import { deploymentLabel, expiryLabel, sourceLabel, statusLabel, statusTone } from "./format";
 import type { PendingJob } from "./types";
 
 export function CertificateRow({
@@ -19,15 +20,16 @@ export function CertificateRow({
   critical: boolean;
   onOpen: (cert: MailCertificate) => void;
 }) {
-  const label = pending ? "Pendiente" : STATUS_LABELS[cert.status];
+  const t = useT();
+  const label = pending ? t("Pending") : statusLabel(cert.status);
   const healthOk = health?.ok;
 
   return (
     <div
       role="button"
       tabIndex={0}
-      title="Doble clic para administrar este certificado"
-      aria-label={`${cert.hostname}. Doble clic para administrar`}
+      title={t("Double click to manage this certificate")}
+      aria-label={t("{hostname}. Double click to manage", { hostname: cert.hostname })}
       onDoubleClick={() => onOpen(cert)}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -52,7 +54,7 @@ export function CertificateRow({
           {deploymentLabel(cert)} · {expiryLabel(cert)}
         </p>
         <p className="mt-0.5">
-          Salud: {healthOk === true ? "OK" : healthOk === false ? "Fallo" : "Sin datos"}
+          {t("Health:")} {healthOk === true ? t("OK") : healthOk === false ? t("Failing") : t("No data")}
         </p>
       </div>
       <div className="flex items-center justify-start gap-2 sm:justify-end">
@@ -62,8 +64,8 @@ export function CertificateRow({
         {critical ? (
           <span
             className="h-2 w-2 rounded-full bg-destructive"
-            title="Tiene alertas críticas"
-            aria-label="Tiene alertas críticas"
+            title={t("Has critical alerts")}
+            aria-label={t("Has critical alerts")}
           />
         ) : null}
       </div>

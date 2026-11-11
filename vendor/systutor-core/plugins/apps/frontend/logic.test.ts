@@ -45,10 +45,12 @@ EMPTY=
   });
 
   it("rejects invalid and duplicate dotenv names", () => {
-    expect(() => parseDotenv("BAD NAME=value")).toThrow("línea 1");
-    expect(() => parseDotenv("API_KEY=one\nAPI_KEY=two")).toThrow("duplicada: API_KEY");
+    expect(() => parseDotenv("BAD NAME=value")).toThrow("line 1");
+    expect(() => parseDotenv("API_KEY=one\nAPI_KEY=two")).toThrow(
+      "Duplicate .env variable: API_KEY",
+    );
     expect(() => parseDotenv("APP_DB_PASSWORD=manual")).toThrow(
-      "administra automáticamente APP_DB_PASSWORD",
+      "Apps manages APP_DB_PASSWORD automatically",
     );
   });
 

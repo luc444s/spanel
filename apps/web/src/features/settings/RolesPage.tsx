@@ -22,6 +22,7 @@ import { DataTable } from "@systutor/shell/ui/data-table";
 import { Dialog } from "@systutor/shell/ui/dialog";
 import { Input } from "@systutor/shell/ui/input";
 import { Select } from "@systutor/shell/ui/select";
+import { useT } from "@/i18n/use-i18n";
 
 type RoleFormState = {
   id?: string;
@@ -32,6 +33,7 @@ type RoleFormState = {
 const EMPTY_ROLE_FORM: RoleFormState = { name: "", permission_names: [] };
 
 export function RolesPage() {
+  const t = useT();
   const queryClient = useQueryClient();
   const permissions = useAuthStore((state) => state.permissions);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -77,7 +79,7 @@ export function RolesPage() {
     try {
       await saveRoleMutation.mutateAsync(formState);
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : "No se pudo guardar el rol.");
+      setFormError(error instanceof Error ? error.message : t("Could not save the role."));
     }
   }
 
@@ -142,6 +144,7 @@ export function RolesPageContent({
   onFieldChange,
   onToggleRole,
 }: RolesPageContentProps) {
+  const t = useT();
   const [filterModule, setFilterModule] = useState("_all");
 
   const modules = useMemo(() => {
@@ -158,45 +161,45 @@ export function RolesPageContent({
     <section className="space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-2">
-          <h1 className="text-2xl font-semibold text-foreground">Roles</h1>
-          <p className="text-sm text-muted-foreground">Administracion tenant-aware de roles y permisos efectivos.</p>
+          <h1 className="text-2xl font-semibold text-foreground">{t("Roles")}</h1>
+          <p className="text-sm text-muted-foreground">{t("Tenant-aware administration of roles and effective permissions.")}</p>
         </div>
-        {canManage ? <Button onClick={onCreate}>Crear rol</Button> : null}
+        {canManage ? <Button onClick={onCreate}>{t("Create role")}</Button> : null}
       </div>
 
       {hasError ? (
-        <Alert title="No se pudieron cargar los roles">Revisa permisos o conectividad.</Alert>
+        <Alert title={t("Could not load roles")}>{t("Check permissions or connectivity.")}</Alert>
       ) : null}
 
       <Card>
         <CardHeader>
-          <CardTitle>Roles</CardTitle>
-          <CardDescription>Roles tenant-scoped con catálogo global de permisos.</CardDescription>
+          <CardTitle>{t("Roles")}</CardTitle>
+          <CardDescription>{t("Tenant-scoped roles with a global permission catalog.")}</CardDescription>
         </CardHeader>
         <CardContent>
           <DataTable
             columns={[
-              { key: "name", header: "Rol", render: (role) => role.name },
+              { key: "name", header: t("Role"), render: (role) => role.name },
               {
                 key: "count",
-                header: "Permisos",
+                header: t("Permissions"),
                 render: (role) => String(role.permissions.length),
               },
-              { key: "status", header: "Estado", render: (role) => <Badge>{role.active ? "Activo" : "Inactivo"}</Badge> },
+              { key: "status", header: t("Status"), render: (role) => <Badge>{role.active ? t("Active") : t("Inactive")}</Badge> },
               {
                 key: "actions",
-                header: "Acciones",
+                header: t("Actions"),
                 className: "w-56",
                 render: (role) => (
                   <div className="flex flex-wrap gap-2">
                     {canManage ? (
                       <Button variant="secondary" onClick={() => onEdit(role)}>
-                        Editar
+                        {t("Edit")}
                       </Button>
                     ) : null}
                     {canManage ? (
                       <Button variant="secondary" onClick={() => onToggleRole(role)}>
-                        {role.active ? "Desactivar" : "Activar"}
+                        {role.active ? t("Deactivate") : t("Activate")}
                       </Button>
                     ) : null}
                   </div>
@@ -205,31 +208,31 @@ export function RolesPageContent({
             ]}
             rows={roles}
             rowKey={(role) => role.id}
-            emptyMessage="No hay roles definidos para este tenant."
+            emptyMessage={t("No roles defined for this tenant.")}
           />
         </CardContent>
       </Card>
 
       <Dialog
         open={isDialogOpen}
-        title={formState.id ? "Editar rol" : "Crear rol"}
-        description="Formulario mínimo del core management."
+        title={formState.id ? t("Edit role") : t("Create role")}
+        description={t("Minimal core management form.")}
         onClose={onCloseDialog}
       >
         <form className="space-y-4" onSubmit={onSubmit}>
           <label className="block space-y-2 text-sm text-foreground">
-            <span>Nombre</span>
+            <span>{t("Name")}</span>
             <Input value={formState.name} onChange={(event) => onFieldChange({ name: event.target.value })} />
           </label>
 
           <fieldset className="space-y-2">
-            <legend className="text-sm text-foreground">Permisos</legend>
+            <legend className="text-sm text-foreground">{t("Permissions")}</legend>
             <Select
               value={filterModule}
               onChange={setFilterModule}
               options={modules.map((m) => ({
                 value: m,
-                label: m === "_all" ? "Todos los módulos" : m,
+                label: m === "_all" ? t("All modules") : m,
               }))}
             />
             <div className="grid max-h-80 gap-2 overflow-y-auto rounded-md border border-border bg-muted/60 p-3 sm:grid-cols-2">
@@ -255,14 +258,14 @@ export function RolesPageContent({
             </div>
           </fieldset>
 
-          {formError ? <Alert title="No se pudo guardar el rol">{formError}</Alert> : null}
+          {formError ? <Alert title={t("Could not save the role")}>{formError}</Alert> : null}
 
           <div className="flex justify-end gap-3">
             <Button type="button" variant="secondary" onClick={onCloseDialog}>
-              Cancelar
+              {t("Cancel")}
             </Button>
             <Button type="submit" disabled={isSaving}>
-              {formState.id ? "Guardar cambios" : "Crear rol"}
+              {formState.id ? t("Save changes") : t("Create role")}
             </Button>
           </div>
         </form>

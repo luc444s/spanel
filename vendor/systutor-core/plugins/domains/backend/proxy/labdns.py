@@ -20,7 +20,7 @@ class LabDnsMixin:
         ip = self.container_ip(self.settings.traefik_container)
         if add and not ip:
             raise ProxyError(
-                "no se pudo obtener la IP del Traefik del laboratorio", EXIT_TRANSPORT
+                "could not obtain the lab Traefik IP", EXIT_TRANSPORT
             )
         text = self._read_text(path) or ""
         targets = set(domains)

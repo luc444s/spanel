@@ -5,6 +5,7 @@ import { Alert } from "@systutor/shell/ui/alert";
 import { Button } from "@systutor/shell/ui/button";
 import { toast } from "@systutor/shell/ui/toast";
 import { useAuthStore } from "../../../../../../apps/web/src/features/auth/store";
+import { useT } from "@/i18n/use-i18n";
 
 import { appsKeys, listApplications } from "../api";
 import { canPlatformMutate } from "../logic";
@@ -15,6 +16,7 @@ import { GithubConnectionCard } from "../components/GithubConnectionCard";
 import { useGithubStatus } from "../useGithubStatus";
 
 export default function AppsPage() {
+  const t = useT();
   const queryClient = useQueryClient();
   const permissions = useAuthStore((state) => state.permissions);
   const canConnect = permissions.includes("apps.github.connect");
@@ -38,9 +40,11 @@ export default function AppsPage() {
     void queryClient.invalidateQueries({ queryKey: appsKeys.status });
     void queryClient.invalidateQueries({ queryKey: appsKeys.installations });
     if (result === "error") {
-      toast.error("No se pudo completar la conexión con GitHub");
+      toast.error(t("Could not complete the GitHub connection"));
     } else {
-      toast.success(result === "installed" ? "GitHub App instalada; sincronizando repositorios" : "GitHub conectado");
+      toast.success(result === "installed"
+        ? t("GitHub App installed; syncing repositories")
+        : t("GitHub connected"));
     }
   }, [queryClient]);
 
@@ -56,13 +60,13 @@ export default function AppsPage() {
     }
   }
 
-  if (applications.isLoading) return <div className="flex min-h-48 items-center justify-center text-sm text-muted-foreground">Cargando Apps…</div>;
-  if (applications.error) return <Alert title="Error">No se pudieron cargar las aplicaciones.</Alert>;
+  if (applications.isLoading) return <div className="flex min-h-48 items-center justify-center text-sm text-muted-foreground">{t("Loading Apps…")}</div>;
+  if (applications.error) return <Alert title={t("Error")}>{t("Could not load applications.")}</Alert>;
 
   return <section className="space-y-4">
     <div className="flex flex-wrap items-center justify-between gap-2">
-      <div><h1 className="text-lg font-semibold text-foreground">Apps</h1><p className="text-sm text-muted-foreground">Despliegues Compose async desde GitHub</p></div>
-      {canCreate ? <Button disabled={!githubStatus.data?.connected} onClick={() => setCreateOpen(true)}>Nueva aplicación</Button> : null}
+      <div><h1 className="text-lg font-semibold text-foreground">{t("Apps")}</h1><p className="text-sm text-muted-foreground">{t("Async Compose deployments from GitHub")}</p></div>
+      {canCreate ? <Button disabled={!githubStatus.data?.connected} onClick={() => setCreateOpen(true)}>{t("New application")}</Button> : null}
     </div>
     <GithubConnectionCard canConnect={canConnect} statusQuery={githubStatus} />
 
@@ -70,10 +74,10 @@ export default function AppsPage() {
       {applications.data?.map((application) => <button key={application.id} type="button" className="rounded-md border border-border bg-card p-4 text-left hover:bg-muted" onClick={() => setSelected(application)}>
         <div className="flex items-center justify-between gap-2"><strong>{application.name}</strong><span className="rounded bg-muted px-2 py-0.5 text-xs">{application.status}</span></div>
         <p className="mt-2 text-sm text-muted-foreground">{application.repository} · {application.branch}</p>
-        <p className="mt-1 text-xs text-muted-foreground">{application.domain ?? "Sin dominio"}</p>
+        <p className="mt-1 text-xs text-muted-foreground">{application.domain ?? t("No domain")}</p>
       </button>)}
     </div>
-    {applications.data?.length === 0 ? <p className="rounded border border-border p-4 text-sm text-muted-foreground">No hay aplicaciones.</p> : null}
+    {applications.data?.length === 0 ? <p className="rounded border border-border p-4 text-sm text-muted-foreground">{t("No applications.")}</p> : null}
 
     <CreateApplicationDialog open={createOpen} platform={platform} onClose={() => setCreateOpen(false)} onAccepted={accepted} />
     <ApplicationDetail key={selected?.id ?? "no-application"} application={selected} canCreate={canCreate} canManage={canManage}

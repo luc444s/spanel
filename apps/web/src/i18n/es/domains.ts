@@ -1,0 +1,62 @@
+const messages: Record<string, string> = {
+  "No data": "Sin datos",
+  "Valid": "Válido",
+  "No DNS": "Sin DNS",
+  "Pending": "Pendiente",
+  "Reserved domain, not published": "Dominio reservado sin publicar",
+  "Not published": "Sin publicar",
+  "Not verified yet": "Todavía no se verificó",
+  "Verify": "Verificar",
+  "Domain added": "Dominio agregado",
+  "Domain linked": "Dominio vinculado",
+  "Domain removed": "Dominio eliminado",
+  "Domains": "Dominios",
+  "Add domain": "Agregar dominio",
+  "Could not load domains": "No se pudieron cargar los dominios",
+  "The proxy is not responding": "El proxy no responde",
+  "Only domains with registered ownership are shown; published routes are missing.":
+    "Se muestran solo los dominios con propiedad registrada; faltan las rutas publicadas.",
+  "Loading domains...": "Cargando dominios...",
+  "No domains yet. You can reserve one without a site and link it later.":
+    "Todavía no hay dominios. Puedes reservar uno sin sitio y vincularlo después.",
+  "No domains yet. Add one to publish it in this tenant.":
+    "Todavía no hay dominios. Agrega uno para publicarlo en este tenant.",
+  "Domain": "Dominio",
+  "Site": "Sitio",
+  "Status": "Estado",
+  "Owner": "Propietario",
+  "Certificate": "Certificado",
+  "Mailboxes": "Buzones",
+  "Actions": "Acciones",
+  "Two owners": "Dos propietarios",
+  "Published": "Publicado",
+  "Managed by Hosting": "Gestionado por Hosting",
+  "Hosting": "Hosting",
+  "Extra": "Extra",
+  "Mail also exists in tenant domains": "El correo también existe en dominios del tenant",
+  "Link": "Vincular",
+  "Remove": "Quitar",
+  "Remove extra": "Quitar extra",
+  "Destination": "Destino",
+  "Reserve only (do not publish)": "Solo reservar (sin publicar)",
+  "The domain will be published on {container}. The Traefik route will be created and the certificate requested.":
+    "El dominio se publicará en {container}. Se creará la ruta en Traefik y se solicitará el certificado.",
+  "Reserve the domain for this tenant. It is not published in Traefik and no certificate is issued until you link it to a site.":
+    "Reserva el dominio para este tenant. No se publica en Traefik ni se emite certificado hasta que lo vincules a un sitio.",
+  "Also add www.{domain}": "Agregar también www.{domain}",
+  "domain": "dominio",
+  "Cancel": "Cancelar",
+  "Could not add": "No se pudo agregar",
+  "example.com": "ejemplo.com",
+  "Add": "Agregar",
+  "Link domain": "Vincular dominio",
+  "The domain will be published on {container}.": "El dominio se publicará en {container}.",
+  "the chosen site": "el sitio elegido",
+  "Remove domain": "Quitar dominio",
+  "The proxy route is removed. The site and its primary domain are unchanged.":
+    "Se elimina la ruta del proxy. El sitio y su dominio primario no cambian.",
+  "The domain reservation is released. There is no published route or certificate.":
+    "Se libera la reserva del dominio. No hay ruta publicada ni certificado.",
+};
+
+export default messages;

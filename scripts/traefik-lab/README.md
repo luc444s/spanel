@@ -1,39 +1,41 @@
-# Laboratorio Traefik + CA ACME local (`traefik-lab.sh`)
+# Traefik + local ACME CA lab (`traefik-lab.sh`)
 
-Laboratorio aislado para probar dominios con **HTTPS real** sin tocar el
-Traefik del servidor (`traefik`, `/opt/stacks/traefik/`) y sin depender de un
-dominio público.
+English | [Español](README.es.md)
+
+Isolated lab for testing domains with **real HTTPS** without touching the
+server's Traefik (`traefik`, `/opt/stacks/traefik/`) and without depending on a
+public domain.
 
 - `spanel-traefik-lab`: Traefik v3.7.8 (proxy)
-- `spanel-step-ca`: CA ACME local (`smallstep/step-ca`)
-- `spanel-lab-dns`: DNS interno (`dnsmasq`)
-- Red: `spanel-traefik-lab`
-- Volumen de la CA: `spanel-step-ca-data`
-- Label de todos los recursos: `com.spanel.lab=true`
+- `spanel-step-ca`: local ACME CA (`smallstep/step-ca`)
+- `spanel-lab-dns`: internal DNS (`dnsmasq`)
+- Network: `spanel-traefik-lab`
+- CA volume: `spanel-step-ca-data`
+- Label on every resource: `com.spanel.lab=true`
 
-## Requisitos
+## Requirements
 
-- Bash y Docker con daemon accesible.
-- Puertos locales libres: `9080`, `9081`, `443` o `9443`, y `5353` si se
-  publica el DNS.
-- `plan` no necesita Docker y no modifica nada.
-- `openssl` (para mostrar la huella de la CA).
+- Bash and Docker with an accessible daemon.
+- Free local ports: `9080`, `9081`, `443` or `9443`, and `5353` if DNS is
+  published.
+- `plan` does not need Docker and changes nothing.
+- `openssl` (to show the CA fingerprint).
 
-## Uso
+## Usage
 
 ```bash
 ./scripts/traefik-lab.sh --help
-./scripts/traefik-lab.sh adopt     # inspecciona el Traefik real (solo lectura)
-./scripts/traefik-lab.sh plan      # muestra qué haría, sin cambios
-./scripts/traefik-lab.sh up        # arranca Traefik + CA + DNS
+./scripts/traefik-lab.sh adopt     # inspects the real Traefik (read-only)
+./scripts/traefik-lab.sh plan      # shows what it would do, without changes
+./scripts/traefik-lab.sh up        # starts Traefik + CA + DNS
 ./scripts/traefik-lab.sh status
-./scripts/traefik-lab.sh down      # elimina solo recursos del laboratorio
-./scripts/traefik-lab.sh down --purge   # además borra datos, CA y volumen
+./scripts/traefik-lab.sh down      # removes only lab resources
+./scripts/traefik-lab.sh down --purge   # also deletes data, CA and volume
 ```
 
-## Cómo se emiten los certificados
+## How certificates are issued
 
-Traefik incluye un resolver `internal` que apunta a la CA local:
+Traefik ships an `internal` resolver that points to the local CA:
 
 ```yaml
 certificatesResolvers:
@@ -45,113 +47,116 @@ certificatesResolvers:
       tlsChallenge: {}
 ```
 
-El flujo es ACME real (TLS-ALPN-01): Traefik pide el certificado a `step-ca`,
-`step-ca` valida el nombre con el DNS interno y emite un X.509 firmado por la
-CA del laboratorio. El resultado es un certificado **criptográficamente real**
-pero **no de confianza pública**: hay que instalar la raíz local una vez.
+The flow is real ACME (TLS-ALPN-01): Traefik requests the certificate from
+`step-ca`, `step-ca` validates the name against the internal DNS and issues an
+X.509 signed by the lab CA. The result is a **cryptographically real**
+certificate but **not publicly trusted**: the local root must be installed
+once.
 
 ```bash
-# confiar en la CA (Linux)
+# trust the CA (Linux)
 sudo cp scripts/traefik-lab/ca/root_ca.crt /usr/local/share/ca-certificates/spanel-lab-ca.crt
 sudo update-ca-certificates
 ```
 
-La clave privada de la CA vive en el volumen `spanel-step-ca-data` y nunca se
-copia al repositorio. Solo se exporta `ca/root_ca.crt` (público).
+The CA private key lives in the `spanel-step-ca-data` volume and is never
+copied to the repository. Only `ca/root_ca.crt` (public) is exported.
 
-## Agregar un dominio
+## Adding a domain
 
 ```bash
-# 1. laboratorio arriba
+# 1. lab up
 ./scripts/traefik-lab.sh up
 
-# 2. sitio WordPress de prueba conectado automáticamente a la red del lab
+# 2. test WordPress site automatically connected to the lab network
 python3 scripts/proxy_domain.py add --site spanel-lucas-test-wp --domain lucas.spanel
 
-# opcional: abrir el link al terminar
+# optional: open the link when done
 python3 scripts/proxy_domain.py add --site spanel-lucas-test-wp --domain lucas.spanel --open
 
-# 3. resolver el nombre en el host (una vez)
+# 3. resolve the name on the host (once)
 echo "127.0.0.1 lucas.spanel" | sudo tee -a /etc/hosts
 
-# 4. abrir el link que imprimió el CLI
+# 4. open the link printed by the CLI
 ```
 
-`add` imprime la URL real (puerto incluido si no es 443), la línea de
-`/etc/hosts`, el comando `curl` verificado y el recordatorio de confiar en la
-CA. Con el puerto 443 libre, el link es limpio: `https://lucas.spanel`.
+`add` prints the real URL (including the port when it is not 443), the
+`/etc/hosts` line, the verified `curl` command and the reminder to trust the
+CA. With port 443 free, the link is clean: `https://lucas.spanel`.
 
-`--set-wordpress-url` actualiza `home` y `siteurl` con un `wordpress:cli`
-efímero que hereda el entorno del sitio por un archivo temporal `0600`, así
-funciona también cuando `wp-config.php` toma la BD de variables de entorno.
+`--set-wordpress-url` updates `home` and `siteurl` with an ephemeral
+`wordpress:cli` that inherits the site environment through a temporary `0600`
+file, so it also works when `wp-config.php` takes the DB from environment
+variables.
 
-## Puertos
+## Ports
 
-`up` decide el puerto HTTPS automáticamente:
+`up` picks the HTTPS port automatically:
 
-| Host (127.0.0.1) | Contenedor | Uso |
-| ---------------- | ---------- | --- |
-| 443 o 9443 | 443 | HTTPS (`websecure`) |
+| Host (127.0.0.1) | Container | Use |
+| ---------------- | --------- | --- |
+| 443 or 9443 | 443 | HTTPS (`websecure`) |
 | 9080 | 80 | HTTP (`web`) |
-| 9081 | 8080 | dashboard/API (insecure, solo lab) |
-| 5353 (opt-in) | 53/udp | DNS interno |
+| 9081 | 8080 | dashboard/API (insecure, lab only) |
+| 5353 (opt-in) | 53/udp | internal DNS |
 
-Se usa `443` si está libre; si no, `9443`. Se puede forzar con
-`LAB_HTTPS_PORT=9443`. Los puertos se publican **solo en 127.0.0.1**.
+`443` is used if free; otherwise `9443`. It can be forced with
+`LAB_HTTPS_PORT=9443`. Ports are published **only on 127.0.0.1**.
 
-## Configuración estática
+## Static configuration
 
-`up` genera `scripts/traefik-lab/traefik.yml` si no existe. Si ya existe y fue
-generado por este script, lo actualiza para agregar el resolver `internal`; si
-no fue generado por el script, aborta sin sobrescribirlo.
+`up` generates `scripts/traefik-lab/traefik.yml` if it does not exist. If it
+already exists and was generated by this script, it updates it to add the
+`internal` resolver; if it was not generated by the script, it aborts without
+overwriting it.
 
-- entrypoints `web` (:80) y `websecure` (:443)
-- provider **file** sobre `/etc/traefik/dynamic` con `watch: true`
-- resolver `internal` (CA local) y, opcionalmente, `letsencrypt-staging`
-- sin provider Docker y sin montar el socket de Docker
+- entrypoints `web` (:80) and `websecure` (:443)
+- **file** provider over `/etc/traefik/dynamic` with `watch: true`
+- `internal` resolver (local CA) and, optionally, `letsencrypt-staging`
+- no Docker provider and no Docker socket mount
 
-## Seguridad
+## Security
 
-- `up` valida que un contenedor/red existente con el mismo nombre tenga el
-  label `com.spanel.lab=true`; si no, aborta sin tocarlo.
-- Si un puerto está ocupado, `up` no arranca e indica cuál.
-- Los contenedores del lab se reutilizan; solo se recrean si son de una versión
-  anterior (label `com.spanel.lab.version`).
-- `down` solo elimina contenedores y red propios (verificando el label).
-- `down --purge` borra únicamente `traefik.yml`, `dynamic/`, `data/`, `dns/`,
-  `ca/` y el volumen `spanel-step-ca-data`, pidiendo confirmación.
-- Nunca se ejecuta `docker system prune`, ni se tocan `/opt/stacks` ni
-  contenedores ajenos.
-- Nada del laboratorio sale a Internet.
+- `up` validates that an existing container/network with the same name carries
+  the `com.spanel.lab=true` label; otherwise it aborts without touching it.
+- If a port is busy, `up` does not start and reports which one.
+- Lab containers are reused; they are only recreated if they come from an older
+  version (`com.spanel.lab.version` label).
+- `down` removes only its own containers and network (verifying the label).
+- `down --purge` deletes only `traefik.yml`, `dynamic/`, `data/`, `dns/`,
+  `ca/` and the `spanel-step-ca-data` volume, asking for confirmation.
+- `docker system prune` is never run, and neither `/opt/stacks` nor foreign
+  containers are touched.
+- Nothing from the lab reaches the Internet.
 
 ## Variables
 
-| Variable | Default | Uso |
+| Variable | Default | Use |
 | -------- | ------- | --- |
-| `LAB_IMAGE` | `traefik:v3.7.8` | imagen del proxy |
-| `LAB_CA_IMAGE` | `smallstep/step-ca:0.30.2` | imagen de la CA |
-| `LAB_DNS_IMAGE` | `4km3/dnsmasq:2.90-r3` | imagen del DNS |
-| `LAB_HTTP_PORT` | `9080` | puerto host HTTP |
-| `LAB_HTTPS_PORT` | `auto` | `auto`, `443` o `9443` |
-| `LAB_DASHBOARD_PORT` | `9081` | puerto host dashboard |
-| `LAB_DNS_PORT` | `5353` | puerto DNS (si se publica) |
-| `LAB_DNS_PUBLISH` | `0` | `1` publica el DNS en 127.0.0.1 |
-| `SPANEL_PROXY_ACME_EMAIL` | vacío | habilita además `letsencrypt-staging` |
-| `SPANEL_PROXY_TRAEFIK_CONTAINER` | `traefik` | contenedor real (solo `adopt`) |
-| `SPANEL_PROXY_CONFIG_DIR` | `/opt/stacks/traefik/config` | config real (solo `adopt`) |
+| `LAB_IMAGE` | `traefik:v3.7.8` | proxy image |
+| `LAB_CA_IMAGE` | `smallstep/step-ca:0.30.2` | CA image |
+| `LAB_DNS_IMAGE` | `4km3/dnsmasq:2.90-r3` | DNS image |
+| `LAB_HTTP_PORT` | `9080` | HTTP host port |
+| `LAB_HTTPS_PORT` | `auto` | `auto`, `443` or `9443` |
+| `LAB_DASHBOARD_PORT` | `9081` | dashboard host port |
+| `LAB_DNS_PORT` | `5353` | DNS port (if published) |
+| `LAB_DNS_PUBLISH` | `0` | `1` publishes DNS on 127.0.0.1 |
+| `SPANEL_PROXY_ACME_EMAIL` | empty | additionally enables `letsencrypt-staging` |
+| `SPANEL_PROXY_TRAEFIK_CONTAINER` | `traefik` | real container (`adopt` only) |
+| `SPANEL_PROXY_CONFIG_DIR` | `/opt/stacks/traefik/config` | real config (`adopt` only) |
 
 ## `adopt`
 
-Solo lectura sobre el contenedor real (`traefik` por defecto). Informa estado,
-`StartedAt`, imagen, puertos, red, mounts, directorio de configuración dinámica,
-cantidad de YAML y, si puede leerlo, entrypoints/resolvers del `traefik.yml`.
-No crea, reinicia ni modifica nada.
+Read-only against the real container (`traefik` by default). Reports status,
+`StartedAt`, image, ports, network, mounts, dynamic configuration directory,
+YAML count and, when it can read it, the entrypoints/resolvers from
+`traefik.yml`. It creates, restarts and modifies nothing.
 
 ## Rollback
 
 ```bash
-./scripts/traefik-lab.sh down          # conserva datos y CA para inspección
-./scripts/traefik-lab.sh down --purge  # elimina también datos, CA y volumen
+./scripts/traefik-lab.sh down          # keeps data and CA for inspection
+./scripts/traefik-lab.sh down --purge  # also deletes data, CA and volume
 ```
 
-El Traefik real y sus rutas no se ven afectados por ninguno de los dos.
+The real Traefik and its routes are not affected by either command.

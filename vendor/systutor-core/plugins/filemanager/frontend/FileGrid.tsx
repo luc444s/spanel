@@ -1,5 +1,6 @@
 import { useRef, type MouseEvent, type TouchEvent } from "react";
 
+import { useT } from "@/i18n/use-i18n";
 import { formatSize, formatType } from "./format";
 import { fileIcon } from "./fileUtils";
 import type { Entry } from "./types";
@@ -14,6 +15,7 @@ type Props = {
 };
 
 export function FileGrid({ entries, selected, onSelect, onToggle, onOpen, onContext }: Props) {
+  const t = useT();
   const timer = useRef<number | null>(null);
   const longPressed = useRef(false);
 
@@ -32,7 +34,7 @@ export function FileGrid({ entries, selected, onSelect, onToggle, onOpen, onCont
   }
 
   if (entries.length === 0) {
-    return <p className="p-8 text-center text-sm text-muted-foreground">Esta carpeta está vacía.</p>;
+    return <p className="p-8 text-center text-sm text-muted-foreground">{t("This folder is empty.")}</p>;
   }
 
   return (
@@ -79,7 +81,7 @@ export function FileGrid({ entries, selected, onSelect, onToggle, onOpen, onCont
           >
             <input
               type="checkbox"
-              aria-label={`Seleccionar ${entry.name}`}
+              aria-label={t("Select {name}", { name: entry.name })}
               checked={isSelected}
               className="absolute left-2 top-2"
               onClick={(event) => event.stopPropagation()}

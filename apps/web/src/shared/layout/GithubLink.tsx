@@ -1,3 +1,5 @@
+import { useT } from "../../i18n/use-i18n";
+
 const REPOSITORY_URL = "https://github.com/luc444s/spanel";
 
 /**
@@ -5,13 +7,15 @@ const REPOSITORY_URL = "https://github.com/luc444s/spanel";
  * dialogs on purpose: `z-50` keeps it out of the way when a modal is open.
  */
 export function GithubLink() {
+  const t = useT();
+
   return (
     <a
       href={REPOSITORY_URL}
       target="_blank"
       rel="noopener noreferrer"
-      aria-label="Repositorio en GitHub"
-      title="Repositorio en GitHub"
+      aria-label={t("GitHub repository")}
+      title={t("GitHub repository")}
       className="fixed bottom-4 right-4 z-50 grid h-10 w-10 place-items-center rounded-full border border-border bg-card/95 text-foreground shadow-md backdrop-blur transition hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
     >
       <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">

@@ -1,6 +1,6 @@
 {
   "id": "filemanager",
-  "name": "Gestor de archivos",
+  "name": "File Manager",
   "version": "0.1.0",
   "api_version": "1",
   "requires": [],
@@ -9,5 +9,5 @@
   "permissions": ["filemanager.files.read", "filemanager.files.manage"],
   "tenant_admin_permissions": ["filemanager.files.read", "filemanager.files.manage"],
   "events": [],
-  "description": "Explorador de archivos para destinos autorizados"
+  "description": "File explorer for authorized targets"
 }

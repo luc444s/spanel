@@ -421,7 +421,7 @@ def test_run_once_missing_lineage_fails_job_instead_of_staying_running(tmp_path)
     job = read_job(config, "55555555-5555-4555-8555-555555555555")
     assert job is not None
     assert job["state"] == "failed"
-    assert "linaje" in job["error"]
+    assert "lineage" in job["error"]
     assert not request.exists()
     assert not (config.install_root / "mail.systutor.com").exists()
 

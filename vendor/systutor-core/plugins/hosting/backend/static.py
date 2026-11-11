@@ -28,29 +28,29 @@ MARKER = 'data-spanel-static="1"'
 DEFAULT_PROFILE_ID = "nginx"
 
 INDEX_HTML = f"""<!doctype html>
-<html lang="es" {MARKER}>
+<html lang="en" {MARKER}>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Sitio estático</title>
+  <title>Static site</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
   <main class="wrap">
     <p class="kicker">SPanel static</p>
-    <h1>Tu sitio está listo</h1>
+    <h1>Your site is ready</h1>
     <p class="lead">
-      Esta página inicial vive en el volumen del sitio. Editala desde el
-      administrador de archivos.
+      This starter page lives in the site volume. Edit it from the
+      file manager.
     </p>
-    <button id="counter" type="button">Probar JavaScript <span id="count">0</span></button>
+    <button id="counter" type="button">Try JavaScript <span id="count">0</span></button>
   </main>
   <script src="/app.js" defer></script>
 </body>
 </html>
 """
 
-STYLES_CSS = """/* Contenido inicial del sitio estático. */
+STYLES_CSS = """/* Initial content for the static site. */
 :root { color-scheme: light dark; }
 * { box-sizing: border-box; }
 body {
@@ -261,10 +261,10 @@ class StaticProvisioner:
 
     def _preflight(self, names: StaticNames) -> None:
         if not self._exists("network", self.settings.network):
-            raise Fallo(f"No existe la red {self.settings.network}")
+            raise Fallo(f"Network {self.settings.network} does not exist")
         for kind, name in (("container", names.container), ("volume", names.volume)):
             if self._exists(kind, name):
-                raise Fallo(f"Ya existe un recurso con nombre {name}")
+                raise Fallo(f"A resource named {name} already exists")
 
     def _write(self, container: str, destination: str, content: str, web_root: str) -> None:
         self._docker.command(
@@ -323,8 +323,8 @@ class StaticProvisioner:
                 pass
             if time.monotonic() >= deadline:
                 raise Fallo(
-                    f"El contenedor {names.container} no sirvió la página inicial "
-                    f"en {self.settings.install_timeout}s"
+                    f"Container {names.container} did not serve the starter page "
+                    f"within {self.settings.install_timeout}s"
                 )
             time.sleep(1)
 
@@ -362,7 +362,7 @@ class StaticProvisioner:
         except Exception as exc:
             failures = self.cleanup(names, tenant_id, created)
             if failures:
-                raise Fallo(f"{exc}; limpieza incompleta: {'; '.join(failures)}") from exc
+                raise Fallo(f"{exc}; incomplete cleanup: {'; '.join(failures)}") from exc
             raise
 
     def cleanup(

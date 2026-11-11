@@ -165,7 +165,7 @@ def test_anadir_el_primario_propio_es_409(client: TestClient) -> None:
     assert response.status_code == 409
     body = response.json()["error"]
     assert body["code"] == "tenant_domain_conflict"
-    assert "primario" in body["message"]
+    assert "primary domain" in body["message"]
 
 
 def test_promover_secundario_a_primario_borra_su_fila(
@@ -219,7 +219,7 @@ def test_quitar_dominio_de_correo_es_409(client: TestClient) -> None:
     assert response.status_code == 409
     body = response.json()["error"]
     assert body["code"] == "tenant_domain_in_use"
-    assert "dominio de correo" in body["message"]
+    assert "email domain" in body["message"]
 
 
 def test_list_incluye_dominio_de_correo_aunque_falte_la_fila(
@@ -239,7 +239,7 @@ def test_anadir_dominio_de_correo_ajeno_menciona_el_motivo(
     assert response.status_code == 409
     body = response.json()["error"]
     assert body["code"] == "tenant_domain_conflict"
-    assert "dominio de correo del tenant" in body["message"]
+    assert "email domain of tenant" in body["message"]
 
 
 def test_quitar_dominio_libre_es_204(client: TestClient, factory) -> None:

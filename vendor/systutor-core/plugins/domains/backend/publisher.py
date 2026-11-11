@@ -48,7 +48,7 @@ class ProxySitePublisher:
         except ProxyError as exc:
             # Deleting a site must not fail because its route was already
             # removed by an operator. Any other proxy error still surfaces.
-            if "no está gestionado" in str(exc):
+            if "is not managed by spanel" in str(exc):
                 logger.info("domains_unpublish_missing_route", extra={"domain": domain})
                 return
             raise

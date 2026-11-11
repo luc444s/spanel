@@ -84,7 +84,7 @@ def db(tmp_path):
     with Session(engine) as session:
         session.add(Tenant(id="t1", name="Tenant", slug="tenant"))
         # The builtin profile the migration 003 creates in every deployment.
-        session.add(StaticProfile(id="nginx", name="Nginx (estático)",
+        session.add(StaticProfile(id="nginx", name="Nginx (static)",
                                   image="nginx:alpine", web_root="/usr/share/nginx/html",
                                   container_port=80, health_mode="marker"))
         session.commit()

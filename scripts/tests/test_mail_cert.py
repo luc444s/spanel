@@ -391,6 +391,6 @@ def test_audit_detecta_clave_incorrecta_y_no_escribe(settings, tmp_path: Path, m
     after = {path.name: path.stat().st_mtime_ns for path in settings.cert_dir.iterdir()}
 
     assert report["checks"]["key_matches"] is False
-    assert any("clave privada" in issue for issue in report["issues"])
+    assert any("key" in issue for issue in report["issues"])
     assert before == after
 

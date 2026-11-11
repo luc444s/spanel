@@ -109,5 +109,5 @@ def test_hosting_create_site_rejects_claimed_extra(tmp_path):
             )
         assert exc.value.status_code == 409
         assert exc.value.code == "hosting_site_conflict"
-        assert "dominio extra" in exc.value.message.lower()
+        assert "extra domain" in exc.value.message.lower()
     engine.dispose()

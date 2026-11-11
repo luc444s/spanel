@@ -5,6 +5,8 @@ import { useAuthStore } from "../../features/auth/store";
 import { useLogoutAction } from "../../features/auth/useLogoutAction";
 import { usePluginFrontendRuntime } from "../../features/plugins/runtime";
 import { buildShellSidebarSections } from "../../features/shell/navigation";
+import { useT } from "../../i18n/use-i18n";
+import { LanguageToggle } from "./language-toggle";
 import { ThemeToggle } from "./theme-toggle";
 
 function ChevronDown({ open }: { open: boolean }) {
@@ -23,6 +25,8 @@ function ChevronDown({ open }: { open: boolean }) {
 
 export function Sidebar() {
   const logout = useLogoutAction();
+  // Re-render the navigation when the locale changes; labels come from t().
+  useT();
   const permissions = useAuthStore((state) => state.permissions);
   const pluginRuntime = usePluginFrontendRuntime();
   const sections = buildShellSidebarSections({
@@ -133,7 +137,8 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="mt-auto border-t border-border pt-3">
+      <div className="mt-auto space-y-3 border-t border-border pt-3">
+        <LanguageToggle />
         <ThemeToggle />
       </div>
     </aside>

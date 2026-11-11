@@ -1,68 +1,70 @@
-# SPANEL-SEC-2026-001 — Contención y verificación
+# SPANEL-SEC-2026-001 — Containment and verification
 
-Estado: **contención Fase 1 aplicada en el repositorio**. Falta desplegarla en el
-VPS y completar la Fase 2 (segmentación de red), que es la que elimina el acceso
-lateral confirmado.
+English | [Español](spanel-sec-2026-001.es.md)
 
-Alcance del cambio en `docker-compose.yml`:
+Status: **Phase 1 containment applied in the repository**. It still needs to be deployed on the
+VPS, and Phase 2 (network segmentation) completed, which is the phase that eliminates the confirmed
+lateral access.
 
-- Se elimina `ports: ["3000:3000"]` del servicio `app`. El panel deja de
-  escuchar en el host, tanto en IPv4 como en IPv6.
-- Se conserva la exposición por Traefik (`proxy`, labels `web`/`websecure`).
-- Se agrega redirección HTTP → HTTPS en el router `spanel-http`, para que el
-  login nunca viaje en texto plano.
+Scope of the change in `docker-compose.yml`:
 
-> Importante: quitar `ports:` **no** elimina el acceso lateral. `app` sigue
-> unida a la red `proxy`, y los sitios de clientes se conectan a esa misma red
-> (`docker network connect <proxy> <sitio>`). Mientras compartan red,
-> `legalattorney-clean` puede seguir llegando a `app:3000`. La Fase 2 separa
-> esas redes.
+- `ports: ["3000:3000"]` is removed from the `app` service. The panel no longer
+  listens on the host, either on IPv4 or IPv6.
+- Exposure through Traefik is preserved (`proxy` network, `web`/`websecure` labels).
+- HTTP → HTTPS redirection is added on the `spanel-http` router, so that
+  login never travels in plain text.
+
+> Important: removing `ports:` does **not** eliminate lateral access. `app` remains
+> joined to the `proxy` network, and customer sites connect to that same network
+> (`docker network connect <proxy> <site>`). As long as they share a network,
+> `legalattorney-clean` can still reach `app:3000`. Phase 2 separates
+> those networks.
 
 ---
 
-## Fase 1 — Despublicar el puerto (rodar en el VPS)
+## Phase 1 — Unpublish the port (run on the VPS)
 
-Desde el directorio real del stack (donde vive el `docker-compose.yml`):
+From the stack's actual directory (where the `docker-compose.yml` lives):
 
 ```bash
-# 1. Ver el estado actual: debe aparecer 0.0.0.0:3000->3000/tcp
+# 1. View the current state: 0.0.0.0:3000->3000/tcp should appear
 docker compose ps
 docker port "$(docker compose ps -q app)" 3000
 
-# 2. Recrear solo el panel con el Compose corregido
+# 2. Recreate only the panel with the corrected Compose file
 docker compose up -d --no-deps app
 
-# 3. Confirmar que ya no hay publicación
-docker port "$(docker compose ps -q app)" 3000 || echo "OK: sin puerto publicado"
+# 3. Confirm that there is no publication anymore
+docker port "$(docker compose ps -q app)" 3000 || echo "OK: no published port"
 docker ps --filter "name=$(docker compose ps --format '{{.Name}}' app)" \
   --format '{{.Names}}  {{.Ports}}'
 ```
 
-Resultado esperado: `3000/tcp` sin `0.0.0.0:3000->` ni `[::]:3000->`.
+Expected result: `3000/tcp` without `0.0.0.0:3000->` or `[::]:3000->`.
 
-### Verificación en el host
+### Verification on the host
 
 ```bash
-ss -lntp  | grep -w 3000 || echo "OK: 3000 no escucha en IPv4"
-ss -lntp6 | grep -w 3000 || echo "OK: 3000 no escucha en IPv6"
+ss -lntp  | grep -w 3000 || echo "OK: 3000 is not listening on IPv4"
+ss -lntp6 | grep -w 3000 || echo "OK: 3000 is not listening on IPv6"
 ```
 
-### Verificación desde fuera
+### Verification from outside
 
-Desde otra máquina (no desde el VPS):
+From another machine (not from the VPS):
 
 ```bash
-curl -sS -m 5 http://<IP_PUBLICA>:3000/ ; echo "exit=$?"
-# Esperado: timeout / connection refused (exit != 0)
+curl -sS -m 5 http://<PUBLIC_IP>:3000/ ; echo "exit=$?"
+# Expected: timeout / connection refused (exit != 0)
 
 curl -sS -o /dev/null -w '%{http_code}\n' https://spanel.systutor.com/
-# Esperado: 200 o 30x
+# Expected: 200 or 30x
 
 curl -sSI http://spanel.systutor.com/ | grep -i '^location:'
-# Esperado: https://spanel.systutor.com/...
+# Expected: https://spanel.systutor.com/...
 ```
 
-### Verificación del acceso lateral (sigue abierto hasta Fase 2)
+### Lateral access verification (still open until Phase 2)
 
 ```bash
 APP_IP=$(docker inspect -f \
@@ -74,24 +76,24 @@ docker exec legalattorney-clean sh -c \
   'getent hosts app; curl -sS -m 5 -o /dev/null -w "HTTP %{http_code}\n" http://app:3000/api/v1/system/health'
 ```
 
-Si responde, el hallazgo lateral está confirmado y se corrige en la Fase 2.
+If it responds, the lateral finding is confirmed and is fixed in Phase 2.
 
 ---
 
-## Fase 2 — Aislar Spanel de los contenedores de clientes
+## Phase 2 — Isolate Spanel from customer containers
 
-Objetivo: que Spanel comparta red **solo con Traefik**, nunca con los sitios
-alojados ni con apps desplegadas por clientes.
+Goal: Spanel shares a network **only with Traefik**, never with hosted sites
+or apps deployed by customers.
 
-1. Crear una red dedicada y conectar Traefik:
+1. Create a dedicated network and connect Traefik:
 
 ```bash
 docker network create spanel_ingress
 docker network connect spanel_ingress traefik
 ```
 
-2. Persistir esa conexión en el Compose de Traefik (para que sobreviva a un
-   `docker compose up -d` del proxy):
+2. Persist that connection in Traefik's Compose file (so it survives a
+   `docker compose up -d` of the proxy):
 
 ```yaml
 services:
@@ -105,7 +107,7 @@ networks:
     external: true
 ```
 
-3. En el Compose de Spanel, reemplazar la red `proxy` del servicio `app`:
+3. In Spanel's Compose file, replace the `proxy` network of the `app` service:
 
 ```yaml
   app:
@@ -114,62 +116,62 @@ networks:
       - spanel_ingress
     labels:
       - "traefik.docker.network=spanel_ingress"
-      # ...resto de labels iguales...
+      # ...rest of the labels unchanged...
 
 networks:
   proxy:
-    external: true          # lo siguen usando los sitios de clientes
+    external: true          # still used by customer sites
   spanel_ingress:
-    external: true          # creada en el paso 1
+    external: true          # created in step 1
 ```
 
-4. Recrear el panel y verificar:
+4. Recreate the panel and verify:
 
 ```bash
 docker compose up -d --no-deps app
 
-# Desde legalattorney-clean debe fallar la resolución/conexión:
+# From legalattorney-clean, resolution/connection must fail:
 docker exec legalattorney-clean sh -c \
-  'getent hosts app || echo "OK: app no resuelve"; curl -sS -m 5 http://app:3000/ || echo "OK: sin acceso"'
+  'getent hosts app || echo "OK: app does not resolve"; curl -sS -m 5 http://app:3000/ || echo "OK: no access"'
 
-# La red de ingreso sí debe alcanzar al panel:
+# The ingress network must still reach the panel:
 docker run --rm --network spanel_ingress curlimages/curl \
   -sS -m 5 -o /dev/null -w 'HTTP %{http_code}\n' http://app:3000/api/v1/system/health
 
-# Y el panel debe seguir respondiendo por Traefik desde fuera:
+# And the panel must still respond through Traefik from outside:
 curl -sS -o /dev/null -w '%{http_code}\n' https://spanel.systutor.com/
 ```
 
-Rollback: volver a agregar `- proxy` a `networks` del servicio `app` y
-`traefik.docker.network=proxy`, luego `docker compose up -d --no-deps app`.
+Rollback: add `- proxy` back to the `app` service's `networks` and
+`traefik.docker.network=proxy`, then `docker compose up -d --no-deps app`.
 
 ---
 
-## Fase 3 — Reducir impacto si la API se compromete
+## Phase 3 — Reduce impact if the API is compromised
 
-Pendiente, requiere ventana de cambio:
+Pending, requires a change window:
 
-- El contenedor corre como **root** y monta `/var/run/docker.sock` con
-  escritura. Cualquier RCE en la API equivale a root en el host. La única
-  mitigación real es que el panel no sea alcanzable desde cargas no confiables
-  (Fase 2) y que el socket no se exponga a otras rutas.
-- Evaluar un `docker-socket-proxy` con allowlist de endpoints. Es parcial: el
-  panel necesita crear contenedores y conectar redes, así que conserva poder
-  equivalente a root. No sustituye el aislamiento de red.
-- Ejecutar como usuario no-root con el grupo del socket (reduce el impacto
-  dentro del contenedor, no el del socket).
-- No hay rate limiting ni bloqueo por intentos fallidos en `/auth/login`.
-  Agregarlo reduce la ventana de fuerza bruta sobre el panel publicado.
-- Revisar que el dashboard de Traefik y otros servicios no estén publicados
-  fuera de `127.0.0.1`.
+- The container runs as **root** and mounts `/var/run/docker.sock` with
+  write access. Any RCE in the API is equivalent to root on the host. The only real
+  mitigation is that the panel is not reachable from untrusted workloads
+  (Phase 2) and that the socket is not exposed to other paths.
+- Evaluate a `docker-socket-proxy` with an endpoint allowlist. It is partial: the
+  panel needs to create containers and connect networks, so it retains power
+  equivalent to root. It does not replace network isolation.
+- Run as a non-root user with the socket group (reduces impact
+  inside the container, not that of the socket).
+- There is no rate limiting or lockout for failed attempts on `/auth/login`.
+  Adding it reduces the brute-force window against the published panel.
+- Verify that the Traefik dashboard and other services are not published
+  outside `127.0.0.1`.
 
 ---
 
-## Criterio de cierre
+## Closure criteria
 
-- [ ] `3000/tcp` no aparece publicado en `docker ps`.
-- [ ] `ss -lntp` / `ss -lntp6` no muestran 3000 en el host.
-- [ ] `curl http://<IP>:3000` desde fuera falla.
-- [ ] `https://spanel.systutor.com` responde y `http://` redirige.
-- [ ] `legalattorney-clean` no resuelve ni conecta a `app:3000` (Fase 2).
-- [ ] Traefik sigue llegando al panel tras la Fase 2.
+- [ ] `3000/tcp` does not appear published in `docker ps`.
+- [ ] `ss -lntp` / `ss -lntp6` do not show 3000 on the host.
+- [ ] `curl http://<IP>:3000` from outside fails.
+- [ ] `https://spanel.systutor.com` responds and `http://` redirects.
+- [ ] `legalattorney-clean` does not resolve or connect to `app:3000` (Phase 2).
+- [ ] Traefik still reaches the panel after Phase 2.

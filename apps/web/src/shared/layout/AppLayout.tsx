@@ -3,6 +3,7 @@ import { Outlet, useLocation } from "react-router-dom";
 
 import { useAuthBootstrap } from "../../features/auth/useAuthBootstrap";
 import { useAuthStore } from "../../features/auth/store";
+import { useT } from "../../i18n/use-i18n";
 import { Sidebar } from "./Sidebar";
 import { GithubLink } from "./GithubLink";
 
@@ -21,6 +22,7 @@ function MenuIcon() {
 }
 
 export function AppLayout() {
+  const t = useT();
   const token = useAuthStore((state) => state.token);
   const bootstrap = useAuthBootstrap();
   const location = useLocation();
@@ -58,7 +60,7 @@ export function AppLayout() {
   if (token && bootstrap.isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">
-        Cargando contexto del tenant...
+        {t("Loading tenant context...")}
       </div>
     );
   }
@@ -83,11 +85,13 @@ export function AppLayout() {
 }
 
 function MenuButton({ onClick, className = "" }: { onClick: () => void; className?: string }) {
+  const t = useT();
+
   return (
     <button
       type="button"
-      aria-label="Abrir menú"
-      title="Menú"
+      aria-label={t("Open menu")}
+      title={t("Menu")}
       onClick={onClick}
       className={`fixed left-3 top-3 z-50 grid h-10 w-10 place-items-center rounded-full border border-border bg-card/95 text-foreground shadow-md backdrop-blur ${className}`}
     >

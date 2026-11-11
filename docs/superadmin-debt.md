@@ -1,46 +1,48 @@
-# Deuda PAGADA: el bypass de `is_superadmin`
+# PAID debt: the `is_superadmin` bypass
 
-> **Cerrada.** A.SPEC 0004 eliminó el flag completo. Este documento queda como registro
-> histórico de por qué existía, qué lo hacía peligroso, y qué queda como deuda menor.
-> Última revisión: 2026-09-26.
+English | [Español](superadmin-debt.es.md)
 
-**Lo que se eliminó**: la columna `users.is_superadmin`, el claim del JWT, los DTOs,
-los 5 cortocircuitos, `require_superadmin` y sus 7 endpoints, y los 40 usos del frontend.
-El acceso del superadmin ahora es **exclusivamente por `RolePermission`**.
+> **Closed.** A.SPEC 0004 removed the flag entirely. This document remains as a
+> historical record of why it existed, what made it dangerous, and what remains as minor debt.
+> Last review: 2026-09-26.
 
-**Lo que queda como deuda menor**:
+**What was removed**: the `users.is_superadmin` column, the JWT claim, the DTOs,
+the 5 shortcuts, `require_superadmin` and its 7 endpoints, and the 40 frontend usages.
+Superadmin access is now **exclusively through `RolePermission`**.
 
-| Deuda | Por qué no se pagó | Costo |
+**What remains as minor debt**:
+
+| Debt | Why it was not paid | Cost |
 |---|---|---|
-La columna `users.is_superadmin` sigue existiendo en las bases desplegadas | `entrypoint.sh` usa `create_all`, que no ejecuta migraciones. Borrarla exige `ALTER TABLE` | Inerte: ya no la lee nadie. Un `ALTER TABLE ... DROP COLUMN` lo resuelve |
-`npm run db` apunta a `scripts/systutor-db.sh`, que no existe | Corrección trivial, sin relación con autorización | El comando falla; hay que hacerlo a mano |
-`pyright` no incluye `plugins/**` | Agregarlo puede exponer errores de tipos nuevos nunca revisados | El plugin mail y tenant no tienen type-check |
-Permisos como strings inline (~15 en `api/v1/core/`) | Fuera del alcance de 0004 | Un typo es un **403 silencioso**. Faltan constantes y un test contra el catálogo |
-`mailadmin/.venv` con dos editables | Verificado que los cores son equivalentes, sin impacto | Tests de kernel necesitan `PYTHONPATH=src` |
+| The `users.is_superadmin` column still exists in deployed databases | `entrypoint.sh` uses `create_all`, which does not run migrations. Dropping it requires `ALTER TABLE` | Inert: nobody reads it anymore. An `ALTER TABLE ... DROP COLUMN` resolves it |
+| `npm run db` points to `scripts/systutor-db.sh`, which does not exist | Trivial fix, unrelated to authorization | The command fails; it must be done by hand |
+| `pyright` does not include `plugins/**` | Adding it may expose new, never-reviewed type errors | The mail and tenant plugins have no type-check |
+| Permissions as inline strings (~15 in `api/v1/core/`) | Outside the scope of 0004 | A typo is a **silent 403**. Constants and a test against the catalog are missing |
+| `mailadmin/.venv` with two editables | Verified that the cores are equivalent, with no impact | Kernel tests need `PYTHONPATH=src` |
 
 ---
 
-# Registro histórico
+# Historical record
 
-Lo que sigue es el análisis previo al pago. Se conserva porque explica las trampas que
-había y que conviene no reintroducir.
+What follows is the analysis prior to payment. It is preserved because it explains the traps
+that existed and that should not be reintroduced.
 
 ---
 
-## 1. Qué es la deuda
+## 1. What the debt is
 
-`users.is_superadmin` es un flag booleano que cortocircuita la autorización. Está escrito
-**cinco veces**, y tres de esas copias están en el mismo camino de request que decide permisos.
+`users.is_superadmin` is a boolean flag that short-circuits authorization. It is written
+**five times**, and three of those copies are on the same request path that decides permissions.
 
-| # | Sitio | Forma | Nota |
+| # | Location | Form | Note |
 |---|---|---|---|
-| B1 | `src/systutor/kernel/tenants/context.py:22` | `return self.is_superadmin or ...` | El original. El que usa `has_permission` |
-| B2 | `src/systutor/kernel/tenants/context.py:26` | `self.is_superadmin or ...` | **Redundante**: un usuario sin warehouses ya obtiene `None` = todos (`context.py:40`) |
-| B3 | `src/systutor/kernel/auth/dependencies.py:174` | `is_superadmin or any(has_permission(...))` | **Doblemente redundante**: `has_permission` ya cortocircuita |
-| B4 | `src/systutor/api/v1/system.py:145` | `is_superadmin or any(p in current_permissions ...)` | **El traicionero**: lee `current_permissions` directo, esquivando `has_permission` |
-| B5 | `plugins/tenant/backend/router.py:37-49` | `def require_superadmin()` | Único guard definido fuera del kernel. Protege 7 endpoints |
+| B1 | `src/systutor/kernel/tenants/context.py:22` | `return self.is_superadmin or ...` | The original. The one used by `has_permission` |
+| B2 | `src/systutor/kernel/tenants/context.py:26` | `self.is_superadmin or ...` | **Redundant**: a user with no warehouses already gets `None` = all (`context.py:40`) |
+| B3 | `src/systutor/kernel/auth/dependencies.py:174` | `is_superadmin or any(has_permission(...))` | **Doubly redundant**: `has_permission` already short-circuits |
+| B4 | `src/systutor/api/v1/system.py:145` | `is_superadmin or any(p in current_permissions ...)` | **The treacherous one**: reads `current_permissions` directly, bypassing `has_permission` |
+| B5 | `plugins/tenant/backend/router.py:37-49` | `def require_superadmin()` | The only guard defined outside the kernel. Protects 7 endpoints |
 
-### Por qué B4 es el peor
+### Why B4 is the worst
 
 ```python
 can_read_full_runtime = tenant_context.is_superadmin or any(
@@ -49,105 +51,105 @@ can_read_full_runtime = tenant_context.is_superadmin or any(
 )
 ```
 
-No pasa por `has_permission`. Si alguien borra B1 y olvida B4, el superadmin pierde lectura del
-runtime de plugins **sin ningún test que lo detecte**. Ese es el modo de falla que hace esta
-deuda peligrosa: no es que falle hoy, es que falla *después*, cuando alguien limpie otra cosa.
+It does not go through `has_permission`. If someone deletes B1 and forgets B4, the superadmin loses
+read access to the plugin runtime **without any test detecting it**. That is the failure mode that makes this
+debt dangerous: it is not that it fails today, it is that it fails *later*, when someone cleans up something else.
 
-### Inventario completo
+### Full inventory
 
-- Backend producción: **37 ocurrencias** en 28 líneas, 14 archivos
+- Production backend: **37 occurrences** on 28 lines, 14 files
 - Tests: 14
-- Frontend: **40 ocurrencias en 9 archivos**
-- Documentación: 22
+- Frontend: **40 occurrences in 9 files**
+- Documentation: 22
 
-De esas 37, unas 10 son el bypass. **Las otras ~27 son plomería inerte** (columna, claim del
-JWT, DTOs, `request.state`, store de Zustand, migración) que no participa de la decisión.
-
----
-
-## 2. Por qué es segura dejada como está
-
-**Las cinco copias leen la misma fuente**: la columna `users.is_superadmin` de la misma fila de
-Postgres. El plugin `tenant` se salta `request.state`, pero ambos terminan en el mismo objeto
-`User`. Mientras eso sea cierto, no puede haber divergencia.
-
-**No hay exploit hoy.** `require_superadmin` compara contra el mismo valor que el token ya
-validó en `dependencies.py:82`.
-
-**La eliminación es más barata de lo que parece.** Para matar el bypass:
-
-- borrar 4 prefijos `is_superadmin or ` (B1-B4)
-- borrar una función (B5) y reemplazar 7 call sites por `require_permission("core.tenants.*")`
-- agregar `core.tenants.read` y `core.tenants.manage` a `BASE_PERMISSIONS`
-
-**~10 líneas y 2 permisos.**
+Of those 37, about 10 are the bypass. **The other ~27 are inert plumbing** (column, JWT
+claim, DTOs, `request.state`, Zustand store, migration) that does not participate in the decision.
 
 ---
 
-## 3. El invariante que la hace pagable
+## 2. Why it is safe to leave as is
 
-> **El admin role tiene todos los permisos de `BASE_PERMISSIONS` ∪ permisos de plugins.**
+**The five copies read the same source**: the `users.is_superadmin` column of the same
+Postgres row. The `tenant` plugin skips `request.state`, but both end up in the same
+`User` object. As long as that is true, there can be no divergence.
 
-Si esto es cierto, el bypass es **redundante por construcción**: el superadmin tiene todo el
-poder por el camino normal de RBAC (`seed.py`, `sync_permissions`). El día que se borre B1, no
-se pierde nada, y B4 sigue funcionando porque el permiso está en el role.
+**There is no exploit today.** `require_superadmin` compares against the same value that the token already
+validated in `dependencies.py:82`.
 
-**Ese invariante está testeado** en `tests/test_permission_sync.py`
-(`test_kernel_permission_reaches_admin_role_on_second_boot`). Antes de A.SPEC 0003 **no lo
-estaba**: `entrypoint.sh` solo sembraba en el primer arranque, así que un permiso agregado
-después jamás llegaba al role, y el flag lo tapaba. Ese era el agujero.
+**Removal is cheaper than it looks.** To kill the bypass:
 
-También está testeado que el bypass **sigue presente**
-(`test_superadmin_bypass_still_present`): 0003 no lo tocó. Ese test es el que va a fallar
-cuando la deuda se pague, y está bien que falle.
+- delete 4 `is_superadmin or ` prefixes (B1-B4)
+- delete a function (B5) and replace 7 call sites with `require_permission("core.tenants.*")`
+- add `core.tenants.read` and `core.tenants.manage` to `BASE_PERMISSIONS`
 
----
-
-## 4. Cuándo revisarla
-
-Disparadores concretos, no "en algún momento":
-
-1. **Alguien endurece `dependencies.py:82`** (el check de token privilege). Es el día que
-   `tenant` queda con un bypass que nadie revisa.
-2. **Se pide superadmin parcial** — alguien que vea todos los buzones pero no pueda cambiar
-   contraseñas. Hoy es imposible con un bool.
-3. **Se agrega un plugin con permisos nuevos.** Hay que confirmar que el sync los otorga.
-4. **Aparece un 403 inesperado en un endpoint de superadmin.** Síntoma de B4.
+**~10 lines and 2 permissions.**
 
 ---
 
-## 5. Decisiones de producto pendientes
+## 3. The invariant that makes it payable
 
-Ninguna se resuelve acá. Son del dueño del sistema.
+> **The admin role has all permissions in `BASE_PERMISSIONS` ∪ plugin permissions.**
 
-- **¿El superadmin conserva poder total por rol, explícitamente, o pierde el atajo?**
-  - (A) Todos los permisos `core.*` asignados al role. Se conserva el atajo pero es auditable.
-  - (B) Superadmin = nadie, y se le asignan permisos como a cualquiera. Desaparece el bypass.
-  - (C) Bandera de emergencia: el flag queda solo para break-glass, con log y aviso en UI.
+If this is true, the bypass is **redundant by construction**: the superadmin has all the
+power through the normal RBAC path (`seed.py`, `sync_permissions`). The day B1 is deleted,
+nothing is lost, and B4 keeps working because the permission is in the role.
 
-  Recomendación: **(C)**, porque preserva la capacidad de emergencia sin que el camino normal
-  dependa del flag. Ojo: para (C) el flag debe **salir del JWT**
-  (`security.py:66-74`, `schemas.py:20`, `legacy.py:87`, `api.ts:12`, `store.ts:37`), porque un
-  token de 60 minutos con privilegios embebidos no es break-glass.
+**That invariant is tested** in `tests/test_permission_sync.py`
+(`test_kernel_permission_reaches_admin_role_on_second_boot`). Before A.SPEC 0003 it was
+**not tested**: `entrypoint.sh` only seeded on the first boot, so a permission added
+later never reached the role, and the flag covered it up. That was the hole.
 
-- **¿El claim `is_superadmin` se queda en el JWT?** Hoy obliga a que cualquier cliente que
-  construya un token a mano acierte el tipo (`dependencies.py:63`).
-
-- **Permisos como strings inline.** `require_permission("core.users.read")` aparece ~15 veces
-  en `api/v1/core/`. Un typo es un **403 silencioso**: el endpoint queda cerrado y nadie lo
-  nota. No hay constante ni test contra el catálogo.
+It is also tested that the bypass **is still present**
+(`test_superadmin_bypass_still_present`): 0003 did not touch it. That test is the one that will fail
+when the debt is paid, and it is good that it fails.
 
 ---
 
-## 6. Contexto de repositorio que afecta esto
+## 4. When to review it
 
-- `entrypoint.sh:8-17` usa `Base.metadata.create_all`, **no ejecuta migraciones**. Por eso
-  la columna `users.is_superadmin` **no se borra**: hacerlo exigiría una migración que el
-  arranque ni correría. Dejarla es gratis e inerte.
-- `npm run db` apunta a `scripts/systutor-db.sh`, que **no existe**.
-- `pyproject.toml` `[tool.pyright] include = ["src", "tests", "app"]` **no incluye `plugins/`**.
-  No hay type-checking sobre el plugin `tenant` ni sobre `mail`.
-- `mailadmin/.venv` fue creado como copia del venv de `Systutor-oss` y arrastra dos
-  distribuciones editables (`systutor_core` y `systutor_oss`). **Hay que correr los tests con
-  `PYTHONPATH=src`** o se importa el `src/systutor` del proyecto equivocado y los tests del
-  kernel no están probando este repo. Ver A.SPEC 0004.
+Concrete triggers, not "at some point":
+
+1. **Someone hardens `dependencies.py:82`** (the token privilege check). That is the day
+   `tenant` is left with a bypass that nobody reviews.
+2. **Partial superadmin is requested** — someone who can see all mailboxes but cannot change
+   passwords. Today that is impossible with a bool.
+3. **A plugin with new permissions is added.** The sync must be confirmed to grant them.
+4. **An unexpected 403 appears on a superadmin endpoint.** Symptom of B4.
+
+---
+
+## 5. Pending product decisions
+
+None are resolved here. They belong to the system owner.
+
+- **Does the superadmin retain full power by role, explicitly, or lose the shortcut?**
+  - (A) All `core.*` permissions assigned to the role. The shortcut is kept but is auditable.
+  - (B) Superadmin = nobody, and permissions are assigned like anyone else. The bypass disappears.
+  - (C) Emergency flag: the flag remains only for break-glass, with logging and a UI notice.
+
+  Recommendation: **(C)**, because it preserves emergency capability without the normal path
+  depending on the flag. Note: for (C) the flag must **leave the JWT**
+  (`security.py:66-74`, `schemas.py:20`, `legacy.py:87`, `api.ts:12`, `store.ts:37`), because a
+  60-minute token with embedded privileges is not break-glass.
+
+- **Does the `is_superadmin` claim stay in the JWT?** Today it forces any client that
+  hand-builds a token to get the type right (`dependencies.py:63`).
+
+- **Permissions as inline strings.** `require_permission("core.users.read")` appears ~15 times
+  in `api/v1/core/`. A typo is a **silent 403**: the endpoint stays closed and nobody
+  notices. There is no constant or test against the catalog.
+
+---
+
+## 6. Repository context affecting this
+
+- `entrypoint.sh:8-17` uses `Base.metadata.create_all`, **does not run migrations**. That is why
+  the `users.is_superadmin` column **is not dropped**: doing so would require a migration that
+  startup would not even run. Leaving it is free and inert.
+- `npm run db` points to `scripts/systutor-db.sh`, which **does not exist**.
+- `pyproject.toml` `[tool.pyright] include = ["src", "tests", "app"]` **does not include `plugins/`**.
+  There is no type-checking on the `tenant` plugin or on `mail`.
+- `mailadmin/.venv` was created as a copy of the `Systutor-oss` venv and carries two
+  editable distributions (`systutor_core` and `systutor_oss`). **Tests must be run with
+  `PYTHONPATH=src`** or the wrong project's `src/systutor` is imported and the kernel
+  tests are not testing this repo. See A.SPEC 0004.

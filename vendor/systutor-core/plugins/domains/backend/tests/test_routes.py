@@ -350,14 +350,14 @@ def test_cross_tenant_domain_and_route_are_opaque(setup):
             context(),
             RouteCreate(domain="other.example.com", site_id="app-1:web", port=80),
         )
-    assert str(foreign_domain.value) == "Dominio desconocido"
+    assert str(foreign_domain.value) == "Unknown domain"
     foreign = service.create_route(
         context("t2"),
         RouteCreate(domain="other.example.com", site_id="app-2:web", port=80),
     )
     with pytest.raises(NotFoundError) as foreign_route:
         service.get_route(context(), foreign.id)
-    assert str(foreign_route.value) == "Ruta desconocida"
+    assert str(foreign_route.value) == "Unknown route"
 
 
 def test_middleware_allowlist_parser_is_explicit_and_empty_by_default():

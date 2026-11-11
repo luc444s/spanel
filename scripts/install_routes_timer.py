@@ -31,7 +31,7 @@ def render_service(repo_root: Path, docker: str) -> str:
 
 def render_timer(interval_minutes: int) -> str:
     if interval_minutes < 1:
-        raise ValueError("El intervalo debe ser de al menos 1 minuto")
+        raise ValueError("The interval must be at least 1 minute")
     text = (UNITS / TIMER).read_text(encoding="utf-8")
     return text.replace(
         "OnUnitActiveSec=5min", f"OnUnitActiveSec={interval_minutes}min"
@@ -46,10 +46,10 @@ def run(command: list[str], dry_run: bool) -> None:
 
 def install(interval_minutes: int, dry_run: bool) -> int:
     if not shutil.which("systemctl"):
-        print("systemctl no está disponible; no se instala el timer", file=sys.stderr)
+        print("systemctl is not available; the timer will not be installed", file=sys.stderr)
         return 2
     if not dry_run and os.geteuid() != 0:
-        print("El instalador debe ejecutarse como root", file=sys.stderr)
+        print("The installer must run as root", file=sys.stderr)
         return 2
     docker = shutil.which("docker") or "/usr/bin/docker"
     service = render_service(ROOT, docker)
@@ -67,7 +67,7 @@ def install(interval_minutes: int, dry_run: bool) -> int:
     run(["systemctl", "daemon-reload"], dry_run=False)
     run(["systemctl", "enable", "--now", TIMER], dry_run=False)
     run(["systemctl", "restart", TIMER], dry_run=False)
-    print("Timer instalado. Próxima ejecución:")
+    print("Timer installed. Next run:")
     subprocess.run(["systemctl", "list-timers", TIMER], check=False)
     return 0
 
@@ -76,7 +76,7 @@ def uninstall(dry_run: bool) -> int:
     if not shutil.which("systemctl"):
         return 2
     if not dry_run and os.geteuid() != 0:
-        print("El instalador debe ejecutarse como root", file=sys.stderr)
+        print("The installer must run as root", file=sys.stderr)
         return 2
     run(["systemctl", "disable", "--now", TIMER], dry_run=dry_run)
     for name in (TIMER, SERVICE):

@@ -5,6 +5,8 @@ type PaginationProps = {
   totalPages: number;
   onChange: (page: number) => void;
   className?: string;
+  previousLabel?: string;
+  nextLabel?: string;
 };
 
 function ChevronLeft() {
@@ -39,7 +41,14 @@ function getPageNumbers(current: number, total: number): (number | "ellipsis")[]
   return pages;
 }
 
-export function Pagination({ page, totalPages, onChange, className }: PaginationProps) {
+export function Pagination({
+  page,
+  totalPages,
+  onChange,
+  className,
+  previousLabel = "Previous page",
+  nextLabel = "Next page",
+}: PaginationProps) {
   if (totalPages <= 1) return null;
 
   const pages = getPageNumbers(page, totalPages);
@@ -51,7 +60,7 @@ export function Pagination({ page, totalPages, onChange, className }: Pagination
         disabled={page <= 1}
         onClick={() => onChange(page - 1)}
         className="rounded-md border border-border p-2 text-muted-foreground transition hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-        aria-label="Página anterior"
+        aria-label={previousLabel}
       >
         <ChevronLeft />
       </button>
@@ -83,7 +92,7 @@ export function Pagination({ page, totalPages, onChange, className }: Pagination
         disabled={page >= totalPages}
         onClick={() => onChange(page + 1)}
         className="rounded-md border border-border p-2 text-muted-foreground transition hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-        aria-label="Página siguiente"
+        aria-label={nextLabel}
       >
         <ChevronRight />
       </button>

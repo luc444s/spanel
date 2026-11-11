@@ -14,6 +14,9 @@ import { Dialog } from "@systutor/shell/ui/dialog";
 import { toast } from "@systutor/shell/ui/toast";
 import { Input } from "@systutor/shell/ui/input";
 
+import { t } from "@/i18n";
+import { useT } from "@/i18n/use-i18n";
+
 type DomainCheckState =
   | { status: "idle" }
   | { status: "checking" }
@@ -21,34 +24,38 @@ type DomainCheckState =
   | { status: "unavailable"; reason: string }
   | { status: "error"; message: string };
 
-const KIND_OPTIONS = [
-  { value: "wordpress", label: "WordPress" },
-  { value: "static", label: "Estático" },
-];
-
 /** Detail line of one profile, exactly what the admin curated. */
 function profileDetail(profile: StaticProfile) {
   const env =
-    profile.env_keys.length > 0 ? ` · vars: ${profile.env_keys.join(", ")}` : "";
+    profile.env_keys.length > 0
+      ? ` · ${t("vars")}: ${profile.env_keys.join(", ")}`
+      : "";
   return `${profile.image} · :${profile.container_port} · ${profile.web_root} · ${profile.health_mode}${env}`;
 }
 
 function DomainCheckMessage({ check }: { check: DomainCheckState }) {
+  const t = useT();
   if (check.status === "idle") return null;
   if (check.status === "checking") {
-    return <p className="text-xs text-muted-foreground">Validando dominio...</p>;
+    return <p className="text-xs text-muted-foreground">{t("Validating domain...")}</p>;
   }
   if (check.status === "available") {
     return (
       <p className="text-xs text-emerald-600">
-        Dominio disponible{check.suffix ? ` para el sufijo ${check.suffix}` : ""}
+        {check.suffix
+          ? t("Domain available for suffix {suffix}", { suffix: check.suffix })
+          : t("Domain available")}
       </p>
     );
   }
   if (check.status === "unavailable") {
     return <p className="text-xs text-destructive">{check.reason}</p>;
   }
-  return <p className="text-xs text-destructive">No se pudo validar el dominio: {check.message}</p>;
+  return (
+    <p className="text-xs text-destructive">
+      {t("Could not validate the domain: {message}", { message: check.message })}
+    </p>
+  );
 }
 
 type CreateSiteDialogProps = {
@@ -73,12 +80,18 @@ export function CreateSiteDialog({
   onClose,
   onCreated,
 }: CreateSiteDialogProps) {
+  const t = useT();
   const queryClient = useQueryClient();
   const [kind, setKind] = useState<HostingSiteKind>("wordpress");
   const [profileId, setProfileId] = useState("nginx");
   const [name, setName] = useState("");
   const [domain, setDomain] = useState("");
   const [domainCheck, setDomainCheck] = useState<DomainCheckState>({ status: "idle" });
+
+  const KIND_OPTIONS = [
+    { value: "wordpress", label: t("WordPress") },
+    { value: "static", label: t("Static") },
+  ];
 
   const selected = profiles.find((p) => p.id === profileId) ?? null;
 
@@ -107,7 +120,7 @@ export function CreateSiteDialog({
           } else {
             setDomainCheck({
               status: "unavailable",
-              reason: result.reason ?? "El dominio no está disponible",
+              reason: result.reason ?? t("The domain is not available"),
             });
           }
         })
@@ -115,7 +128,7 @@ export function CreateSiteDialog({
           if (cancelled) return;
           setDomainCheck({
             status: "error",
-            message: error.message || "No se pudo validar el dominio",
+            message: error.message || t("Could not validate the domain"),
           });
         });
     }, 350);
@@ -163,22 +176,24 @@ export function CreateSiteDialog({
         ...(kind === "static" ? { profile: profileId } : {}),
       }),
       {
-        loading: "Creando sitio…",
+        loading: t("Creating site…"),
         success: (data) =>
-          data.site.domain ? `Sitio creado (${data.site.domain})` : "Sitio creado",
-        error: (error: Error) => error.message || "No se pudo crear el sitio",
+          data.site.domain
+            ? t("Site created ({domain})", { domain: data.site.domain })
+            : t("Site created"),
+        error: (error: Error) => error.message || t("Could not create the site"),
       },
     );
   }
 
   return (
-    <Dialog open={open} title="Crear sitio" onClose={onClose}>
+    <Dialog open={open} title={t("Create site")} onClose={onClose}>
       <form
         className="space-y-3"
         onSubmit={submitSite}
       >
         <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Tipo</label>
+          <label className="text-xs text-muted-foreground">{t("Type")}</label>
           <Select
             value={kind}
             onChange={(value) => setKind(value as HostingSiteKind)}
@@ -187,9 +202,9 @@ export function CreateSiteDialog({
         </div>
         {kind === "static" ? (
           <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Perfil</label>
+            <label className="text-xs text-muted-foreground">{t("Profile")}</label>
             {profiles.length === 0 ? (
-              <p className="text-xs text-muted-foreground">No hay perfiles cargados aún.</p>
+              <p className="text-xs text-muted-foreground">{t("No profiles loaded yet.")}</p>
             ) : (
               <Select
                 value={profileId}
@@ -203,19 +218,19 @@ export function CreateSiteDialog({
           </div>
         ) : null}
         <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Nombre</label>
+          <label className="text-xs text-muted-foreground">{t("Name")}</label>
           <Input
             required
-            placeholder="Nombre"
+            placeholder={t("Name")}
             value={name}
             onChange={(event) => setName(event.target.value)}
           />
         </div>
         <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Dominio</label>
+          <label className="text-xs text-muted-foreground">{t("Domain")}</label>
           <Input
             required
-            placeholder="Dominio"
+            placeholder={t("Domain")}
             value={domain}
             onChange={(event) => setDomain(event.target.value)}
           />
@@ -230,7 +245,7 @@ export function CreateSiteDialog({
             (kind === "static" && !selected)
           }
         >
-          {createMutation.isPending ? "Creando..." : "Crear"}
+          {createMutation.isPending ? t("Creating...") : t("Create")}
         </Button>
       </form>
     </Dialog>

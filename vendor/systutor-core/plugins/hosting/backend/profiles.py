@@ -48,7 +48,7 @@ def spec_from_row(row) -> ProfileSpec:
             loaded = json.loads(row.env_json)
         except ValueError as exc:
             raise ProfileValidationError(
-                "Las variables de entorno del perfil son inválidas"
+                "The profile environment variables are invalid"
             ) from exc
         if isinstance(loaded, dict):
             env = {k: v for k, v in loaded.items() if isinstance(k, str) and isinstance(v, str)}
@@ -67,7 +67,7 @@ def spec_from_row(row) -> ProfileSpec:
 def validate_profile_id(value: str) -> str:
     value = (value or "").strip()
     if not PROFILE_ID_RE.fullmatch(value):
-        raise ProfileValidationError("El id del perfil es inválido")
+        raise ProfileValidationError("The profile id is invalid")
     return value
 
 
@@ -80,7 +80,7 @@ def validate_profile_image(value: str) -> str:
         or " " in value
         or not IMAGE_RE.fullmatch(value)
     ):
-        raise ProfileValidationError("La imagen del perfil es inválida")
+        raise ProfileValidationError("The profile image is invalid")
     return value
 
 
@@ -92,7 +92,7 @@ def validate_profile_web_root(value: str) -> str:
         or len(value) > 1
         and value != value.rstrip("/")
     ):
-        raise ProfileValidationError("El web root debe ser una ruta absoluta")
+        raise ProfileValidationError("The web root must be an absolute path")
     return value
 
 
@@ -100,16 +100,16 @@ def validate_profile_port(value: int) -> int:
     try:
         port = int(value)
     except (TypeError, ValueError) as exc:
-        raise ProfileValidationError("El puerto del perfil es inválido") from exc
+        raise ProfileValidationError("The profile port is invalid") from exc
     if not 1 <= port <= 65535:
-        raise ProfileValidationError("El puerto del perfil está fuera de rango")
+        raise ProfileValidationError("The profile port is out of range")
     return port
 
 
 def validate_profile_health_mode(value: str) -> str:
     value = (value or "").strip()
     if value not in HEALTH_MODES:
-        raise ProfileValidationError("El modo de health check es inválido")
+        raise ProfileValidationError("The health check mode is invalid")
     return value
 
 
@@ -122,7 +122,7 @@ def validate_profile_env(value: dict[str, str] | None) -> dict[str, str] | None:
         for key, item in value.items()
     ):
         raise ProfileValidationError(
-            "Las variables de entorno deben ser un objeto de strings"
+            "The environment variables must be an object of strings"
         )
     return dict(value)
 

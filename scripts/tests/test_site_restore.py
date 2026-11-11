@@ -171,7 +171,7 @@ def test_without_yes_is_verified_plan_with_zero_mutations(tmp_path: Path, capsys
     code = restore.main(argv(incoming), tooling(fake, safety=None))
     assert code == restore.EXIT_OK
     assert not mutating_calls(fake)
-    assert "sin --yes" in capsys.readouterr().out
+    assert "without --yes" in capsys.readouterr().out
 
 
 def test_confirmed_static_restore_creates_safety_before_mutation(tmp_path: Path):
@@ -283,7 +283,7 @@ def test_manifest_over_bounded_limit_is_rejected(tmp_path: Path):
 
     with (
         zipfile.ZipFile(path) as zipped,
-        pytest.raises(restore.StrictVerifyError, match="demasiado grande"),
+        pytest.raises(restore.StrictVerifyError, match="too large"),
     ):
         restore._read_manifest(zipped)
 
@@ -355,7 +355,7 @@ def test_sql_failure_rolls_back_with_safety_zip_and_redacts_secret(tmp_path: Pat
     assert b"RESTORE SQL;\n" in fake.inputs
     assert b"SAFETY SQL;\n" in fake.inputs
     output = capsys.readouterr()
-    assert "ROLLBACK: estado previo restaurado" in output.err
+    assert "ROLLBACK: previous state restored" in output.err
     assert "current-secret" not in output.out + output.err
 
 

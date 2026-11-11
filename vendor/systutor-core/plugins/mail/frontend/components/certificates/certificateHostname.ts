@@ -1,3 +1,5 @@
+import { t } from "@/i18n";
+
 /** Validación y normalización pura de hostnames `mail.<dominio>` (A.SPEC 0041). */
 
 const HOSTNAME_PATTERN = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/;
@@ -16,17 +18,17 @@ export function normalizeCertificateHostname(value: string): string {
 export function certificateHostnameError(value: string): string | null {
   const hostname = normalizeCertificateHostname(value);
   if (!hostname) {
-    return "Ingresá el hostname del certificado.";
+    return t("Enter the certificate hostname.");
   }
   if (!HOSTNAME_PATTERN.test(hostname)) {
-    return "Hostname inválido: solo letras, números, guiones y puntos.";
+    return t("Invalid hostname: only letters, numbers, hyphens, and periods.");
   }
   if (!hostname.startsWith(MAIL_PREFIX)) {
-    return "El hostname debe tener la forma mail.<dominio>.";
+    return t("The hostname must have the form mail.<domain>.");
   }
   const domain = hostname.slice(MAIL_PREFIX.length);
   if (!domain) {
-    return "Falta el dominio después de mail.";
+    return t("Missing the domain after mail.");
   }
   return null;
 }

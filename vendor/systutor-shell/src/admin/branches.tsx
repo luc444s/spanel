@@ -91,23 +91,23 @@ export function BranchesView() {
         <CardHeader className="flex flex-row items-center justify-between">
           <div className="space-y-1">
             <CardTitle>Branches</CardTitle>
-            <CardDescription>Sucursales del tenant activo</CardDescription>
+            <CardDescription>Branches of the active tenant</CardDescription>
           </div>
-          <Button onClick={openCreate}>Nuevo branch</Button>
+          <Button onClick={openCreate}>New branch</Button>
         </CardHeader>
         <CardContent className="space-y-4">
           {error && <Alert title="Error">{error}</Alert>}
           {loading ? (
-            <p className="text-sm text-muted-foreground">Cargando…</p>
+            <p className="text-sm text-muted-foreground">Loading…</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border text-left text-muted-foreground">
-                    <th className="py-2 pr-4 font-medium">Nombre</th>
-                    <th className="py-2 pr-4 font-medium">Código</th>
-                    <th className="py-2 pr-4 font-medium">Estado</th>
-                    <th className="py-2 font-medium">Acciones</th>
+                    <th className="py-2 pr-4 font-medium">Name</th>
+                    <th className="py-2 pr-4 font-medium">Code</th>
+                    <th className="py-2 pr-4 font-medium">Status</th>
+                    <th className="py-2 font-medium">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -153,7 +153,7 @@ export function BranchesView() {
 
       <Dialog
         open={creating || editing !== null}
-        title={creating ? "Nuevo branch" : "Editar branch"}
+        title={creating ? "New branch" : "Edit branch"}
         onClose={() => {
           setCreating(false);
           setEditing(null);
@@ -168,10 +168,10 @@ export function BranchesView() {
                 setEditing(null);
               }}
             >
-              Cancelar
+              Cancel
             </Button>
             <Button type="submit" form="branch-form" disabled={busy === "form"}>
-              Guardar
+              Save
             </Button>
           </div>
         }
@@ -180,14 +180,14 @@ export function BranchesView() {
           {error && <Alert title="Error">{error}</Alert>}
           <div className="grid gap-4 md:grid-cols-2">
             <label className="block space-y-2 text-sm text-foreground">
-              <span>Nombre</span>
+              <span>Name</span>
               <Input
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
               />
             </label>
             <label className="block space-y-2 text-sm text-foreground">
-              <span>Código</span>
+              <span>Code</span>
               <Input
                 value={form.code}
                 onChange={(e) => setForm({ ...form, code: e.target.value })}

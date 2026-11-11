@@ -1,24 +1,26 @@
 # Core UI Components
 
-Componentes reutilizables del core frontend. Viven en `apps/web/src/shared/ui/` y son importables desde cualquier plugin o página.
+English | [Español](README.es.md)
 
-Estilo: utility-first con Tailwind CSS, colores semánticos vía variables CSS, sin colores hardcodeados.
+Reusable core frontend components. They live in `apps/web/src/shared/ui/` and can be imported from any plugin or page.
+
+Style: utility-first with Tailwind CSS, semantic colors via CSS variables, no hardcoded colors.
 
 ---
 
-## Form patterns (obligatorio — leer antes de crear cualquier formulario)
+## Form patterns (mandatory — read before creating any form)
 
 ### Label + input
 
 ```tsx
 <label className="block space-y-2 text-sm text-foreground">
-  <span>Nombre del campo</span>
+  <span>Field name</span>
   <Input value={val} onChange={fn} />
-  {/* o <Combobox />, <Select />, <Textarea /> */}
+  {/* or <Combobox />, <Select />, <Textarea /> */}
 </label>
 ```
 
-Nunca: `text-xs`, `text-muted-foreground` en labels, asteriscos rojos para required.
+Never: `text-xs`, `text-muted-foreground` on labels, red asterisks for required.
 
 ### Form layout
 
@@ -32,33 +34,33 @@ Nunca: `text-xs`, `text-muted-foreground` en labels, asteriscos rojos para requi
   </div>
 
   <div className="flex justify-end gap-3">
-    <Button type="button" variant="secondary">Cancelar</Button>
-    <Button type="submit">Guardar</Button>
+    <Button type="button" variant="secondary">Cancel</Button>
+    <Button type="submit">Save</Button>
   </div>
 </form>
 ```
 
-### Que componente usar
+### Which component to use
 
-| Necesidad | Componente | Import |
+| Need | Component | Import |
 |-----------|-----------|--------|
-| Input texto/fecha | `Input` | `shared/ui/input` |
-| Multilinea | `Textarea` | `shared/ui/input` |
-| Select con busqueda | `Combobox` | `shared/ui/combobox` |
-| Select simple | `Select` | `shared/ui/select` |
-| Boton | `Button` | `shared/ui/button` |
+| Text/date input | `Input` | `shared/ui/input` |
+| Multiline | `Textarea` | `shared/ui/input` |
+| Searchable select | `Combobox` | `shared/ui/combobox` |
+| Simple select | `Select` | `shared/ui/select` |
+| Button | `Button` | `shared/ui/button` |
 | Error | `Alert` | `shared/ui/alert` |
 | Modal | `Dialog` | `shared/ui/dialog` |
 | Checkbox | `Checkbox` | `shared/ui/input` |
 
-### Prohibido
+### Forbidden
 
-- `<button>` con estilos inline → usar `<Button>`
-- `<textarea>` nativo → usar `<Textarea>`
-- Divs rojos para errores → usar `<Alert>`
-- Asteriscos rojos `*` en labels
-- `text-xs` o `text-muted-foreground` en labels
-- `style={{}}` o colores hardcodeados
+- `<button>` with inline styles → use `<Button>`
+- Native `<textarea>` → use `<Textarea>`
+- Red divs for errors → use `<Alert>`
+- Red `*` asterisks on labels
+- `text-xs` or `text-muted-foreground` on labels
+- `style={{}}` or hardcoded colors
 
 ---
 
@@ -68,10 +70,10 @@ Nunca: `text-xs`, `text-muted-foreground` en labels, asteriscos rojos para requi
 import { Alert } from "ruta/al/shared/ui/alert";
 ```
 
-| Prop | Tipo | Default | Descripción |
+| Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `title` | `string` | requerido | Título del mensaje |
-| `children` | `ReactNode` | — | Contenido descriptivo |
+| `title` | `string` | required | Message title |
+| `children` | `ReactNode` | — | Descriptive content |
 
 ---
 
@@ -81,10 +83,10 @@ import { Alert } from "ruta/al/shared/ui/alert";
 import { Badge } from "ruta/al/shared/ui/badge";
 ```
 
-Badge genérico. Acepta `className` para personalizar color de estado.
+Generic badge. Accepts `className` to customize the status color.
 
 ```tsx
-<Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">Activo</Badge>
+<Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">Active</Badge>
 ```
 
 ---
@@ -95,15 +97,15 @@ Badge genérico. Acepta `className` para personalizar color de estado.
 import { Button } from "ruta/al/shared/ui/button";
 ```
 
-| Prop | Tipo | Default | Descripción |
+| Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `variant` | `"primary" \| "secondary"` | `"primary"` | Estilo visual |
-| `...props` | `ButtonHTMLAttributes` | — | Pasa al elemento `<button>` |
+| `variant` | `"primary" \| "secondary"` | `"primary"` | Visual style |
+| `...props` | `ButtonHTMLAttributes` | — | Passed to the `<button>` element |
 
 ```tsx
-<Button>Guardar</Button>
-<Button variant="secondary">Cancelar</Button>
-<Button disabled>Enviando...</Button>
+<Button>Save</Button>
+<Button variant="secondary">Cancel</Button>
+<Button disabled>Sending...</Button>
 ```
 
 ---
@@ -117,10 +119,10 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "ruta/
 ```tsx
 <Card>
   <CardHeader>
-    <CardTitle>Título</CardTitle>
-    <CardDescription>Subtítulo o descripción</CardDescription>
+    <CardTitle>Title</CardTitle>
+    <CardDescription>Subtitle or description</CardDescription>
   </CardHeader>
-  <CardContent>Contenido del card</CardContent>
+  <CardContent>Card content</CardContent>
 </Card>
 ```
 
@@ -132,17 +134,17 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "ruta/
 import { Combobox, type ComboboxOption } from "ruta/al/shared/ui/combobox";
 ```
 
-Select con buscador inline. Recomendado cuando hay más de 5-8 opciones.
+Select with an inline search box. Recommended when there are more than 5-8 options.
 
-| Prop | Tipo | Default | Descripción |
+| Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `value` | `string` | requerido | Valor seleccionado |
-| `onChange` | `(value: string) => void` | requerido | Callback al seleccionar |
-| `options` | `ComboboxOption[]` | requerido | `{ value, label, keywords? }` |
-| `placeholder` | `string` | — | Texto cuando no hay selección |
-| `searchPlaceholder` | `string` | `"Buscar..."` | Placeholder del input de búsqueda |
-| `emptyMessage` | `string` | `"Sin opciones."` | Mensaje cuando no hay resultados |
-| `disabled` | `boolean` | `false` | Deshabilitado |
+| `value` | `string` | required | Selected value |
+| `onChange` | `(value: string) => void` | required | Callback on select |
+| `options` | `ComboboxOption[]` | required | `{ value, label, keywords? }` |
+| `placeholder` | `string` | — | Text when nothing is selected |
+| `searchPlaceholder` | `string` | `"Search..."` | Search input placeholder |
+| `emptyMessage` | `string` | `"No options."` | Message when there are no results |
+| `disabled` | `boolean` | `false` | Disabled |
 
 ```tsx
 <Combobox
@@ -150,9 +152,9 @@ Select con buscador inline. Recomendado cuando hay más de 5-8 opciones.
   onChange={(val) => setForm({ ...form, type: val })}
   options={[
     { value: "GLOBAL", label: "Global", keywords: ["global"] },
-    { value: "PRODUCT", label: "Producto", keywords: ["producto"] },
+    { value: "PRODUCT", label: "Product", keywords: ["product"] },
   ]}
-  placeholder="Seleccionar tipo"
+  placeholder="Select type"
 />
 ```
 
@@ -164,26 +166,26 @@ Select con buscador inline. Recomendado cuando hay más de 5-8 opciones.
 import { DataTable, type DataTableColumn } from "ruta/al/shared/ui/data-table";
 ```
 
-Tabla genérica con soporte de filas clickeables y modo denso.
+Generic table with clickable row support and dense mode.
 
-| Prop | Tipo | Default | Descripción |
+| Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `columns` | `DataTableColumn<Row>[]` | requerido | `{ key, header, render, className? }` |
-| `rows` | `Row[]` | requerido | Datos de la tabla |
-| `rowKey` | `(row: Row) => string` | requerido | Función para obtener key única |
-| `emptyMessage` | `string` | requerido | Mensaje cuando no hay filas |
-| `onRowClick` | `(row: Row) => void` | — | Callback al hacer click en fila |
-| `dense` | `boolean` | `false` | Reduce padding de celdas |
+| `columns` | `DataTableColumn<Row>[]` | required | `{ key, header, render, className? }` |
+| `rows` | `Row[]` | required | Table data |
+| `rowKey` | `(row: Row) => string` | required | Function returning the unique key |
+| `emptyMessage` | `string` | required | Message when there are no rows |
+| `onRowClick` | `(row: Row) => void` | — | Callback when a row is clicked |
+| `dense` | `boolean` | `false` | Reduces cell padding |
 
 ```tsx
 <DataTable
   columns={[
-    { key: "name", header: "Nombre", render: (row) => row.name },
+    { key: "name", header: "Name", render: (row) => row.name },
     { key: "email", header: "Email", render: (row) => row.email ?? "-" },
   ]}
   rows={data}
   rowKey={(row) => row.id}
-  emptyMessage="No hay registros."
+  emptyMessage="No records."
   onRowClick={(row) => handleEdit(row)}
 />
 ```
@@ -196,20 +198,20 @@ Tabla genérica con soporte de filas clickeables y modo denso.
 import { Dialog } from "ruta/al/shared/ui/dialog";
 ```
 
-Modal básico. Se cierra al hacer click fuera o en "Cerrar".
+Basic modal. Closes when clicking outside or on "Close".
 
-| Prop | Tipo | Default | Descripción |
+| Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `open` | `boolean` | requerido | Control de visibilidad |
-| `title` | `string` | requerido | Título del modal |
-| `description` | `string` | — | Subtítulo opcional |
-| `children` | `ReactNode` | requerido | Contenido del modal |
-| `actions` | `ReactNode` | — | Footer de acciones |
-| `onClose` | `() => void` | requerido | Callback al cerrar |
-| `maxWidthClassName` | `string` | `"max-w-2xl"` | Clase Tailwind para ancho máximo |
+| `open` | `boolean` | required | Visibility control |
+| `title` | `string` | required | Modal title |
+| `description` | `string` | — | Optional subtitle |
+| `children` | `ReactNode` | required | Modal content |
+| `actions` | `ReactNode` | — | Action footer |
+| `onClose` | `() => void` | required | Callback on close |
+| `maxWidthClassName` | `string` | `"max-w-2xl"` | Tailwind class for max width |
 
 ```tsx
-<Dialog open={isOpen} title="Nuevo cliente" onClose={() => setIsOpen(false)}>
+<Dialog open={isOpen} title="New customer" onClose={() => setIsOpen(false)}>
   <form>...</form>
 </Dialog>
 ```
@@ -222,10 +224,10 @@ Modal básico. Se cierra al hacer click fuera o en "Cerrar".
 import { Input } from "ruta/al/shared/ui/input";
 ```
 
-Wrapper de `<input>` con estilos del sistema. Pasa todas las props estándar de HTMLInputElement.
+`<input>` wrapper with system styles. Passes all standard HTMLInputElement props.
 
 ```tsx
-<Input value={name} onChange={handleChange} placeholder="Nombre del cliente" />
+<Input value={name} onChange={handleChange} placeholder="Customer name" />
 <Input type="date" value={date} onChange={handleDateChange} />
 ```
 
@@ -237,23 +239,23 @@ Wrapper de `<input>` con estilos del sistema. Pasa todas las props estándar de 
 import { LocationPicker } from "ruta/al/shared/ui/location-picker";
 ```
 
-Selector de ubicación geográfica con mapa interactivo (Leaflet + OpenStreetMap). Incluye búsqueda por dirección vía Nominatim.
+Geographic location picker with an interactive map (Leaflet + OpenStreetMap). Includes address search via Nominatim.
 
-| Prop | Tipo | Default | Descripción |
+| Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `value` | `{ lat: number; lng: number } \| null` | requerido | Ubicación actual |
-| `onChange` | `(location: { lat: number; lng: number }) => void` | requerido | Callback al cambiar ubicación |
-| `className` | `string` | — | Clase adicional |
-| `placeholder` | `string` | `"Haz clic en el mapa para seleccionar una ubicación"` | Texto inferior |
-| `searchPlaceholder` | `string` | `"Buscar dirección..."` | Placeholder del buscador |
-| `height` | `number` | `300` | Alto del mapa en px |
+| `value` | `{ lat: number; lng: number } \| null` | required | Current location |
+| `onChange` | `(location: { lat: number; lng: number }) => void` | required | Callback when the location changes |
+| `className` | `string` | — | Additional class |
+| `placeholder` | `string` | `"Click the map to select a location"` | Bottom text |
+| `searchPlaceholder` | `string` | `"Search address..."` | Search box placeholder |
+| `height` | `number` | `300` | Map height in px |
 
-Características:
-- Click en el mapa para colocar marcador
-- Marcador arrastrable
-- Búsqueda por dirección (Nominatim, limitado a España)
-- Cambio automático de tiles (OSM light / CartoDB dark) según el tema
-- Muestra coordenadas `lat, lng` en formato legible
+Features:
+- Click the map to place the marker
+- Draggable marker
+- Address search (Nominatim, limited to Spain)
+- Automatic tile switching (OSM light / CartoDB dark) based on the theme
+- Shows `lat, lng` coordinates in a readable format
 
 ```tsx
 const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
@@ -273,29 +275,29 @@ const [location, setLocation] = useState<{ lat: number; lng: number } | null>(nu
 import { SearchDialog, type SearchDialogProps } from "ruta/al/shared/ui/search-dialog";
 ```
 
-Modal de búsqueda genérica con debounce, consulta remota y tabla de resultados. Genérico por tipo `T`.
+Generic search modal with debounce, remote query and results table. Generic over type `T`.
 
-| Prop | Tipo | Default | Descripción |
+| Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `open` | `boolean` | requerido | Control de visibilidad |
-| `onOpenChange` | `(open: boolean) => void` | requerido | Callback de apertura/cierre |
-| `title` | `string` | requerido | Título del diálogo |
-| `placeholder` | `string` | — | Ejemplo de búsqueda |
-| `columns` | `DataTableColumn<T>[]` | requerido | Columnas de resultados |
-| `fetchFn` | `(query: string) => Promise<T[]>` | requerido | Función de búsqueda remota |
-| `onSelect` | `(item: T) => void` | requerido | Callback al seleccionar |
-| `getRowId` | `(item: T) => string` | — | Extrae ID de fila |
-| `emptyMessage` | `string` | `"Sin resultados."` | Mensaje sin resultados |
+| `open` | `boolean` | required | Visibility control |
+| `onOpenChange` | `(open: boolean) => void` | required | Open/close callback |
+| `title` | `string` | required | Dialog title |
+| `placeholder` | `string` | — | Search example |
+| `columns` | `DataTableColumn<T>[]` | required | Result columns |
+| `fetchFn` | `(query: string) => Promise<T[]>` | required | Remote search function |
+| `onSelect` | `(item: T) => void` | required | Callback on select |
+| `getRowId` | `(item: T) => string` | — | Extracts the row ID |
+| `emptyMessage` | `string` | `"No results."` | No-results message |
 
 ```tsx
 <SearchDialog<Customer>
   open={isOpen}
   onOpenChange={setIsOpen}
-  title="Buscar cliente"
-  placeholder="Nombre, NIF, teléfono..."
+  title="Search customer"
+  placeholder="Name, tax ID, phone..."
   columns={[
-    { key: "name", header: "Cliente", render: (c) => c.commercial_name },
-    { key: "doc", header: "NIF", render: (c) => c.document_number },
+    { key: "name", header: "Customer", render: (c) => c.commercial_name },
+    { key: "doc", header: "Tax ID", render: (c) => c.document_number },
   ]}
   fetchFn={searchCustomers}
   onSelect={(customer) => handleSelect(customer)}
@@ -310,24 +312,24 @@ Modal de búsqueda genérica con debounce, consulta remota y tabla de resultados
 import { Select } from "ruta/al/shared/ui/select";
 ```
 
-Select nativo estilizado. Para listas pequeñas (< 8 opciones). Para listas más grandes usar `Combobox`.
+Styled native select. For small lists (< 8 options). For larger lists use `Combobox`.
 
-| Prop | Tipo | Default | Descripción |
+| Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `value` | `string` | requerido | Valor seleccionado |
-| `onChange` | `(value: string) => void` | requerido | Callback al seleccionar |
-| `options` | `{ value: string; label: string }[]` | requerido | Opciones |
-| `placeholder` | `string` | — | Texto cuando no hay selección |
+| `value` | `string` | required | Selected value |
+| `onChange` | `(value: string) => void` | required | Callback on select |
+| `options` | `{ value: string; label: string }[]` | required | Options |
+| `placeholder` | `string` | — | Text when nothing is selected |
 
 ```tsx
 <Select
   value={form.status}
   onChange={(val) => setForm({ ...form, status: val })}
   options={[
-    { value: "active", label: "Activo" },
-    { value: "inactive", label: "Inactivo" },
+    { value: "active", label: "Active" },
+    { value: "inactive", label: "Inactive" },
   ]}
-  placeholder="Seleccionar estado"
+  placeholder="Select status"
 />
 ```
 
@@ -339,9 +341,9 @@ Select nativo estilizado. Para listas pequeñas (< 8 opciones). Para listas más
 import { ThemeToggle } from "ruta/al/shared/ui/theme-toggle";
 ```
 
-Botón que alterna entre modo claro/oscuro. Usa `useThemeStore` de `features/theme/store`.
+Button that toggles between light/dark mode. Uses `useThemeStore` from `features/theme/store`.
 
-Sin props.
+No props.
 
 ---
 
@@ -351,7 +353,7 @@ Sin props.
 import { Checkbox } from "ruta/al/shared/ui/checkbox";
 ```
 
-Checkbox estilizado con acento del tema. Pasa todas las props de `InputHTMLAttributes`.
+Checkbox styled with the theme accent. Passes all `InputHTMLAttributes` props.
 
 ```tsx
 <Checkbox checked={isActive} onChange={handleChange} />
@@ -365,10 +367,10 @@ Checkbox estilizado con acento del tema. Pasa todas las props de `InputHTMLAttri
 import { Textarea } from "ruta/al/shared/ui/textarea";
 ```
 
-Campo de texto multilínea estilizado. Pasa todas las props de `TextareaHTMLAttributes`.
+Styled multiline text field. Passes all `TextareaHTMLAttributes` props.
 
 ```tsx
-<Textarea value={notes} onChange={handleChange} placeholder="Observaciones..." rows={3} />
+<Textarea value={notes} onChange={handleChange} placeholder="Notes..." rows={3} />
 ```
 
 ---
@@ -379,12 +381,12 @@ Campo de texto multilínea estilizado. Pasa todas las props de `TextareaHTMLAttr
 import { Switch } from "ruta/al/shared/ui/switch";
 ```
 
-Toggle visual para campos booleanos. Renderiza un `<input type="checkbox">` oculto con un slider estilizado.
+Visual toggle for boolean fields. Renders a hidden `<input type="checkbox">` with a styled slider.
 
 ```tsx
 <label className="flex items-center gap-2 text-sm">
   <Switch checked={isActive} onChange={handleChange} />
-  Activo
+  Active
 </label>
 ```
 
@@ -396,7 +398,7 @@ Toggle visual para campos booleanos. Renderiza un `<input type="checkbox">` ocul
 import { Skeleton } from "ruta/al/shared/ui/skeleton";
 ```
 
-Placeholder animado para estados de carga. Útil combinado con `DataTable` o `Card`.
+Animated placeholder for loading states. Useful combined with `DataTable` or `Card`.
 
 ```tsx
 <div className="space-y-2">
@@ -414,12 +416,12 @@ Placeholder animado para estados de carga. Útil combinado con `DataTable` o `Ca
 import { Progress } from "ruta/al/shared/ui/progress";
 ```
 
-Barra de progreso con `role="progressbar"` accesible.
+Progress bar with an accessible `role="progressbar"`.
 
-| Prop | Tipo | Default | Descripción |
+| Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `value` | `number` | requerido | Valor actual |
-| `max` | `number` | `100` | Valor máximo |
+| `value` | `number` | required | Current value |
+| `max` | `number` | `100` | Maximum value |
 
 ```tsx
 <Progress value={75} />
@@ -434,17 +436,17 @@ Barra de progreso con `role="progressbar"` accesible.
 import { Breadcrumb } from "ruta/al/shared/ui/breadcrumb";
 ```
 
-Migas de pan para navegación jerárquica. El último item se muestra como texto, los anteriores como enlaces.
+Breadcrumbs for hierarchical navigation. The last item is shown as text, the previous ones as links.
 
-| Prop | Tipo | Default | Descripción |
+| Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `items` | `{ label: string; href?: string }[]` | requerido | Ruta de navegación |
+| `items` | `{ label: string; href?: string }[]` | required | Navigation path |
 
 ```tsx
 <Breadcrumb items={[
-  { label: "Clientes", href: "/clientes" },
-  { label: "Detalle", href: "/clientes/123" },
-  { label: "Editar" },
+  { label: "Customers", href: "/customers" },
+  { label: "Detail", href: "/customers/123" },
+  { label: "Edit" },
 ]} />
 ```
 
@@ -456,20 +458,20 @@ Migas de pan para navegación jerárquica. El último item se muestra como texto
 import { EmptyState } from "ruta/al/shared/ui/empty-state";
 ```
 
-Estado vacío con icono, título, descripción opcional y acción.
+Empty state with an icon, title, optional description and action.
 
-| Prop | Tipo | Default | Descripción |
+| Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `title` | `string` | requerido | Título del estado vacío |
-| `description` | `string` | — | Descripción opcional |
-| `icon` | `ReactNode` | Icono por defecto | Icono personalizado |
-| `action` | `ReactNode` | — | Botón o link de acción |
+| `title` | `string` | required | Empty state title |
+| `description` | `string` | — | Optional description |
+| `icon` | `ReactNode` | Default icon | Custom icon |
+| `action` | `ReactNode` | — | Action button or link |
 
 ```tsx
 <EmptyState
-  title="No hay productos"
-  description="Crea tu primer producto para empezar."
-  action={<Button>Nuevo producto</Button>}
+  title="No products"
+  description="Create your first product to get started."
+  action={<Button>New product</Button>}
 />
 ```
 
@@ -481,22 +483,22 @@ Estado vacío con icono, título, descripción opcional y acción.
 import { Tabs, type Tab } from "ruta/al/shared/ui/tabs";
 ```
 
-Navegación por pestañas con contenido asociado.
+Tab navigation with associated content.
 
-| Prop | Tipo | Default | Descripción |
+| Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `value` | `string` | requerido | Pestaña activa |
-| `onChange` | `(value: string) => void` | requerido | Callback al cambiar |
-| `tabs` | `Tab[]` | requerido | `{ value, label, content, disabled? }` |
+| `value` | `string` | required | Active tab |
+| `onChange` | `(value: string) => void` | required | Callback on change |
+| `tabs` | `Tab[]` | required | `{ value, label, content, disabled? }` |
 
 ```tsx
 <Tabs
   value={tab}
   onChange={setTab}
   tabs={[
-    { value: "datos", label: "Datos generales", content: <DatosGenerales /> },
-    { value: "bancos", label: "Datos bancarios", content: <BankAccountsSection /> },
-    { value: "precios", label: "Precios especiales", content: <PricingTermsSection /> },
+    { value: "datos", label: "General data", content: <DatosGenerales /> },
+    { value: "bancos", label: "Bank details", content: <BankAccountsSection /> },
+    { value: "precios", label: "Special prices", content: <PricingTermsSection /> },
   ]}
 />
 ```
@@ -509,13 +511,13 @@ Navegación por pestañas con contenido asociado.
 import { Pagination } from "ruta/al/shared/ui/pagination";
 ```
 
-Paginación con navegación numérica, elipsis y botones anterior/siguiente.
+Pagination with numeric navigation, ellipsis and previous/next buttons.
 
-| Prop | Tipo | Default | Descripción |
+| Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `page` | `number` | requerido | Página actual |
-| `totalPages` | `number` | requerido | Total de páginas |
-| `onChange` | `(page: number) => void` | requerido | Callback al cambiar página |
+| `page` | `number` | required | Current page |
+| `totalPages` | `number` | required | Total pages |
+| `onChange` | `(page: number) => void` | required | Callback on page change |
 
 ```tsx
 <Pagination page={page} totalPages={total} onChange={setPage} />
@@ -529,15 +531,15 @@ Paginación con navegación numérica, elipsis y botones anterior/siguiente.
 import { Tooltip } from "ruta/al/shared/ui/tooltip";
 ```
 
-Tooltip simple que aparece al hacer hover/focus. Se posiciona sobre el elemento.
+Simple tooltip that appears on hover/focus. Positioned above the element.
 
-| Prop | Tipo | Default | Descripción |
+| Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `content` | `string` | requerido | Texto del tooltip |
-| `children` | `ReactNode` | requerido | Elemento trigger |
+| `content` | `string` | required | Tooltip text |
+| `children` | `ReactNode` | required | Trigger element |
 
 ```tsx
-<Tooltip content="Eliminar cliente">
+<Tooltip content="Delete customer">
   <Button onClick={handleDelete}>x</Button>
 </Tooltip>
 ```
@@ -550,19 +552,19 @@ Tooltip simple que aparece al hacer hover/focus. Se posiciona sobre el elemento.
 import { Popover } from "ruta/al/shared/ui/popover";
 ```
 
-Panel flotante que se abre al hacer click en el trigger. Se cierra al hacer click fuera.
+Floating panel that opens when the trigger is clicked. Closes when clicking outside.
 
-| Prop | Tipo | Default | Descripción |
+| Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `trigger` | `ReactNode` | requerido | Elemento que abre el popover |
-| `children` | `ReactNode` | requerido | Contenido del popover |
-| `align` | `"start" \| "center" \| "end"` | `"center"` | Alineación horizontal |
+| `trigger` | `ReactNode` | required | Element that opens the popover |
+| `children` | `ReactNode` | required | Popover content |
+| `align` | `"start" \| "center" \| "end"` | `"center"` | Horizontal alignment |
 
 ```tsx
-<Popover trigger={<Button>Filtros</Button>}>
+<Popover trigger={<Button>Filters</Button>}>
   <div className="space-y-2 p-3">
     <label className="flex items-center gap-2 text-sm">
-      <Checkbox /> Solo activos
+      <Checkbox /> Active only
     </label>
   </div>
 </Popover>
@@ -576,21 +578,21 @@ Panel flotante que se abre al hacer click en el trigger. Se cierra al hacer clic
 import { DropdownMenu, type DropdownItem } from "ruta/al/shared/ui/dropdown-menu";
 ```
 
-Menú contextual con acciones. Se cierra al hacer click fuera o al seleccionar un item.
+Context menu with actions. Closes when clicking outside or when an item is selected.
 
-| Prop | Tipo | Default | Descripción |
+| Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `trigger` | `ReactNode` | requerido | Elemento que abre el menú |
-| `items` | `DropdownItem[]` | requerido | `{ label, onClick, disabled?, destructive?, icon? }` |
-| `align` | `"start" \| "end"` | `"start"` | Alineación horizontal |
+| `trigger` | `ReactNode` | required | Element that opens the menu |
+| `items` | `DropdownItem[]` | required | `{ label, onClick, disabled?, destructive?, icon? }` |
+| `align` | `"start" \| "end"` | `"start"` | Horizontal alignment |
 
 ```tsx
 <DropdownMenu
-  trigger={<Button variant="secondary">Acciones</Button>}
+  trigger={<Button variant="secondary">Actions</Button>}
   items={[
-    { label: "Editar", onClick: () => handleEdit(row) },
-    { label: "Duplicar", onClick: () => handleDuplicate(row) },
-    { label: "Eliminar", onClick: () => handleDelete(row), destructive: true },
+    { label: "Edit", onClick: () => handleEdit(row) },
+    { label: "Duplicate", onClick: () => handleDuplicate(row) },
+    { label: "Delete", onClick: () => handleDelete(row), destructive: true },
   ]}
 />
 ```
@@ -603,22 +605,22 @@ Menú contextual con acciones. Se cierra al hacer click fuera o al seleccionar u
 import { toast, ToastContainer } from "ruta/al/shared/ui/toast";
 ```
 
-Sistema de notificaciones global. Coloca `ToastContainer` una vez en el layout raíz y usa la función `toast()` desde cualquier componente.
+Global notification system. Place `ToastContainer` once in the root layout and use the `toast()` function from any component.
 
 ```tsx
-// En el layout:
+// In the layout:
 <ToastContainer />
 
-// En cualquier componente:
-toast("Cliente guardado correctamente", "success");
-toast("Error al guardar", "error");
-toast("Procesando...", "info");
+// In any component:
+toast("Customer saved successfully", "success");
+toast("Error while saving", "error");
+toast("Processing...", "info");
 ```
 
-| Función | Tipo | Descripción |
+| Function | Type | Description |
 |---------|------|-------------|
-| `toast(message, type?)` | `(msg: string, type?: "success" \| "error" \| "info") => void` | Muestra notificación |
-| `ToastContainer` | Componente | Renderiza las notificaciones (poner una vez en el root) |
+| `toast(message, type?)` | `(msg: string, type?: "success" \| "error" \| "info") => void` | Shows a notification |
+| `ToastContainer` | Component | Renders the notifications (place once in the root) |
 
 ---
 
@@ -628,28 +630,28 @@ toast("Procesando...", "info");
 import { ConfirmDialog } from "ruta/al/shared/ui/confirm-dialog";
 ```
 
-Diálogo de confirmación con acciones de confirmar/cancelar.
+Confirmation dialog with confirm/cancel actions.
 
-| Prop | Tipo | Default | Descripción |
+| Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `open` | `boolean` | requerido | Control de visibilidad |
-| `onClose` | `() => void` | requerido | Callback al cerrar |
-| `onConfirm` | `() => void` | requerido | Callback al confirmar |
-| `title` | `string` | requerido | Título |
-| `description` | `string` | — | Descripción opcional |
-| `confirmLabel` | `string` | `"Confirmar"` | Texto del botón de confirmar |
-| `cancelLabel` | `string` | `"Cancelar"` | Texto del botón de cancelar |
-| `destructive` | `boolean` | `false` | Estilo rojo para acciones destructivas |
-| `loading` | `boolean` | `false` | Estado de carga |
+| `open` | `boolean` | required | Visibility control |
+| `onClose` | `() => void` | required | Callback on close |
+| `onConfirm` | `() => void` | required | Callback on confirm |
+| `title` | `string` | required | Title |
+| `description` | `string` | — | Optional description |
+| `confirmLabel` | `string` | `"Confirm"` | Confirm button text |
+| `cancelLabel` | `string` | `"Cancel"` | Cancel button text |
+| `destructive` | `boolean` | `false` | Red style for destructive actions |
+| `loading` | `boolean` | `false` | Loading state |
 
 ```tsx
 <ConfirmDialog
   open={isOpen}
   onClose={() => setIsOpen(false)}
   onConfirm={handleDelete}
-  title="Eliminar cliente"
-  description="Esta acción no se puede deshacer."
-  confirmLabel="Eliminar"
+  title="Delete customer"
+  description="This action cannot be undone."
+  confirmLabel="Delete"
   destructive
 />
 ```
@@ -662,14 +664,14 @@ Diálogo de confirmación con acciones de confirmar/cancelar.
 import { FileUpload } from "ruta/al/shared/ui/file-upload";
 ```
 
-Área de arrastrar y soltar archivos con click alternativo.
+Drag-and-drop file area with a click alternative.
 
-| Prop | Tipo | Default | Descripción |
+| Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `onFiles` | `(files: File[]) => void` | requerido | Callback con archivos seleccionados |
-| `accept` | `string` | — | Tipos MIME aceptados (ej. `".png,.jpg"`) |
-| `multiple` | `boolean` | `false` | Permitir múltiples archivos |
-| `maxSize` | `number` | — | Tamaño máximo en bytes |
+| `onFiles` | `(files: File[]) => void` | required | Callback with the selected files |
+| `accept` | `string` | — | Accepted MIME types (e.g. `".png,.jpg"`) |
+| `multiple` | `boolean` | `false` | Allow multiple files |
+| `maxSize` | `number` | — | Maximum size in bytes |
 
 ```tsx
 <FileUpload
@@ -688,7 +690,7 @@ import { FileUpload } from "ruta/al/shared/ui/file-upload";
 import { cn } from "ruta/al/shared/ui/cn";
 ```
 
-Wrapper de `clsx` + `tailwind-merge`. Útil para combinar clases condicionalmente.
+`clsx` + `tailwind-merge` wrapper. Useful for combining classes conditionally.
 
 ```tsx
 <div className={cn("base-class", condition && "extra-class", className)} />
@@ -696,11 +698,11 @@ Wrapper de `clsx` + `tailwind-merge`. Útil para combinar clases condicionalment
 
 ---
 
-## Domain wrappers (fuera de shared/ui)
+## Domain wrappers (outside shared/ui)
 
 ### `apps/web/src/components/ProductSearchDialog.tsx`
 
-Wrapper de `SearchDialog` para búsqueda de productos. Consulta `GET /api/v1/plugins/productos/products/search`.
+Wrapper around `SearchDialog` for product search. Queries `GET /api/v1/plugins/productos/products/search`.
 
 ```tsx
 import { ProductSearchDialog, type ProductSearchDialogItem } from "ruta/a/components/ProductSearchDialog";

@@ -79,7 +79,7 @@ def normalize_tenant_domain(value: str | None) -> str | None:
         return None
     if re.search(r"[\s/]", text):
         raise AppError(
-            "El dominio del tenant no puede tener espacios ni barras",
+            "The tenant domain cannot contain spaces or slashes",
             status_code=422,
             code="tenant_domain_invalid",
         )
@@ -143,7 +143,7 @@ def ensure_site_suffix_available(
             continue
         if site_suffixes_overlap(suffix, other_suffix):
             raise AppError(
-                f"El sufijo {suffix} se solapa con el del tenant "
+                f"The suffix {suffix} overlaps with that of tenant "
                 f"{other_tenant.name} ({other_tenant.slug})",
                 status_code=409,
                 code="tenant_site_suffix_conflict",
@@ -186,7 +186,7 @@ def ensure_domain_available(
     other = db.scalar(stmt)
     if other is not None:
         raise AppError(
-            f"El dominio {needle} ya está asignado al tenant {other.name} ({other.slug})",
+            f"The domain {needle} is already assigned to tenant {other.name} ({other.slug})",
             status_code=409,
             code="tenant_domain_conflict",
         )
@@ -391,8 +391,8 @@ def claim_managed_domain(
     )
     if primary_owner is not None:
         raise AppError(
-            f"El dominio {needle} es el dominio primario de un tenant y no "
-            "puede añadirse como dominio adicional",
+            f"The domain {needle} is the primary domain of a tenant and cannot "
+            "be added as an additional domain",
             status_code=409,
             code="tenant_domain_conflict",
         )
@@ -400,7 +400,7 @@ def claim_managed_domain(
     if existing is not None:
         if existing.tenant_id != tenant_id:
             raise AppError(
-                f"El dominio {needle} ya está asignado a otro tenant",
+                f"The domain {needle} is already assigned to another tenant",
                 status_code=409,
                 code="tenant_domain_conflict",
             )
@@ -413,7 +413,7 @@ def claim_managed_domain(
     except IntegrityError as exc:
         db.rollback()
         raise AppError(
-            f"El dominio {needle} ya está asignado a otro tenant",
+            f"The domain {needle} is already assigned to another tenant",
             status_code=409,
             code="tenant_domain_conflict",
         ) from exc
@@ -444,8 +444,8 @@ def add_managed_domain(
     primary = (tenant.domain or "").strip().lower().removesuffix(".")
     if primary and needle == primary:
         raise AppError(
-            f"El dominio {needle} es el dominio primario del tenant y no puede "
-            "añadirse como dominio adicional; se cambia en «Dominio y sufijo»",
+            f"The domain {needle} is the tenant's primary domain and cannot "
+            'be added as an additional domain; change it in "Domain and suffix"',
             status_code=409,
             code="tenant_domain_conflict",
         )
@@ -455,7 +455,7 @@ def add_managed_domain(
         if existing.tenant_id == tenant.id:
             return existing, False
         raise AppError(
-            f"El dominio {needle} ya está asignado a otro tenant",
+            f"The domain {needle} is already assigned to another tenant",
             status_code=409,
             code="tenant_domain_conflict",
         )
@@ -469,9 +469,9 @@ def add_managed_domain(
     )
     if other is not None:
         raise AppError(
-            f"El dominio {needle} es el dominio de correo del tenant "
-            f"{other.name} ({other.slug}). Cámbialo en ese tenant o unifica "
-            "la cuenta antes de reclamarlo.",
+            f"The domain {needle} is the email domain of tenant "
+            f"{other.name} ({other.slug}). Change it in that tenant or unify "
+            "the account before claiming it.",
             status_code=409,
             code="tenant_domain_conflict",
         )
@@ -479,8 +479,8 @@ def add_managed_domain(
     site = _primary_of_other_tenant(app, db, needle, tenant.id)
     if site is not None:
         raise AppError(
-            f"El dominio {needle} es el primario del contenedor {site.container} "
-            "de otro tenant",
+            f"The domain {needle} is the primary domain of container {site.container} "
+            "of another tenant",
             status_code=409,
             code="tenant_domain_conflict",
         )
@@ -504,7 +504,7 @@ def remove_managed_domain(
     row = db.get(TenantDomain, needle)
     if row is not None and row.tenant_id != tenant.id:
         raise AppError(
-            f"El dominio {needle} no pertenece al tenant",
+            f"The domain {needle} does not belong to the tenant",
             status_code=404,
             code="tenant_domain_not_found",
         )
@@ -516,7 +516,7 @@ def remove_managed_domain(
         for site in list_sites(app, db, tenant.id):
             if (site.primary_domain or "").strip().lower() == needle:
                 raise AppError(
-                    f"El dominio {needle} es el primario del contenedor "
+                    f"The domain {needle} is the primary domain of container "
                     f"{site.container}",
                     status_code=409,
                     code="tenant_domain_in_use",
@@ -525,14 +525,14 @@ def remove_managed_domain(
         if usage is not None:
             if usage.tenant_id == tenant.id or usage.container in own_containers:
                 raise AppError(
-                    f"El dominio {needle} está publicado por el contenedor "
+                    f"The domain {needle} is published by container "
                     f"{usage.container}",
                     status_code=409,
                     code="tenant_domain_in_use",
                 )
         elif is_extra_claimed(app, db, needle):
             raise AppError(
-                f"El dominio {needle} está publicado como dominio extra",
+                f"The domain {needle} is published as an extra domain",
                 status_code=409,
                 code="tenant_domain_in_use",
             )
@@ -543,15 +543,15 @@ def remove_managed_domain(
     primary = (tenant.domain or "").strip().lower().removesuffix(".")
     if primary and needle == primary:
         raise AppError(
-            f"El dominio {needle} es el dominio de correo del tenant. "
-            "Cámbialo en \"Dominio y sufijo\" antes de quitarlo.",
+            f"The domain {needle} is the tenant's email domain. "
+            'Change it in "Domain and suffix" before removing it.',
             status_code=409,
             code="tenant_domain_in_use",
         )
 
     if row is None:
         raise AppError(
-            f"El dominio {needle} no pertenece al tenant",
+            f"The domain {needle} does not belong to the tenant",
             status_code=404,
             code="tenant_domain_not_found",
         )

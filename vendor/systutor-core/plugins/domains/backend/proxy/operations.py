@@ -149,7 +149,7 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
         result = self.runner.run(["docker", *args])
         if check and not result.ok:
             raise ProxyError(
-                f"docker {args[0]} falló: {result.text().strip()}", EXIT_TRANSPORT
+                f"docker {args[0]} failed: {result.text().strip()}", EXIT_TRANSPORT
             )
         return result
 
@@ -301,9 +301,9 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
             new_domains.append(normalize_domain(f"www.{domain}", self.profile))
 
         if not self.container_exists(site):
-            raise ProxyError(f"el sitio '{site}' no existe como contenedor", EXIT_TRANSPORT)
+            raise ProxyError(f"site '{site}' does not exist as a container", EXIT_TRANSPORT)
         if not self.container_running(site):
-            raise ProxyError(f"el sitio '{site}' no está running", EXIT_TRANSPORT)
+            raise ProxyError(f"site '{site}' is not running", EXIT_TRANSPORT)
 
         slug = slug_for(site)
         path = self.files.config_dir / site_file_name(slug)
@@ -313,7 +313,7 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
         existing_port: int | None = None
         if existing_text:
             if not is_managed_document(existing_text):
-                raise ProxyError(f"{path} existe y no está gestionado por spanel", EXIT_VALIDATION)
+                raise ProxyError(f"{path} exists and is not managed by spanel", EXIT_VALIDATION)
             existing_data = parse_site_document(existing_text)
             existing_domains = document_domains(existing_data)
             existing_routes = document_path_routes(existing_data)
@@ -322,7 +322,7 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
         owner = self._find_owner(domain)
         if owner is not None and owner != path:
             raise ProxyError(
-                f"el dominio {domain} ya está gestionado en {owner.name}", EXIT_VALIDATION
+                f"the domain {domain} is already managed in {owner.name}", EXIT_VALIDATION
             )
 
         domains = list(dict.fromkeys([*existing_domains, *new_domains]))
@@ -331,12 +331,12 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
         for route in effective_routes:
             if not self.container_exists(route.container):
                 raise ProxyError(
-                    f"el sitio de ruta '{route.container}' no existe como contenedor",
+                    f"route site '{route.container}' does not exist as a container",
                     EXIT_TRANSPORT,
                 )
             if not self.container_running(route.container):
                 raise ProxyError(
-                    f"el sitio de ruta '{route.container}' no está running", EXIT_TRANSPORT
+                    f"route site '{route.container}' is not running", EXIT_TRANSPORT
                 )
         content = render_site_yaml(
             site,
@@ -361,11 +361,11 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
         dns_commands = self._dns_plan(new_domains)
 
         if dry_run:
-            self.say("# dry-run: no se escribe nada")
-            self.say(f"# archivo: {path}")
+            self.say("# dry-run: nothing is written")
+            self.say(f"# file: {path}")
             self.say(f"# resolver: {self.resolver}")
             for command in connect_commands:
-                self.say(f"# comando: {command}")
+                self.say(f"# command: {command}")
             for line in dns_commands:
                 self.say(f"# {line}")
             self.say()
@@ -391,26 +391,26 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
             self._update_wordpress(site, domain)
 
         port = self.https_port()
-        self.say(f"sitio:    {site}")
-        self.say(f"dominio:  {', '.join(domains)}")
-        self.say(f"archivo:  {path}")
+        self.say(f"site:     {site}")
+        self.say(f"domain:   {', '.join(domains)}")
+        self.say(f"file:     {path}")
         self.say(f"resolver: {self.resolver}")
         self.say(
-            "estado:   active"
+            "state:    active"
             if wait_seconds > 0
-            else "estado:   pendiente (no verificado; usá 'status')"
+            else "state:    pending (not verified; use 'status')"
         )
         self.say(f"url:      {self.link_for(domain)}")
         if port != 443:
-            self.say(f"nota:     el laboratorio publica HTTPS en 127.0.0.1:{port}")
+            self.say(f"note:     the lab publishes HTTPS on 127.0.0.1:{port}")
         self.say()
-        self.say("Para abrir el link en este host, agregá una vez:")
+        self.say("To open the link on this host, add once:")
         for name in domains:
             self.say(f"  127.0.0.1 {name}")
-        self.say(f"(en /etc/hosts; después: {self.link_for(domain)})")
+        self.say(f"(in /etc/hosts; then: {self.link_for(domain)})")
         if self.settings.ca_file:
             self.say()
-            self.say("Y confiá en la CA local una sola vez:")
+            self.say("And trust the local CA once:")
             self.say(
                 f"  sudo cp {self.settings.ca_file} "
                 "/usr/local/share/ca-certificates/spanel-lab-ca.crt"
@@ -425,9 +425,9 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
                 opened = webbrowser.open(url)
             except Exception as exc:  # noqa: BLE001
                 opened = False
-                self.warn(f"aviso: no se pudo abrir el navegador: {exc}")
+                self.warn(f"warning: could not open the browser: {exc}")
             if not opened:
-                self.warn(f"aviso: abrí manualmente {url}")
+                self.warn(f"warning: open manually {url}")
         return EXIT_OK
 
     def _wait_for_certificate(self, domain: str, seconds: int) -> None:
@@ -439,19 +439,19 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
             if last.state == "active":
                 last_code = self._route_code(domain)
                 if last_code is not None and last_code not in (404, 503):
-                    self.say(f"certificado: emitido por {last.issuer}")
-                    self.say(f"ruta:       HTTP {last_code} en {self.link_for(domain)}")
+                    self.say(f"certificate: issued by {last.issuer}")
+                    self.say(f"route:      HTTP {last_code} at {self.link_for(domain)}")
                     return
             time.sleep(2)
         if last is None or last.state != "active":
-            detail = last.error if last else "sin respuesta"
+            detail = last.error if last else "no response"
             raise ProxyError(
-                f"el certificado para {domain} no quedó activo en {seconds}s ({detail})",
+                f"the certificate for {domain} did not become active within {seconds}s ({detail})",
                 EXIT_CERT,
             )
         raise ProxyError(
-            f"el certificado está activo pero la ruta {domain} responde HTTP "
-            f"{last_code or 'sin respuesta'} en {seconds}s",
+            f"the certificate is active but route {domain} responds HTTP "
+            f"{last_code or 'no response'} in {seconds}s",
             EXIT_CERT,
         )
 
@@ -462,7 +462,7 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
             return None
         normalized = normalize_path_prefix(path)
         if any(character in normalized for character in '"\\'):
-            raise ProxyError("path de sondeo inválido", EXIT_VALIDATION)
+            raise ProxyError("invalid probe path", EXIT_VALIDATION)
         context = ssl.create_default_context()
         if self.settings.ca_file:
             context.load_verify_locations(cafile=str(self.settings.ca_file))
@@ -502,8 +502,8 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
     def _backup(self, path: Path, text: str) -> None:
         if self.selection.transport != "local":
             self.warn(
-                "==> backup: omitido (transporte no local; el backup no puede "
-                "escribir rutas del proceso en el host remoto)"
+                "==> backup: skipped (non-local transport; the backup cannot "
+                "write process paths on the remote host)"
             )
             return
         target = self.settings.backups_dir / timestamp() / path.name
@@ -516,29 +516,29 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
         domain = normalize_domain(domain, self.profile)
         owner = self._find_owner(domain)
         if owner is None:
-            raise ProxyError(f"el dominio {domain} no está gestionado por spanel", EXIT_VALIDATION)
+            raise ProxyError(f"the domain {domain} is not managed by spanel", EXIT_VALIDATION)
         text = self._read_text(owner) or ""
         data = parse_site_document(text)
-        site = document_container(data) or "desconocido"
+        site = document_container(data) or "unknown"
         resolver = document_resolver(data) or self.resolver
         info = self.certificate(domain)
 
-        self.say(f"dominio:   {domain}")
-        self.say(f"sitio:     {site}")
-        self.say(f"archivo:   {owner}")
+        self.say(f"domain:    {domain}")
+        self.say(f"site:      {site}")
+        self.say(f"file:      {owner}")
         self.say(f"resolver:  {resolver}")
-        self.say(f"estado:    {info.state}")
+        self.say(f"state:     {info.state}")
         if info.issuer:
-            self.say(f"emisor:    {info.issuer}")
+            self.say(f"issuer:    {info.issuer}")
         if info.subject:
-            self.say(f"sujeto:    {info.subject}")
+            self.say(f"subject:   {info.subject}")
         if info.not_after:
             self.say(f"notAfter:  {info.not_after}")
         if info.sans:
             self.say(f"SAN:       {', '.join(info.sans)}")
         self.say(f"url:       {self.link_for(domain)}")
         if info.error:
-            self.say(f"detalle:   {info.error}")
+            self.say(f"detail:    {info.error}")
 
         if info.state == "active":
             return EXIT_OK
@@ -573,7 +573,7 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
         if selection is not None and selection.transport == "docker" and not selection.probe_host:
             return CertificateInfo(
                 state="pending_cert",
-                error="no hay host de sondeo alcanzable desde este contenedor",
+                error="no reachable probe host from this container",
             )
         return probe_certificate(
             domain,
@@ -586,9 +586,9 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
     def list_domains(self) -> int:
         rows = self.managed_domains()
         if not rows:
-            self.say("no hay dominios gestionados")
+            self.say("no managed domains")
             return EXIT_OK
-        self.say(f"{'DOMINIO':<40} {'SITIO':<28} {'RESOLVER':<12} ARCHIVO")
+        self.say(f"{'DOMAIN':<40} {'SITE':<28} {'RESOLVER':<12} FILE")
         for row in sorted(rows, key=lambda item: item.domain):
             self.say(f"{row.domain:<40} {row.container:<28} {row.resolver:<12} {row.file}")
         return EXIT_OK
@@ -630,18 +630,18 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
             return None
         for route in routes:
             if not route.container.strip():
-                raise ProxyError("contenedor de ruta vacío", EXIT_VALIDATION)
+                raise ProxyError("empty route container", EXIT_VALIDATION)
             if not 1 <= route.port <= 65535:
-                raise ProxyError("puerto de ruta inválido", EXIT_VALIDATION)
+                raise ProxyError("invalid route port", EXIT_VALIDATION)
             if validate_runtime:
                 if not self.container_exists(route.container):
                     raise ProxyError(
-                        f"el servicio de ruta '{route.container}' no existe como contenedor",
+                        f"route service '{route.container}' does not exist as a container",
                         EXIT_TRANSPORT,
                     )
                 if not self.container_running(route.container):
                     raise ProxyError(
-                        f"el servicio de ruta '{route.container}' no está running",
+                        f"route service '{route.container}' is not running",
                         EXIT_TRANSPORT,
                     )
         content = render_site_yaml(
@@ -655,7 +655,7 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
         )
         existing_text = self._read_text(path)
         if existing_text is not None and not is_managed_document(existing_text):
-            raise ProxyError(f"{path} existe y no está gestionado por spanel", EXIT_VALIDATION)
+            raise ProxyError(f"{path} exists and is not managed by spanel", EXIT_VALIDATION)
         # Un redeploy reemplaza el contenedor conservando el nombre: hay que
         # reconectar aunque el YAML renderizado sea idéntico.
         if validate_runtime and connect_network and routes:
@@ -710,7 +710,7 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
         domain = normalize_domain(domain, self.profile)
         owner = self._find_owner(domain)
         if owner is None:
-            raise ProxyError(f"el dominio {domain} no está gestionado por spanel", EXIT_VALIDATION)
+            raise ProxyError(f"the domain {domain} is not managed by spanel", EXIT_VALIDATION)
         validate_managed_path(owner)
 
         text = self._read_text(owner) or ""
@@ -724,9 +724,9 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
 
         if dry_run:
             self.say(f"# dry-run: {owner}")
-            self.say(f"# se quitaría: {domain}")
-            kept = ", ".join(remaining) if remaining else "(ninguno, se borra el archivo)"
-            self.say(f"# quedarían: {kept}")
+            self.say(f"# would remove: {domain}")
+            kept = ", ".join(remaining) if remaining else "(none, the file is deleted)"
+            self.say(f"# remaining: {kept}")
             return EXIT_OK
 
         self._backup(owner, text)
@@ -750,7 +750,7 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
             self._dns_apply([domain, f"www.{domain}"], add=False)
 
         self.audit("remove", site, domain, action)
-        self.say(f"dominio:  {domain}")
-        self.say(f"archivo:  {owner} -> {action}")
-        self.say("estado:   eliminado")
+        self.say(f"domain:   {domain}")
+        self.say(f"file:     {owner} -> {action}")
+        self.say("state:    removed")
         return EXIT_OK

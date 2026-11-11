@@ -36,7 +36,7 @@ def _proxy(settings: StaticSettings, *args: str) -> CommandResult:
     remote = settings.transport == "ssh" or settings.remote_repo is not None
     if not remote and not settings.proxy_script.is_file():
         raise CliError(
-            f"No existe {settings.proxy_script}; ejecutá el CLI desde el repo de SPanel",
+            f"{settings.proxy_script} does not exist; run the CLI from the SPanel repo",
             2,
         )
     argv = [
@@ -66,8 +66,8 @@ def _wait_http(docker: Docker, container: str, seconds: int) -> None:
             return
         time.sleep(1)
     raise CliError(
-        f"El contenedor {container} no sirvió la página en {seconds}s; "
-        f"revisá 'docker logs {container}'",
+        f"Container {container} did not serve the page within {seconds}s; "
+        f"check 'docker logs {container}'",
         3,
     )
 
@@ -75,8 +75,8 @@ def _wait_http(docker: Docker, container: str, seconds: int) -> None:
 def _ensure_network(docker: Docker, network: str) -> None:
     if not docker.network_exists(network):
         raise CliError(
-            f"No existe la red Docker {network!r}. "
-            "En el laboratorio: ./scripts/traefik-lab.sh up",
+            f"Docker network does not exist: {network!r}. "
+            "In the lab: ./scripts/traefik-lab.sh up",
             3,
         )
 
@@ -84,10 +84,10 @@ def _ensure_network(docker: Docker, network: str) -> None:
 def _ensure_image(docker: Docker, image: str) -> None:
     if docker.image_exists(image):
         return
-    print(f"==> descargando {image}", file=sys.stderr)
+    print(f"==> pulling {image}", file=sys.stderr)
     result = docker.run("pull", image, check=False, timeout=600)
     if not result.ok:
-        raise CliError(f"No se pudo descargar {image}: {result.text().strip()[:300]}", 3)
+        raise CliError(f"Could not pull {image}: {result.text().strip()[:300]}", 3)
 
 
 def _create_dry_run(settings: StaticSettings, names: SiteNames, domain: str, www: bool) -> None:
@@ -113,16 +113,16 @@ def _create_dry_run(settings: StaticSettings, names: SiteNames, domain: str, www
         f"{names.volume}:/usr/share/nginx/html",
         settings.image,
     ]
-    print("# dry-run: no se ejecuta nada")
-    print(f"# perfil:  {settings.profile}")
-    print(f"# red:     {settings.network}")
-    print(f"# imagen:  {settings.image}")
-    print(f"# archivo de ruta esperado: scripts/traefik-lab/dynamic/{names.route_file}")
+    print("# dry-run: nothing is executed")
+    print(f"# profile: {settings.profile}")
+    print(f"# network: {settings.network}")
+    print(f"# image:   {settings.image}")
+    print(f"# expected route file: scripts/traefik-lab/dynamic/{names.route_file}")
     print()
     print(" ".join(shlex.quote(part) for part in args))
     print(" ".join(shlex.quote(part) for part in run))
     print()
-    print("# contenido inicial:")
+    print("# initial content:")
     for name in ("index.html", "styles.css", "app.js"):
         print(f"#   {name} -> /usr/share/nginx/html/{name}")
     print()
@@ -169,16 +169,16 @@ def create_site(
     exists = docker.container_exists(names.container)
     if exists and not reuse:
         raise CliError(
-            f"Ya existe {names.container}. Usá --reuse para reutilizarlo o "
-            f"borralo con: python3 scripts/spanel-static.py delete --name {name}",
+            f"Already exists: {names.container}. Use --reuse to reuse it or "
+            f"delete it with: python3 scripts/spanel-static.py delete --name {name}",
             2,
         )
     if exists:
         owner = docker.label(names.container, LABEL_STATIC)
         if owner != "true":
             raise CliError(
-                f"{names.container} existe pero no está marcado como sitio estático "
-                f"({LABEL_STATIC}={owner or 'ausente'})",
+                f"{names.container} exists but is not marked as a static site "
+                f"({LABEL_STATIC}={owner or 'missing'})",
                 2,
             )
         if docker.container_running(names.container) is False:
@@ -218,30 +218,30 @@ def create_site(
     _show_proxy_result(result)
     if not result.ok:
         raise CliError(
-            "El contenedor quedó creado, pero Traefik/certificado falló. "
-            f"Revisá el detalle de arriba y el contenedor {names.container}.",
+            "The container was created, but Traefik/certificate failed. "
+            f"Check the detail above and the container {names.container}.",
             4,
         )
 
     print()
-    print(f"contenedor: {names.container}")
-    print(f"volumen:    {names.volume}")
-    print(f"contenido:  {', '.join(written) if written else 'sin cambios (ya existía)'}")
+    print(f"container: {names.container}")
+    print(f"volume:    {names.volume}")
+    print(f"content:   {', '.join(written) if written else 'unchanged (already existed)'}")
     port = _https_port(settings)
     suffix = "" if port == 443 else f":{port}"
-    print(f"página:     https://{domain}{suffix}")
+    print(f"page:      https://{domain}{suffix}")
     print()
-    print("Verificación desde el host Docker:")
+    print("Verification from the Docker host:")
     print(f"  curl --cacert scripts/traefik-lab/ca/root_ca.crt https://{domain}{suffix}/")
     print()
     if port != 443:
         print(
-            "Desde otra máquina, abrí un túnel y usá --resolve:\n"
-            f"  ssh -N -L {port}:127.0.0.1:443 <usuario>@<host>\n"
+            "From another machine, open a tunnel and use --resolve:\n"
+            f"  ssh -N -L {port}:127.0.0.1:443 <user>@<host>\n"
             f"  curl --cacert root_ca.crt --resolve {domain}:{port}:127.0.0.1 "
             f"https://{domain}:{port}/\n"
         )
-    print("Si abrís el navegador en el host, agregá una vez en /etc/hosts:")
+    print("If you open the browser on the host, add this once to /etc/hosts:")
     print(f"  127.0.0.1 {domain}")
     return 0
 
@@ -288,9 +288,9 @@ def _site_identity(docker: Docker, container: str) -> tuple[str, str]:
     kind = docker.label(container, LABEL_KIND)
     domain = docker.label(container, LABEL_DOMAIN)
     if not slug:
-        raise CliError(f"{container} no tiene la etiqueta {LABEL_SITE}", 2)
+        raise CliError(f"{container} does not have the label {LABEL_SITE}", 2)
     if kind != KIND:
-        raise CliError(f"{container} no es un sitio estático (kind={kind or 'ausente'})", 2)
+        raise CliError(f"{container} is not a static site (kind={kind or 'missing'})", 2)
     return slug, domain
 
 
@@ -309,19 +309,19 @@ def delete_site(
     elif domain:
         container = _resolve_container_by_domain(docker, domain) or ""
         if not container:
-            raise CliError(f"No encontré un sitio estático para {domain}", 2)
+            raise CliError(f"Could not find a static site for {domain}", 2)
         slug, _ = _site_identity(docker, container)
         names = SiteNames(slug)
     else:
-        raise CliError("Indicá --name o --domain", 2)
+        raise CliError("Specify --name or --domain", 2)
 
     if not docker.container_exists(container):
-        raise CliError(f"No existe el contenedor {container}", 2)
+        raise CliError(f"Container does not exist: {container}", 2)
     _, saved_domain = _site_identity(docker, container)
     target_domain = domain or saved_domain
 
     if dry_run:
-        print("# dry-run: no se borra nada")
+        print("# dry-run: nothing is deleted")
         print(f"docker rm -f {container}")
         if not keep_volume:
             print(f"docker volume rm {names.volume}")
@@ -337,14 +337,14 @@ def delete_site(
         _show_proxy_result(result)
         if not result.ok:
             print(
-                "aviso: no se pudo quitar la ruta del proxy; se continúa con el contenedor",
+                "warning: could not remove the proxy route; continuing with the container",
                 file=sys.stderr,
             )
 
     docker.remove_container(container)
     if not keep_volume:
         docker.remove_volume(names.volume)
-    print(f"eliminado: {container}" + ("" if keep_volume else f" y volumen {names.volume}"))
+    print(f"deleted: {container}" + ("" if keep_volume else f" and volume {names.volume}"))
     return 0
 
 
@@ -360,12 +360,12 @@ def list_sites(settings: StaticSettings) -> int:
         check=False,
     )
     if not result.ok:
-        raise CliError(f"docker ps falló: {result.text().strip()[:300]}", 3)
+        raise CliError(f"docker ps failed: {result.text().strip()[:300]}", 3)
     rows = [line.split("\t") for line in result.stdout.splitlines() if line.strip()]
     if not rows:
-        print("no hay sitios estáticos")
+        print("there are no static sites")
         return 0
-    print(f"{'CONTENEDOR':<32} {'ESTADO':<24} {'SLUG':<20} DOMINIO")
+    print(f"{'CONTAINER':<32} {'STATUS':<24} {'SLUG':<20} DOMAIN")
     for row in rows:
         row += [""] * (4 - len(row))
         print(f"{row[0]:<32} {row[1][:23]:<24} {row[2]:<20} {row[3]}")
@@ -382,15 +382,15 @@ def status_site(
     if name:
         names = SiteNames(name)
         if not docker.container_exists(names.container):
-            raise CliError(f"No existe el contenedor {names.container}", 2)
-        print(f"contenedor: {names.container}")
-        print(f"estado:     {'running' if docker.container_running(names.container) else 'stopped'}")
-        print(f"volumen:    {names.volume}")
+            raise CliError(f"Container does not exist: {names.container}", 2)
+        print(f"container: {names.container}")
+        print(f"status:    {'running' if docker.container_running(names.container) else 'stopped'}")
+        print(f"volume:    {names.volume}")
         saved_domain = docker.label(names.container, LABEL_DOMAIN)
         if saved_domain:
             domain = saved_domain
     if not domain:
-        raise CliError("Indicá --name o --domain", 2)
+        raise CliError("Specify --name or --domain", 2)
     result = _proxy(settings, "status", "--domain", domain)
     _show_proxy_result(result)
     return 0 if result.ok else 4
@@ -402,21 +402,21 @@ def doctor(settings: StaticSettings) -> int:
     info = docker.run("info", check=False, timeout=20)
     checks.append(("docker info", info.ok, info.text().strip()[:120]))
     checks.append(
-        ("red " + settings.network, docker.network_exists(settings.network), settings.network)
+        ("network " + settings.network, docker.network_exists(settings.network), settings.network)
     )
     image = docker.image_exists(settings.image)
-    checks.append(("imagen " + settings.image, image, "presente" if image else "se descargará"))
+    checks.append(("image " + settings.image, image, "present" if image else "will be pulled"))
     proxy_local = settings.proxy_script.is_file()
     remote = settings.transport == "ssh" or settings.remote_repo is not None
     checks.append(
         (
             "proxy_domain.py",
             proxy_local or remote,
-            str(settings.proxy_script) + (" (remoto)" if remote and not proxy_local else ""),
+            str(settings.proxy_script) + (" (remote)" if remote and not proxy_local else ""),
         )
     )
     for label, ok, detail in checks:
-        print(f"[{'ok' if ok else 'FALLA'}] {label}: {detail}")
+        print(f"[{'ok' if ok else 'FAIL'}] {label}: {detail}")
     if proxy_local or remote:
         print()
         result = _proxy(settings, "doctor")

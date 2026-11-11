@@ -134,11 +134,11 @@ class Target:
 def inspect_container(tooling: Tooling, container: str) -> dict:
     out = tooling.docker(["inspect", container])
     if out.returncode != 0:
-        raise BackupError(f"docker inspect {container} falló: {out.stderr.strip() or out.stdout.strip()}")
+        raise BackupError(f"docker inspect {container} failed: {out.stderr.strip() or out.stdout.strip()}")
     try:
         return json.loads(out.stdout)[0]
     except (json.JSONDecodeError, IndexError, KeyError, TypeError) as exc:
-        raise BackupError(f"docker inspect {container} devolvió JSON inválido: {exc}") from exc
+        raise BackupError(f"docker inspect {container} returned invalid JSON: {exc}") from exc
 
 
 def env_of(inspect_data: dict) -> dict[str, str]:
@@ -156,7 +156,7 @@ def resolve_site_path(kind: str, labels: dict[str, str], env: dict[str, str], ov
     profile = (labels.get("spanel.profile") or "").strip().lower()
     if profile and profile not in PROFILE_CATALOG:
         known = ", ".join(sorted(PROFILE_CATALOG))
-        raise BackupError(f"label spanel.profile={profile!r} no está en el catálogo default ({known}); usar --path")
+        raise BackupError(f"label spanel.profile={profile!r} is not in the default catalog ({known}); use --path")
     return PROFILE_CATALOG.get(profile, FALLBACK_SITE_PATH)
 
 
@@ -195,9 +195,9 @@ def build_target(
         missing = [name for name, value in fields.items() if not value]
         if missing:
             raise BackupError(
-                "container WP sin base de datos completa; faltan: "
+                "WP container without a complete database; missing: "
                 + ", ".join(sorted(missing))
-                + " — usar --db-host/--db-user/--db-pass/--db-name/--db-container"
+                + " — use --db-host/--db-user/--db-pass/--db-name/--db-container"
             )
         return Target(
             container=container,
@@ -225,7 +225,7 @@ def extract_tar_stream(result: Result, dest: Path) -> int:
     """Extrae el tar de `docker cp container:path -` a dest; streaming a file
     temporal primero (memory-safe). Devuelve N archivos extraídos."""
     if result.returncode != 0:
-        raise BackupError(f"docker cp falló: {result.stderr.strip() or result.stdout.strip()}")
+        raise BackupError(f"docker cp failed: {result.stderr.strip() or result.stdout.strip()}")
     dest.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(suffix=".tar", delete=False) as tmp:
         tmp_path = Path(tmp.name)
@@ -240,7 +240,7 @@ def extract_tar_stream(result: Result, dest: Path) -> int:
                     extracted += 1
         return extracted
     except tarfile.TarError as exc:
-        raise BackupError(f"docker cp no devolvió un tar válido: {exc}") from exc
+        raise BackupError(f"docker cp did not return a valid tar: {exc}") from exc
     finally:
         tmp_path.unlink(missing_ok=True)
 
@@ -249,7 +249,7 @@ def capture_files(tooling: Tooling, target: Target, tmp: Path) -> int:
     print(f"[cp] {target.container}:{target.site_path} -> site/")
     result = tooling.docker(["cp", f"{target.container}:{target.site_path}", "-"])
     n = extract_tar_stream(result, tmp / "site")
-    print(f"[cp] {n} archivos capturados")
+    print(f"[cp] {n} files captured")
     return n
 
 
@@ -257,8 +257,8 @@ def dump_db(tooling: Tooling, target: Target, tmp: Path) -> None:
     """mysqldump vía `docker exec`; falla antes de zip si falla o queda vacío (I2)."""
     if not target.db_container:
         raise BackupError(
-            "no se pudo resolver el container de DB (WORDPRESS_DB_HOST no es un "
-            "container corriendo?); usar --db-container"
+            "could not resolve the DB container (WORDPRESS_DB_HOST is not a "
+            "running container?); use --db-container"
         )
     password = target.db_pass or ""
     # Multi-tenant: la DB compartida (p.ej. un mariadb global con N bases)
@@ -286,7 +286,7 @@ def dump_db(tooling: Tooling, target: Target, tmp: Path) -> None:
         )
         if result.returncode == 0:
             break
-        last_detail = (result.stderr.strip() or "sin stderr").replace(password, "***")
+        last_detail = (result.stderr.strip() or "no stderr").replace(password, "***")
         if "not found" not in last_detail.lower():
             break
     sql_bytes = (
@@ -295,13 +295,13 @@ def dump_db(tooling: Tooling, target: Target, tmp: Path) -> None:
         else result.stdout.encode("utf-8")
     )
     if result is None or result.returncode != 0:
-        raise BackupError(f"mysqldump falló en {target.db_container}: {last_detail}")
+        raise BackupError(f"mysqldump failed in {target.db_container}: {last_detail}")
     if not sql_bytes.strip():
-        raise BackupError("mysqldump produjo SQL vacío — fallando antes del zip (I2)")
+        raise BackupError("mysqldump produced empty SQL — failing before the zip (I2)")
     dest = tmp / "database" / "backup.sql"
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_bytes(sql_bytes)
-    print(f"[db] {len(sql_bytes)} bytes SQL capturados (binario-loyal)")
+    print(f"[db] {len(sql_bytes)} bytes of SQL captured (binary-faithful)")
 
 
 # --- Empaquetado + self-verify (I2/I3) ---------------------------------------- #
@@ -328,7 +328,7 @@ def build_manifest(kind: str, container: str, timestamp: str, db_host: str | Non
         }
     if sql_path is not None:
         if not sql_path.is_file():
-            raise VerifyError("database/backup.sql no existe tras el dump (invariante I3)")
+            raise VerifyError("database/backup.sql does not exist after the dump (invariant I3)")
         entries["database/backup.sql"] = {"sha256": sha256_file(sql_path), "size": sql_path.stat().st_size}
     return {
         "kind": kind,
@@ -345,7 +345,7 @@ def build_zip(kind: str, container: str, timestamp: str, out_dir: Path, tmp: Pat
     site_dir = tmp / "site"
     sql_path = tmp / "database" / "backup.sql" if kind == "wp" else None
     if not any(collect_tree(site_dir)):
-        raise BackupError("docker cp no trajo archivos de site/")
+        raise BackupError("docker cp did not bring site/ files")
     manifest = build_manifest(kind, container, timestamp, db_host, site_dir, sql_path)
     final_path = out_dir / f"{kind}-{container}-{timestamp}.zip"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -365,35 +365,35 @@ def verify_zip(zip_path: Path) -> dict:
     """Reabre el zip y verifica manifest, SHA256/size por entry y contenido
     mínimo (site/ + SQL para WP). Raise VerifyError → exit 2 (I3)."""
     if not zip_path.is_file():
-        raise VerifyError(f"no existe el zip: {zip_path}")
+        raise VerifyError(f"zip does not exist: {zip_path}")
     try:
         with zipfile.ZipFile(zip_path) as zipped:
             if "manifest.json" not in zipped.namelist():
-                raise VerifyError(f"zip sin manifest.json: {zip_path}")
+                raise VerifyError(f"zip without manifest.json: {zip_path}")
             manifest = json.loads(zipped.read("manifest.json").decode("utf-8"))
             entries = manifest.get("entries") or {}
             if not entries:
-                raise VerifyError("manifest sin entries")
+                raise VerifyError("manifest without entries")
             present = set(zipped.namelist())
             for arcname, meta in sorted(entries.items()):
                 if arcname not in present:
-                    raise VerifyError(f"entry faltante en zip: {arcname}")
+                    raise VerifyError(f"missing entry in zip: {arcname}")
                 info = zipped.getinfo(arcname)
                 if hashlib.sha256(zipped.read(arcname)).hexdigest() != meta.get("sha256"):
-                    raise VerifyError(f"SHA256 mismatch en {arcname}")
+                    raise VerifyError(f"SHA256 mismatch in {arcname}")
                 meta_size = int(meta.get("size", -1))
                 if meta_size != info.file_size:
                     raise VerifyError(f"size mismatch: {arcname} ({info.file_size} vs {meta_size})")
             kind = manifest.get("kind")
             if kind not in ("wp", "static"):
-                raise VerifyError(f"kind inválido en manifest: {kind!r}")
+                raise VerifyError(f"invalid kind in manifest: {kind!r}")
             if kind == "wp" and "database/backup.sql" not in present:
-                raise VerifyError("WP sin database/backup.sql")
+                raise VerifyError("WP without database/backup.sql")
             if not present & {name for name in present if name.startswith("site/")}:
-                raise VerifyError("zip sin archivos site/")
+                raise VerifyError("zip without site/ files")
         return manifest
     except zipfile.BadZipFile as exc:
-        raise VerifyError(f"zip corrupto: {zip_path} ({exc})") from exc
+        raise VerifyError(f"corrupt zip: {zip_path} ({exc})") from exc
 
 
 # --- Orquestación y CLI -------------------------------------------------------- #
@@ -413,7 +413,7 @@ def run_backup(args: argparse.Namespace, tooling: Tooling) -> int:
             "zip": f"{target.kind}-{target.container}-{timestamp}.zip",
         }
         print(json.dumps(plan, indent=2, ensure_ascii=False))
-        print("dry-run: nada escrito (I2)")
+        print("dry-run: nothing written (I2)")
         return EXIT_OK
 
     out_dir = Path(args.out)
@@ -438,24 +438,24 @@ def run_backup(args: argparse.Namespace, tooling: Tooling) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="site_backup.py",
-        description="Respaldo completo de un sitio (WP o estático) en un .zip verificable (A.SPEC 0047).",
+        description="Full backup of a site (WP or static) into a verifiable .zip (A.SPEC 0047).",
     )
-    parser.add_argument("--container", default=None, help="container del sitio a respaldar")
-    parser.add_argument("--db-container", default=None, help="override del container de DB (WP)")
-    parser.add_argument("--db-host", default=None, help="override del host de DB")
-    parser.add_argument("--db-user", default=None, help="override del usuario de DB")
-    parser.add_argument("--db-pass", default=None, help="override del password de DB (no persiste, I4)")
-    parser.add_argument("--db-name", default=None, help="override del nombre de la DB")
-    parser.add_argument("--path", default=None, help="override del site path dentro del container")
+    parser.add_argument("--container", default=None, help="site container to back up")
+    parser.add_argument("--db-container", default=None, help="override the DB container (WP)")
+    parser.add_argument("--db-host", default=None, help="override the DB host")
+    parser.add_argument("--db-user", default=None, help="override the DB user")
+    parser.add_argument("--db-pass", default=None, help="override the DB password (not persisted, I4)")
+    parser.add_argument("--db-name", default=None, help="override the DB name")
+    parser.add_argument("--path", default=None, help="override the site path inside the container")
     parser.add_argument(
         "--kind",
         choices=("auto", "wp", "static"),
         default="auto",
-        help="forzar el tipo de sitio (auto detecta por WORDPRESS_DB_*)",
+        help="force the site type (auto-detects via WORDPRESS_DB_*)",
     )
-    parser.add_argument("--out", default=DEFAULT_OUT, help=f"dir de salida (default {DEFAULT_OUT})")
-    parser.add_argument("--dry-run", action="store_true", help="printear el plan sin escribir")
-    parser.add_argument("--verify", default=None, metavar="ZIP", help="re-verificar un.zip previo (exit 0/2)")
+    parser.add_argument("--out", default=DEFAULT_OUT, help=f"output dir (default {DEFAULT_OUT})")
+    parser.add_argument("--dry-run", action="store_true", help="print the plan without writing")
+    parser.add_argument("--verify", default=None, metavar="ZIP", help="re-verify a previous .zip (exit 0/2)")
     return parser
 
 
@@ -474,7 +474,7 @@ def main(argv: list[str] | None = None, tooling: Tooling | None = None) -> int:
         return EXIT_OK
 
     if not args.container:
-        parser.error("--container es obligatorio (o --verify ZIP)")
+        parser.error("--container is required (or --verify ZIP)")
 
     try:
         return run_backup(args, tooling)

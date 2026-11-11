@@ -57,7 +57,7 @@ def normalize_domain(value: str) -> str:
     text = value.strip().lower().removesuffix(".")
     if not text or _DOMAIN_RE.fullmatch(text) is None:
         raise SetDomainError(
-            f"dominio invalido: {value!r} (sin esquema, puerto, ruta ni espacios)"
+            f"invalid domain: {value!r} (no scheme, port, path or spaces)"
         )
     return text
 
@@ -68,8 +68,8 @@ def _site_by_container(db: Session, container_name: str) -> HostingSite:
     )
     if site is None:
         raise SetDomainError(
-            f"el contenedor {container_name!r} no esta adoptado; "
-            "usá scripts/hosting_adopt.py primero"
+            f"container {container_name!r} is not adopted; "
+            "use scripts/hosting_adopt.py first"
         )
     return site
 
@@ -107,7 +107,7 @@ def _domain_is_extra(domain: str) -> str | None:
             if row.domain.lower() == domain:
                 return row.container
     except Exception as exc:  # noqa: BLE001 - visible warning for the operator
-        print(f"aviso: no se pudieron leer los extras del proxy: {exc}", file=sys.stderr)
+        print(f"warning: could not read the proxy extras: {exc}", file=sys.stderr)
     return None
 
 
@@ -141,30 +141,30 @@ def set_domain(
 
     if previous == needle:
         raise SetDomainError(
-            f"{container_name} ya tiene el dominio {needle}; no hay nada que hacer"
+            f"{container_name} already has domain {needle}; nothing to do"
         )
 
     owner = _domain_owned_by_other(db, needle, site.id)
     if owner is not None:
         raise SetDomainError(
-            f"el dominio {needle} ya pertenece al contenedor {owner}"
+            f"domain {needle} already belongs to container {owner}"
         )
 
     extra_owner = _domain_is_extra(needle)
     if extra_owner is not None:
         raise SetDomainError(
-            f"el dominio {needle} ya esta publicado como extra por {extra_owner}"
+            f"domain {needle} is already published as an extra by {extra_owner}"
         )
 
     suffix = _tenant_suffix(db, site.tenant_id)
     if suffix and not _inside_suffix(needle, suffix):
         message = (
-            f"{needle} esta fuera del sufijo {suffix} del tenant; "
-            "un admin de tenant no lo va a ver"
+            f"{needle} is outside the tenant suffix {suffix}; "
+            "a tenant admin will not see it"
         )
         if not allow_outside:
-            raise SetDomainError(message + " (usá --allow-outside para forzarlo)")
-        print(f"aviso: {message}", file=sys.stderr)
+            raise SetDomainError(message + " (use --allow-outside to force it)")
+        print(f"warning: {message}", file=sys.stderr)
 
     if dry_run:
         return site, previous
@@ -196,12 +196,12 @@ def set_domain(
 def _list(db: Session) -> int:
     rows = list(db.scalars(select(HostingSite).order_by(HostingSite.container_name)))
     if not rows:
-        print("no hay sitios adoptados")
+        print("there are no adopted sites")
         return 0
-    print(f"{'CONTENEDOR':<28} {'DOMINIO':<40} {'TIPO':<10} TENANT")
+    print(f"{'CONTAINER':<28} {'DOMAIN':<40} {'KIND':<10} TENANT")
     for site in rows:
         print(
-            f"{site.container_name:<28} {(site.domain or '(sin dominio)'):<40} "
+            f"{site.container_name:<28} {(site.domain or '(no domain)'):<40} "
             f"{site.kind:<10} {site.tenant_id}"
         )
     return 0
@@ -212,16 +212,16 @@ def main(argv: list[str] | None = None) -> int:
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--container", help="nombre del contenedor ya adoptado")
-    parser.add_argument("--domain", help="dominio publico del sitio")
-    parser.add_argument("--list", action="store_true", help="listar sitios y dominios")
+    parser.add_argument("--container", help="name of the already adopted container")
+    parser.add_argument("--domain", help="public domain of the site")
+    parser.add_argument("--list", action="store_true", help="list sites and domains")
     parser.add_argument(
-        "--dry-run", action="store_true", help="validar sin escribir ni auditar"
+        "--dry-run", action="store_true", help="validate without writing or auditing"
     )
     parser.add_argument(
         "--allow-outside",
         action="store_true",
-        help="permitir un dominio fuera del sufijo del tenant",
+        help="allow a domain outside the tenant suffix",
     )
     args = parser.parse_args(argv)
 
@@ -231,7 +231,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.list:
             return _list(db)
         if not args.container or not args.domain:
-            parser.error("--container y --domain son obligatorios (o usá --list)")
+            parser.error("--container and --domain are required (or use --list)")
         try:
             site, previous = set_domain(
                 db,
@@ -241,20 +241,20 @@ def main(argv: list[str] | None = None) -> int:
                 allow_outside=args.allow_outside,
             )
         except SetDomainError as exc:
-            print(f"FALLO: {exc}")
+            print(f"FAILED: {exc}")
             return 2
         except Exception as exc:  # noqa: BLE001 - explained to the operator
-            print(f"FALLO: no se pudo actualizar el dominio: {exc}")
+            print(f"FAILED: could not update the domain: {exc}")
             return 1
 
     if args.dry_run:
         print(
-            f"dry-run: {site.container_name}: {previous or '(sin dominio)'} -> "
-            f"{args.domain.strip().lower()}; no se escribio nada"
+            f"dry-run: {site.container_name}: {previous or '(no domain)'} -> "
+            f"{args.domain.strip().lower()}; nothing was written"
         )
         return 0
     print(
-        f"OK: {site.container_name}: {previous or '(sin dominio)'} -> {site.domain}"
+        f"OK: {site.container_name}: {previous or '(no domain)'} -> {site.domain}"
     )
     return 0
 

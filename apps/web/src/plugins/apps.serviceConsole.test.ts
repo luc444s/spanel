@@ -22,9 +22,9 @@ const form: RouteForm = {
 
 describe("Apps service console", () => {
   it("labels environment sources exactly as the API declares them", () => {
-    expect(sourceLabel("managed")).toBe("Administrada");
+    expect(sourceLabel("managed")).toBe("Managed");
     expect(sourceLabel("tenant")).toBe("Tenant");
-    expect(sourceLabel("image")).toBe("Imagen");
+    expect(sourceLabel("image")).toBe("Image");
   });
 
   it("offers reveal only when the API says revealable and RBAC allows it", () => {
@@ -79,7 +79,7 @@ describe("Apps service console", () => {
     expect(serviceFromSubject(operation)).toBe("api");
     expect(resultText(operation)).toBe("reiniciado");
     expect(resultText({ ...operation, result: { hidden: "value" } })).toBe(
-      "Sin detalle público.",
+      "No public detail.",
     );
   });
 

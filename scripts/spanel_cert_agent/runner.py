@@ -166,7 +166,7 @@ class CertAgent:
                 detail = (process.stderr or process.stdout or b"").decode(
                     "utf-8", "replace"
                 )
-                raise CertbotError(safe_error(detail) or "Certbot falló")
+                raise CertbotError(safe_error(detail) or "Certbot failed")
 
             cert_path, key_path, _info = install_pair(
                 self.config,
@@ -190,7 +190,7 @@ class CertAgent:
                     state="succeeded",
                     requested_by=request.get("requested_by"),
                     requested_at=requested_at if isinstance(requested_at, str) else None,
-                    message="Certificado instalado",
+                    message="Certificate installed",
                 ),
             )
             self._discard(path)
@@ -235,7 +235,7 @@ class CertAgent:
                 sender=self._alert_sender,
             )
             ok = True
-            message = "Verificación completada"
+            message = "Verification completed"
             error = None
         else:
             runner = self._runner
@@ -267,7 +267,7 @@ class CertAgent:
                     sender=self._alert_sender,
                 )
             ok = outcome.ok
-            message = "Certificado instalado" if ok else None
+            message = "Certificate installed" if ok else None
             error = outcome.error
         self._job(
             job_id,
@@ -278,7 +278,7 @@ class CertAgent:
                 requested_by=requested_by,
                 requested_at=requested_at if isinstance(requested_at, str) else None,
                 message=message,
-                error=None if ok else (error or "Operación fallida"),
+                error=None if ok else (error or "Operation failed"),
             ),
         )
         self._discard(path)
@@ -346,7 +346,7 @@ class CertAgent:
                 state="failed",
                 requested_by=requested_by,
                 requested_at=requested_at,
-                error=safe_error(error) or "Error desconocido",
+                error=safe_error(error) or "Unknown error",
             ),
         )
 

@@ -8,6 +8,8 @@ import { Input } from "@systutor/shell/ui/input";
 import { Select } from "@systutor/shell/ui/select";
 import { toast } from "@systutor/shell/ui/toast";
 
+import { useT } from "@/i18n/use-i18n";
+
 import {
   getHostingSiteConfig,
   hostingKeys,
@@ -18,19 +20,6 @@ import {
 
 const BOOLEAN_KEYS = new Set(["WP_DEBUG", "WP_DEBUG_LOG", "WP_DEBUG_DISPLAY"]);
 const CORE_KEYS = new Set(["WP_AUTO_UPDATE_CORE"]);
-
-const BOOLEAN_OPTIONS = [
-  { value: "", label: "— sin cambio —" },
-  { value: "true", label: "true" },
-  { value: "false", label: "false" },
-];
-
-const CORE_OPTIONS = [
-  { value: "", label: "— sin cambio —" },
-  { value: "true", label: "true" },
-  { value: "false", label: "false" },
-  { value: "minor", label: "minor" },
-];
 
 /** Only the values that changed and are not empty. Empty means "leave it". */
 export function changedEnv(
@@ -59,9 +48,24 @@ type SiteConfigDialogProps = {
  * so this component can only render their names.
  */
 export function SiteConfigDialog({ site, canManage, onClose }: SiteConfigDialogProps) {
+  const t = useT();
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [saltsOpen, setSaltsOpen] = useState(false);
+
+  const noChangeOption = t("— no change —");
+  const BOOLEAN_OPTIONS = [
+    { value: "", label: noChangeOption },
+    { value: "true", label: "true" },
+    { value: "false", label: "false" },
+  ];
+
+  const CORE_OPTIONS = [
+    { value: "", label: noChangeOption },
+    { value: "true", label: "true" },
+    { value: "false", label: "false" },
+    { value: "minor", label: "minor" },
+  ];
 
   const configQuery = useQuery({
     queryKey: hostingKeys.config(site?.id ?? ""),
@@ -80,7 +84,7 @@ export function SiteConfigDialog({ site, canManage, onClose }: SiteConfigDialogP
       await queryClient.invalidateQueries({ queryKey: hostingKeys.config(variables.siteId) });
       // Saving recreates the container, so the list's status must be refetched.
       await queryClient.invalidateQueries({ queryKey: hostingKeys.sites });
-      toast.success("Configuración guardada");
+      toast.success(t("Configuration saved"));
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -89,7 +93,7 @@ export function SiteConfigDialog({ site, canManage, onClose }: SiteConfigDialogP
     mutationFn: (siteId: string) => rotateHostingSiteSalts(siteId),
     onSuccess: () => {
       setSaltsOpen(false);
-      toast.success("Claves de seguridad rotadas");
+      toast.success(t("Security keys rotated"));
     },
     onError: (error: Error) => {
       setSaltsOpen(false);
@@ -106,8 +110,8 @@ export function SiteConfigDialog({ site, canManage, onClose }: SiteConfigDialogP
   return (
     <Dialog
       open={Boolean(site)}
-      title={`Configuración de ${site?.container_name ?? ""}`}
-      description={site?.domain ?? "Sin dominio"}
+      title={t("Configuration for {site}", { site: site?.container_name ?? "" })}
+      description={site?.domain ?? t("No domain")}
       onClose={onClose}
       zIndexClassName="z-[1100]"
       maxWidthClassName="max-w-2xl"
@@ -121,13 +125,13 @@ export function SiteConfigDialog({ site, canManage, onClose }: SiteConfigDialogP
                 disabled={saltsMutation.isPending}
                 onClick={() => setSaltsOpen(true)}
               >
-                Rotar claves de seguridad
+                {t("Rotate security keys")}
               </Button>
             ) : null}
           </div>
           <div className="flex gap-2">
             <Button type="button" variant="secondary" onClick={onClose}>
-              Cancelar
+              {t("Cancel")}
             </Button>
             {editable ? (
               <Button
@@ -138,7 +142,7 @@ export function SiteConfigDialog({ site, canManage, onClose }: SiteConfigDialogP
                   updateMutation.mutate({ siteId: site.id, env: changed });
                 }}
               >
-                {updateMutation.isPending ? "Guardando..." : "Guardar"}
+                {updateMutation.isPending ? t("Saving...") : t("Save")}
               </Button>
             ) : null}
           </div>
@@ -146,31 +150,30 @@ export function SiteConfigDialog({ site, canManage, onClose }: SiteConfigDialogP
       }
     >
       {configQuery.isLoading ? (
-        <p className="text-sm text-muted-foreground">Cargando configuración...</p>
+        <p className="text-sm text-muted-foreground">{t("Loading configuration...")}</p>
       ) : configQuery.error ? (
-        <Alert title="No se pudo cargar la configuración">
+        <Alert title={t("Could not load configuration")}>
           {configQuery.error instanceof Error
             ? configQuery.error.message
-            : "Error desconocido al consultar el sitio."}
+            : t("Unknown error while querying the site.")}
         </Alert>
       ) : config ? (
         <div className="space-y-5">
           {editable ? (
-            <Alert title="Guardar recrea el contenedor">
-              El sitio puede tardar unos segundos en volver. Los datos y los usuarios no se
-              pierden.
+            <Alert title={t("Saving recreates the container")}>
+              {t("The site may take a few seconds to come back. Data and users are not lost.")}
             </Alert>
           ) : (
             <p className="text-sm text-muted-foreground">
               {site?.managed
-                ? "Solo lectura: no tenés permiso para editarlo."
-                : "Sitio no gestionable: solo lectura."}
+                ? t("Read only: you do not have permission to edit it.")
+                : t("Site not manageable: read only.")}
             </p>
           )}
 
           <section className="space-y-3">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Variables editables
+              {t("Editable variables")}
             </h3>
             <div className="grid gap-3 sm:grid-cols-2">
               {config.editable_keys.map((key) => (
@@ -184,12 +187,12 @@ export function SiteConfigDialog({ site, canManage, onClose }: SiteConfigDialogP
                           setDraft((current) => ({ ...current, [key]: value }))
                         }
                         options={CORE_KEYS.has(key) ? CORE_OPTIONS : BOOLEAN_OPTIONS}
-                        placeholder="— sin cambio —"
+                        placeholder={t("— no change —")}
                       />
                     ) : (
                       <Input
                         value={draft[key] ?? ""}
-                        placeholder={original[key] ? "— sin cambio —" : "Sin definir"}
+                        placeholder={original[key] ? t("— no change —") : t("Not set")}
                         onChange={(event) =>
                           setDraft((current) => ({ ...current, [key]: event.target.value }))
                         }
@@ -205,17 +208,17 @@ export function SiteConfigDialog({ site, canManage, onClose }: SiteConfigDialogP
             </div>
             {editable ? (
               <p className="text-xs text-muted-foreground">
-                Dejar un campo vacío mantiene el valor actual.
+                {t("Leaving a field empty keeps the current value.")}
               </p>
             ) : null}
           </section>
 
           <section className="space-y-2">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Secretos
+              {t("Secrets")}
             </h3>
             {config.secret_names.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No hay secretos registrados.</p>
+              <p className="text-sm text-muted-foreground">{t("No secrets are registered.")}</p>
             ) : (
               <ul className="space-y-1">
                 {config.secret_names.map((name) => (
@@ -224,19 +227,19 @@ export function SiteConfigDialog({ site, canManage, onClose }: SiteConfigDialogP
                     className="flex items-center justify-between rounded-md border border-border bg-muted px-3 py-2 text-sm"
                   >
                     <span className="font-mono text-xs">🔒 {name}</span>
-                    <span className="text-xs text-muted-foreground">valor oculto</span>
+                    <span className="text-xs text-muted-foreground">{t("hidden value")}</span>
                   </li>
                 ))}
               </ul>
             )}
-            <p className="text-xs text-muted-foreground">Los valores nunca se muestran.</p>
+            <p className="text-xs text-muted-foreground">{t("Values are never shown.")}</p>
           </section>
         </div>
       ) : null}
 
       <Dialog
         open={saltsOpen}
-        title="Rotar claves de seguridad de WordPress"
+        title={t("Rotate WordPress security keys")}
         description={site?.container_name}
         onClose={() => setSaltsOpen(false)}
         zIndexClassName="z-[1200]"
@@ -249,7 +252,7 @@ export function SiteConfigDialog({ site, canManage, onClose }: SiteConfigDialogP
               disabled={saltsMutation.isPending}
               onClick={() => setSaltsOpen(false)}
             >
-              Cancelar
+              {t("Cancel")}
             </Button>
             <Button
               type="button"
@@ -259,14 +262,13 @@ export function SiteConfigDialog({ site, canManage, onClose }: SiteConfigDialogP
                 saltsMutation.mutate(site.id);
               }}
             >
-              {saltsMutation.isPending ? "Procesando..." : "Rotar claves de seguridad"}
+              {saltsMutation.isPending ? t("Processing...") : t("Rotate security keys")}
             </Button>
           </div>
         }
       >
         <p className="text-sm text-muted-foreground">
-          Se generarán claves de seguridad nuevas. Todos los usuarios de WordPress cerrarán sesión y
-          tendrán que volver a entrar.
+          {t("New security keys will be generated. All WordPress users will be logged out and will have to sign in again.")}
         </p>
       </Dialog>
     </Dialog>

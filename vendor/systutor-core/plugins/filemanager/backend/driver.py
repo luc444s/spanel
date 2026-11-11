@@ -87,7 +87,7 @@ def _error(stderr: bytes) -> HTTPException:
             return HTTPException(code, str(message["message"]))
     except (UnicodeError, ValueError, KeyError, TypeError):
         pass
-    return HTTPException(502, "No se pudo acceder a los archivos del contenedor")
+    return HTTPException(502, "Could not access the container files")
 
 
 def operation(target: FileTarget, op: str, env: dict[str, str], **arguments: object) -> dict:
@@ -97,13 +97,13 @@ def operation(target: FileTarget, op: str, env: dict[str, str], **arguments: obj
     except subprocess.TimeoutExpired as exc:
         process.kill()
         process.communicate()
-        raise HTTPException(504, "El contenedor no respondió") from exc
+        raise HTTPException(504, "The container did not respond") from exc
     if process.returncode:
         raise _error(stderr)
     try:
         return json.loads(stdout)
     except (UnicodeError, ValueError) as exc:
-        raise HTTPException(502, "Respuesta inválida del contenedor") from exc
+        raise HTTPException(502, "Invalid response from the container") from exc
 
 
 def upload(
@@ -121,7 +121,7 @@ def upload(
         while chunk := source.read(65536):
             count += len(chunk)
             if count > limit:
-                raise HTTPException(413, "Archivo demasiado grande")
+                raise HTTPException(413, "File too large")
             try:
                 process.stdin.write(chunk)
             except BrokenPipeError:

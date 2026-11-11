@@ -90,7 +90,7 @@ def try_file_lock(path: Path) -> Iterator[bool]:
 def atomic_write_json(path: Path, payload: dict[str, Any], *, mode: int, lock: bool = True) -> None:
     serialized = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True)
     if contains_secret_material(serialized):
-        raise StateError("Se intentó escribir material privado en un archivo de estado")
+        raise StateError("Attempted to write private material to a state file")
     context = file_lock(path.with_name(f".{path.name}.lock")) if lock else _null_lock()
     with context:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -145,14 +145,14 @@ def job_id_from(path: Path, payload: dict[str, Any]) -> str:
     if not JOB_ID_RE.match(candidate):
         stem = path.stem.removeprefix("refresh-")
         if not JOB_ID_RE.match(stem):
-            raise StateError("Solicitud sin identificador UUID válido")
+            raise StateError("Request without a valid UUID identifier")
         candidate = stem
     return candidate
 
 
 def write_job(config: AgentConfig, job_id: str, payload: dict[str, Any]) -> Path:
     if not JOB_ID_RE.match(job_id):
-        raise StateError("Job inválido")
+        raise StateError("Invalid job")
     path = config.jobs_dir / f"{job_id}.json"
     atomic_write_json(path, {"id": job_id, **payload}, mode=0o640)
     return path

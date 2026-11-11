@@ -33,14 +33,14 @@ def _validate_host(host: str) -> str:
     """
     if "://" in host:
         raise AppError(
-            f"El host de la base de datos no apunta a un contenedor ({host!r})",
+            f"The database host does not point to a container ({host!r})",
             status_code=409,
             code="hosting_database_unavailable",
         )
     name = host.split(":", 1)[0].strip()
     if not _DOCKER_NAME.fullmatch(name) or name in {"localhost", "127.0.0.1", "::1"}:
         raise AppError(
-            f"El host de la base de datos no apunta a un contenedor ({host!r})",
+            f"The database host does not point to a container ({host!r})",
             status_code=409,
             code="hosting_database_unavailable",
         )
@@ -70,13 +70,13 @@ def database_binding(
             raw_host, database, user, password = parsed
             return raw_host, _validate_host(raw_host), database, user, password
         raise AppError(
-            "El sitio no declara su base de datos en el entorno ni en wp-config.php",
+            "The site does not declare its database in the environment or wp-config.php",
             status_code=409,
             code="hosting_database_unavailable",
         )
 
     raise AppError(
-        "El sitio no declara su base de datos en el entorno",
+        "The site does not declare its database in the environment",
         status_code=409,
         code="hosting_database_unavailable",
     )

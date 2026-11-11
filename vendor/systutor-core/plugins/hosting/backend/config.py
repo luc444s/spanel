@@ -77,20 +77,20 @@ def validate_env_updates(updates: dict[str, str]) -> dict[str, str]:
         pattern = ENV_WHITELIST.get(key)
         if pattern is None:
             raise AppError(
-                f"La variable {key} no se puede editar desde el panel",
+                f"The variable {key} cannot be edited from the panel",
                 status_code=422,
                 code="hosting_invalid_env",
             )
         text = str(value).strip()
         if "\n" in text or "\r" in text:
             raise AppError(
-                f"El valor de {key} no puede tener saltos de linea",
+                f"The value of {key} cannot contain line breaks",
                 status_code=422,
                 code="hosting_invalid_env",
             )
         if not pattern.fullmatch(text):
             raise AppError(
-                f"El valor de {key} no es valido",
+                f"The value of {key} is not valid",
                 status_code=422,
                 code="hosting_invalid_env",
             )
@@ -151,7 +151,7 @@ def build_run_args(info: dict, *, name: str, env_file: str) -> list[str]:
     host = _mapping(info.get("HostConfig"))
     image = str(config.get("Image") or info.get("Image") or "").strip()
     if not image:
-        raise Fallo("el contenedor no declara imagen; no se puede recrear")
+        raise Fallo("the container does not declare an image; it cannot be recreated")
 
     args: list[str] = ["-d", "--name", name]
 
@@ -233,7 +233,7 @@ class RawAdapter:
         )
         if info is None:
             raise AppError(
-                f"El contenedor {site.container_name} no existe o no responde",
+                f"Container {site.container_name} does not exist or is not responding",
                 status_code=409,
                 code="hosting_site_unavailable",
             )
@@ -244,7 +244,7 @@ class RawAdapter:
         info = self._inspect(site)
         if not candidato_de(info).gestionable:
             raise AppError(
-                f"El sitio {site.container_name} no es gestionable (spanel.managed=false)",
+                f"Site {site.container_name} is not manageable (spanel.managed=false)",
                 status_code=409,
                 code="hosting_site_not_managed",
             )

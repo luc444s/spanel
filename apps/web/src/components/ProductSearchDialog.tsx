@@ -1,6 +1,8 @@
 import { SearchDialog } from "@systutor/shell/ui/search-dialog";
 import { apiRequest } from "@systutor/shell/api/client";
 
+import { useT } from "../i18n/use-i18n";
+
 export type ProductSearchDialogItem = {
   id: string;
   sku: string;
@@ -33,23 +35,25 @@ export function ProductSearchDialog({
   open,
   onOpenChange,
   onSelect,
-  title = "Seleccionar producto",
+  title,
 }: ProductSearchDialogProps) {
+  const t = useT();
+
   return (
     <SearchDialog<ProductSearchDialogItem>
       open={open}
       onOpenChange={onOpenChange}
-      title={title}
-      placeholder="GLP 10kg, SKU-001, 7750..."
+      title={title ?? t("Select product")}
+      placeholder={t("GLP 10kg, SKU-001, 7750...")}
       fetchFn={searchProducts}
       onSelect={onSelect}
       getRowId={(item) => item.id}
       columns={[
-        { key: "sku", header: "SKU", render: (row) => row.sku },
-        { key: "name", header: "Producto", render: (row) => row.name },
-        { key: "brand", header: "Marca", render: (row) => row.brand_name ?? "-" },
-        { key: "condition", header: "Condición", render: (row) => row.condition_code },
-        { key: "status", header: "Activo", render: (row) => (row.is_active ? "Sí" : "No") },
+        { key: "sku", header: t("SKU"), render: (row) => row.sku },
+        { key: "name", header: t("Product"), render: (row) => row.name },
+        { key: "brand", header: t("Brand"), render: (row) => row.brand_name ?? "-" },
+        { key: "condition", header: t("Condition"), render: (row) => row.condition_code },
+        { key: "status", header: t("Active"), render: (row) => (row.is_active ? t("Yes") : t("No")) },
       ]}
     />
   );

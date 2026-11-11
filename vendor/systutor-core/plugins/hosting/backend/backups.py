@@ -138,7 +138,7 @@ class BackupService:
     def _require_local(self) -> None:
         if self.settings.docker_transport != "local":
             raise AppError(
-                "Los respaldos requieren transporte Docker local",
+                "Backups require the local Docker transport",
                 status_code=503,
                 code="hosting_backup_transport_unsupported",
             )
@@ -148,7 +148,7 @@ class BackupService:
         candidate = scripts / name
         if candidate.parent != scripts or not candidate.is_file():
             raise AppError(
-                "El runtime de respaldos no está disponible",
+                "The backup runtime is not available",
                 status_code=503,
                 code="hosting_backup_runtime_unavailable",
             )
@@ -163,7 +163,7 @@ class BackupService:
             )
         except Exception as exc:
             raise AppError(
-                "No se pudo comprobar el estado del sitio",
+                "Could not check the site status",
                 status_code=503,
                 code="hosting_backup_runtime_unavailable",
             ) from exc
@@ -171,7 +171,7 @@ class BackupService:
         state = state if isinstance(state, dict) else {}
         if state.get("Status") != "running" and state.get("Running") is not True:
             raise AppError(
-                "El sitio debe estar en ejecución",
+                "The site must be running",
                 status_code=409,
                 code="hosting_backup_site_not_running",
             )
@@ -190,7 +190,7 @@ class BackupService:
                 fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError as exc:
                 raise AppError(
-                    "Ya hay una operación de respaldo para este sitio",
+                    "A backup operation is already in progress for this site",
                     status_code=409,
                     code="hosting_backup_busy",
                 ) from exc
@@ -210,7 +210,7 @@ class BackupService:
             return self.runner(argv, env=env)
         except (OSError, subprocess.SubprocessError) as exc:
             raise AppError(
-                "El runtime de respaldos no está disponible",
+                "The backup runtime is not available",
                 status_code=503,
                 code="hosting_backup_runtime_unavailable",
             ) from exc
@@ -305,7 +305,7 @@ class BackupService:
                             result.stdout[-4000:],
                         )
                         raise AppError(
-                            "No se pudo generar el respaldo",
+                            "Could not generate the backup",
                             status_code=503,
                             code="hosting_backup_runtime_unavailable",
                         )
@@ -327,7 +327,7 @@ class BackupService:
             raise
         except OSError as exc:
             raise AppError(
-                "El almacenamiento de respaldos no está disponible",
+                "Backup storage is not available",
                 status_code=503,
                 code="hosting_backup_runtime_unavailable",
             ) from exc
@@ -341,7 +341,7 @@ class BackupService:
                     written += len(chunk)
                     if written > self.settings.backup_max_upload_bytes:
                         raise AppError(
-                            "El respaldo supera el tamaño permitido",
+                            "The backup exceeds the allowed size",
                             status_code=413,
                             code="hosting_backup_upload_too_large",
                         )
@@ -388,13 +388,13 @@ class BackupService:
         self._require_local()
         if not filename.lower().endswith(".zip"):
             raise AppError(
-                "Seleccioná un archivo .zip",
+                "Select a .zip file",
                 status_code=422,
                 code="hosting_backup_invalid",
             )
         if confirmation != site.container_name:
             raise AppError(
-                "La confirmación no coincide con el contenedor",
+                "The confirmation does not match the container",
                 status_code=422,
                 code="hosting_backup_confirmation_mismatch",
             )
@@ -424,13 +424,13 @@ class BackupService:
                     return
                 if result.returncode == 2:
                     raise AppError(
-                        "El respaldo no es válido para este sitio",
+                        "The backup is not valid for this site",
                         status_code=422,
                         code="hosting_backup_invalid",
                     )
                 if result.returncode == 1:
                     raise AppError(
-                        "No se pudo restaurar el respaldo; el sitio conserva un estado seguro",
+                        "Could not restore the backup; the site remains in a safe state",
                         status_code=409,
                         code="hosting_backup_restore_failed",
                     )
@@ -438,12 +438,12 @@ class BackupService:
                     reference = self._preserve_failure(incoming, new_safety)
                     preserved = True
                     raise AppError(
-                        f"Falló el rollback. Referencia: {reference}",
+                        f"Rollback failed. Reference: {reference}",
                         status_code=500,
                         code="hosting_backup_rollback_failed",
                     )
                 raise AppError(
-                    "El runtime de respaldos no está disponible",
+                    "The backup runtime is not available",
                     status_code=503,
                     code="hosting_backup_runtime_unavailable",
                 )
@@ -451,7 +451,7 @@ class BackupService:
             raise
         except OSError as exc:
             raise AppError(
-                "El runtime de respaldos no está disponible",
+                "The backup runtime is not available",
                 status_code=503,
                 code="hosting_backup_runtime_unavailable",
             ) from exc

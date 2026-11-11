@@ -75,12 +75,12 @@ def list_domains(
 ) -> DomainsResponse:
     if scope not in ("tenant", "all"):
         raise AppError(
-            "scope debe ser 'tenant' o 'all'", status_code=422, code="domains.invalid_scope"
+            "scope must be 'tenant' or 'all'", status_code=422, code="domains.invalid_scope"
         )
     if scope == "all":
         if not tenant_context.is_platform:
             raise AppError(
-                "Solo el administrador de plataforma puede ver todos los tenants",
+                "Only the platform administrator can view all tenants",
                 status_code=403,
                 code="domains.platform_scope_forbidden",
             )

@@ -52,7 +52,7 @@ class CertificateInfo:
 def normalize_hostname(value: object) -> str:
     candidate = str(value or "").strip().lower().rstrip(".")
     if not candidate or len(candidate) > 253 or not HOSTNAME_RE.match(candidate):
-        raise CertificateValidationError("Hostname inválido")
+        raise CertificateValidationError("Invalid hostname")
     return candidate
 
 
@@ -60,28 +60,28 @@ def validate_request_payload(payload: object, *, default_name: str) -> dict:
     """Rechaza campos extra y valores fuera del contrato de solicitud."""
 
     if not isinstance(payload, dict):
-        raise CertificateValidationError("La solicitud debe ser un objeto JSON")
+        raise CertificateValidationError("The request must be a JSON object")
     action = str(payload.get("action", "")).strip().lower()
     if action == "refresh":
         unknown = set(payload) - set(REFRESH_KEYS)
         if unknown:
-            raise CertificateValidationError(f"Campos no permitidos: {sorted(unknown)}")
+            raise CertificateValidationError(f"Fields not allowed: {sorted(unknown)}")
         return {"action": "refresh", "id": payload.get("id")}
 
     unknown = set(payload) - set(REQUEST_KEYS)
     if unknown:
-        raise CertificateValidationError(f"Campos no permitidos: {sorted(unknown)}")
+        raise CertificateValidationError(f"Fields not allowed: {sorted(unknown)}")
     hostname = normalize_hostname(payload.get("hostname"))
     if hostname == default_name:
-        raise CertificateValidationError("El certificado global no se regenera")
+        raise CertificateValidationError("The global certificate is not regenerated")
     if action not in ("ensure", "force", "verify", "sync", "install", "rollback"):
-        raise CertificateValidationError("Acción inválida")
+        raise CertificateValidationError("Invalid action")
     reason = payload.get("reason")
     if reason is not None:
         if not isinstance(reason, str) or len(reason) > 200:
-            raise CertificateValidationError("Motivo inválido")
+            raise CertificateValidationError("Invalid reason")
         if any(ord(char) < 32 for char in reason):
-            raise CertificateValidationError("Motivo inválido")
+            raise CertificateValidationError("Invalid reason")
     return {
         "id": payload.get("id"),
         "hostname": hostname,
@@ -101,7 +101,7 @@ def safe_error(value: object, limit: int = 500) -> str | None:
     if not isinstance(value, str) or not value.strip():
         return None
     if contains_secret_material(value):
-        return "Detalle no disponible"
+        return "Detail unavailable"
     return value.strip()[:limit]
 
 
@@ -118,7 +118,7 @@ def _openssl(args: Sequence[str], *, runner: Runner = _run) -> str:
     process = runner(["openssl", *args], None)
     if process.returncode != 0:
         detail = (process.stderr or process.stdout or b"").decode("utf-8", "replace").strip()
-        raise CertificateValidationError(f"openssl falló: {detail[:200]}")
+        raise CertificateValidationError(f"openssl failed: {detail[:200]}")
     return process.stdout.decode("utf-8", "replace")
 
 
@@ -142,7 +142,7 @@ def _parse_date(value: str) -> datetime:
             return datetime.strptime(text, fmt).replace(tzinfo=timezone.utc)
         except ValueError:
             continue
-    raise CertificateValidationError(f"Fecha inválida: {text}")
+    raise CertificateValidationError(f"Invalid date: {text}")
 
 
 def inspect_certificate(cert: Path, *, runner: Runner = _run) -> CertificateInfo:
@@ -156,7 +156,7 @@ def inspect_certificate(cert: Path, *, runner: Runner = _run) -> CertificateInfo
         ["x509", "-in", str(cert), "-noout", "-startdate", "-enddate"], runner=runner
     ).splitlines()
     if len(dates) < 2:
-        raise CertificateValidationError("No se pudieron leer las fechas del certificado")
+        raise CertificateValidationError("Could not read the certificate dates")
     san_text = _openssl(
         ["x509", "-in", str(cert), "-noout", "-ext", "subjectAltName"], runner=runner
     )
@@ -221,27 +221,27 @@ def validate_pair(
     """Clave ↔ certificado, SAN y fechas; nada se instala si falla (I7)."""
 
     if not cert.is_file():
-        raise CertificateValidationError(f"Falta el certificado: {cert}")
+        raise CertificateValidationError(f"Missing certificate: {cert}")
     if not key.is_file():
-        raise CertificateValidationError(f"Falta la clave: {key}")
+        raise CertificateValidationError(f"Missing key: {key}")
     if not public_key_matches(cert, key, runner=runner):
-        raise CertificateValidationError("La clave no corresponde al certificado")
+        raise CertificateValidationError("The key does not match the certificate")
 
     info = inspect_certificate(cert, runner=runner)
     if not _hostname_in_sans(hostname, info.sans):
-        raise CertificateValidationError(f"El SAN no contiene {hostname}")
+        raise CertificateValidationError(f"The SAN does not contain {hostname}")
     reference = now or datetime.now(timezone.utc)
     if info.not_after is None or info.not_after <= reference:
-        raise CertificateValidationError("El certificado está vencido")
+        raise CertificateValidationError("The certificate has expired")
     if info.not_before is not None and info.not_before > reference + timedelta(minutes=5):
-        raise CertificateValidationError("El certificado todavía no es válido")
+        raise CertificateValidationError("The certificate is not yet valid")
 
     if ca_file is not None:
         if not ca_file.is_file():
-            raise CertificateValidationError(f"Falta el bundle de CA: {ca_file}")
+            raise CertificateValidationError(f"Missing CA bundle: {ca_file}")
         args = chain_verify_command(cert, ca_file)
         process = runner(["openssl", *args], None)
         if process.returncode != 0:
             detail = (process.stdout or process.stderr or b"").decode("utf-8", "replace")
-            raise CertificateValidationError(f"La cadena no valida: {detail.strip()[:200]}")
+            raise CertificateValidationError(f"The chain does not validate: {detail.strip()[:200]}")
     return info

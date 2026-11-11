@@ -13,17 +13,17 @@ class AppError(Exception):
 
 
 class AuthenticationError(AppError):
-    def __init__(self, message: str = "Credenciales invalidas") -> None:
+    def __init__(self, message: str = "Invalid credentials") -> None:
         super().__init__(message, status_code=401, code="authentication_error")
 
 
 class AuthorizationError(AppError):
-    def __init__(self, message: str = "Permiso insuficiente") -> None:
+    def __init__(self, message: str = "Insufficient permissions") -> None:
         super().__init__(message, status_code=403, code="authorization_error")
 
 
 class NotFoundError(AppError):
-    def __init__(self, message: str = "Recurso no encontrado") -> None:
+    def __init__(self, message: str = "Resource not found") -> None:
         super().__init__(message, status_code=404, code="not_found")
 
 

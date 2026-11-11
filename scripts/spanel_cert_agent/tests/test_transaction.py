@@ -287,7 +287,7 @@ def test_sync_without_lineage_fails_and_alerts_do_not_use_smtp(tmp_path):
     )
 
     assert outcome.ok is False
-    assert "linaje" in (outcome.error or "")
+    assert "lineage" in (outcome.error or "")
     assert not commands.called("certbot")
     assert not any(name in ("sendmail", "postfix", "dovecot") for name in commands.names())
 

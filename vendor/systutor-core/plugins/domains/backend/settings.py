@@ -43,7 +43,7 @@ class DomainsSettings(BaseModel):
 
     def proxy_settings(self) -> Settings:
         if self.profile not in PROFILES:
-            raise ValueError(f"perfil desconocido: {self.profile}")
+            raise ValueError(f"unknown profile: {self.profile}")
         settings = Settings.from_env(self.profile)
         # La API puede apuntar el sondeo a otro host que el de escritura.
         return settings

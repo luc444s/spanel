@@ -13,7 +13,7 @@ type LoginProps = {
   description?: string;
 };
 
-export function Login({ onLogin, title = "SYSTUTOR", description = "Iniciar sesión" }: LoginProps) {
+export function Login({ onLogin, title = "SYSTUTOR", description = "Sign in" }: LoginProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);

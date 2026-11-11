@@ -138,7 +138,7 @@ def ticket_access(
 ) -> tuple[Access, str]:
     record = consume(ticket)
     if not record or record.get("provider") != provider or record.get("resource_id") != resource_id:
-        raise HTTPException(401, "Descarga expirada")
+        raise HTTPException(401, "Download expired")
     with ensure_session_factory(request.app)() as db:
         user = db.get(User, record.get("user_id"))
         if (
@@ -147,7 +147,7 @@ def ticket_access(
             or user.tenant_id != record.get("tenant_id")
             or not validate_user_branch_scope(db, user)
         ):
-            raise HTTPException(401, "Descarga expirada")
+            raise HTTPException(401, "Download expired")
         context = build_tenant_context(db, user)
         if not context.has_permission("filemanager.files.read"):
             raise HTTPException(403, "Permission denied")
@@ -216,7 +216,7 @@ def save_text(
 ) -> dict:
     encoded = body.content.encode("utf-8")
     if len(encoded) > EDIT_LIMIT:
-        raise HTTPException(413, "Archivo demasiado grande para editar")
+        raise HTTPException(413, "File too large to edit")
     result = upload(
         access.target,
         "write",
@@ -240,7 +240,7 @@ def add_file(
 ) -> dict:
     name = file.filename or ""
     if not name or "/" in name or "\\" in name or name in (".", "..") or path.startswith("/"):
-        raise HTTPException(400, "Nombre de archivo inválido")
+        raise HTTPException(400, "Invalid file name")
     relative = "/".join(part for part in (path.strip("/"), name) if part)
     result = upload(
         access.target,
@@ -271,7 +271,7 @@ class ManagedDownload(StreamingResponse):
 def get_file(path: str, request: Request, access: Access = Depends(authorize)) -> Response:
     info = operation(access.target, "stat", docker_environment(), path=path)
     if info.get("directory"):
-        raise HTTPException(400, "Seleccioná un archivo")
+        raise HTTPException(400, "Select a file")
     audited(request, access, "filemanager.download", path)
     process, chunks = download(access.target, docker_environment(), path)
     name = quote(str(info["name"]), safe="")

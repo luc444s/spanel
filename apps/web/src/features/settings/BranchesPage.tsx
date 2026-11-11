@@ -19,6 +19,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@syst
 import { DataTable } from "@systutor/shell/ui/data-table";
 import { Dialog } from "@systutor/shell/ui/dialog";
 import { Input } from "@systutor/shell/ui/input";
+import { useT } from "@/i18n/use-i18n";
 
 type BranchFormState = {
   id?: string;
@@ -29,6 +30,7 @@ type BranchFormState = {
 const EMPTY_BRANCH_FORM: BranchFormState = { name: "", code: "" };
 
 export function BranchesPage() {
+  const t = useT();
   const queryClient = useQueryClient();
   const permissions = useAuthStore((state) => state.permissions);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -72,7 +74,7 @@ export function BranchesPage() {
     try {
       await saveBranchMutation.mutateAsync(formState);
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : "No se pudo guardar la branch.");
+      setFormError(error instanceof Error ? error.message : t("Could not save the branch."));
     }
   }
 
@@ -134,45 +136,46 @@ export function BranchesPageContent({
   onFieldChange,
   onToggleBranch,
 }: BranchesPageContentProps) {
+  const t = useT();
   return (
     <section className="space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-2">
-          <h1 className="text-2xl font-semibold text-foreground">Sucursales</h1>
-          <p className="text-sm text-muted-foreground">Administracion tenant-aware de sucursales disponibles.</p>
+          <h1 className="text-2xl font-semibold text-foreground">{t("Branches")}</h1>
+          <p className="text-sm text-muted-foreground">{t("Tenant-aware administration of available branches.")}</p>
         </div>
-        {canManage ? <Button onClick={onCreate}>Crear sucursal</Button> : null}
+        {canManage ? <Button onClick={onCreate}>{t("Create branch")}</Button> : null}
       </div>
 
       {hasError ? (
-        <Alert title="No se pudieron cargar las branches">Revisa permisos o conectividad.</Alert>
+        <Alert title={t("Could not load branches")}>{t("Check permissions or connectivity.")}</Alert>
       ) : null}
 
       <Card>
         <CardHeader>
-          <CardTitle>Sucursales</CardTitle>
-          <CardDescription>Listado mínimo de branches activas o deshabilitadas.</CardDescription>
+          <CardTitle>{t("Branches")}</CardTitle>
+          <CardDescription>{t("Minimal list of active or disabled branches.")}</CardDescription>
         </CardHeader>
         <CardContent>
           <DataTable
             columns={[
-              { key: "name", header: "Nombre", render: (branch) => branch.name },
-              { key: "code", header: "Código", render: (branch) => branch.code },
-              { key: "status", header: "Estado", render: (branch) => <Badge>{branch.active ? "Activo" : "Inactivo"}</Badge> },
+              { key: "name", header: t("Name"), render: (branch) => branch.name },
+              { key: "code", header: t("Code"), render: (branch) => branch.code },
+              { key: "status", header: t("Status"), render: (branch) => <Badge>{branch.active ? t("Active") : t("Inactive")}</Badge> },
               {
                 key: "actions",
-                header: "Acciones",
+                header: t("Actions"),
                 className: "w-56",
                 render: (branch) => (
                   <div className="flex flex-wrap gap-2">
                     {canManage ? (
                       <Button variant="secondary" onClick={() => onEdit(branch)}>
-                        Editar
+                        {t("Edit")}
                       </Button>
                     ) : null}
                     {canManage ? (
                       <Button variant="secondary" onClick={() => onToggleBranch(branch)}>
-                        {branch.active ? "Desactivar" : "Activar"}
+                        {branch.active ? t("Deactivate") : t("Activate")}
                       </Button>
                     ) : null}
                   </div>
@@ -181,36 +184,36 @@ export function BranchesPageContent({
             ]}
             rows={branches}
             rowKey={(branch) => branch.id}
-            emptyMessage="No hay branches registradas para este tenant."
+            emptyMessage={t("No branches registered for this tenant.")}
           />
         </CardContent>
       </Card>
 
       <Dialog
         open={isDialogOpen}
-        title={formState.id ? "Editar sucursal" : "Crear sucursal"}
-        description="Formulario mínimo del core management."
+        title={formState.id ? t("Edit branch") : t("Create branch")}
+        description={t("Minimal core management form.")}
         onClose={onCloseDialog}
       >
         <form className="space-y-4" onSubmit={onSubmit}>
           <label className="block space-y-2 text-sm text-foreground">
-            <span>Nombre</span>
+            <span>{t("Name")}</span>
             <Input value={formState.name} onChange={(event) => onFieldChange({ name: event.target.value })} />
           </label>
 
           <label className="block space-y-2 text-sm text-foreground">
-            <span>Código</span>
+            <span>{t("Code")}</span>
             <Input value={formState.code} onChange={(event) => onFieldChange({ code: event.target.value.toUpperCase() })} />
           </label>
 
-          {formError ? <Alert title="No se pudo guardar la branch">{formError}</Alert> : null}
+          {formError ? <Alert title={t("Could not save the branch")}>{formError}</Alert> : null}
 
           <div className="flex justify-end gap-3">
             <Button type="button" variant="secondary" onClick={onCloseDialog}>
-              Cancelar
+              {t("Cancel")}
             </Button>
             <Button type="submit" disabled={isSaving}>
-              {formState.id ? "Guardar cambios" : "Crear sucursal"}
+              {formState.id ? t("Save changes") : t("Create branch")}
             </Button>
           </div>
         </form>

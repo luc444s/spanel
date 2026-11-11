@@ -4,6 +4,8 @@ import { Alert } from "@systutor/shell/ui/alert";
 import { Button } from "@systutor/shell/ui/button";
 import { Dialog } from "@systutor/shell/ui/dialog";
 
+import { useT } from "@/i18n/use-i18n";
+
 import { hostingKeys, hostingSiteLogs, listSiteUsers, type HostingSite, type WordPressUser } from "../api";
 
 type UsersDialogProps = {
@@ -18,6 +20,7 @@ type UsersDialogProps = {
  * enabled by the open site, so closing the dialog also stops asking Docker.
  */
 export function UsersDialog({ site, canReset, onClose, onReset }: UsersDialogProps) {
+  const t = useT();
   const usersQuery = useQuery({
     queryKey: hostingKeys.users(site?.id ?? ""),
     queryFn: () => listSiteUsers(site!.id),
@@ -32,33 +35,33 @@ export function UsersDialog({ site, canReset, onClose, onReset }: UsersDialogPro
   return (
     <Dialog
       open={Boolean(site)}
-      title={`Usuarios de ${site?.container_name ?? ""}`}
-      description={site && !site.managed ? "Sitio no gestionable: solo lectura" : undefined}
+      title={t("Users of {site}", { site: site?.container_name ?? "" })}
+      description={site && !site.managed ? t("Site not manageable: read only") : undefined}
       onClose={onClose}
       zIndexClassName="z-[1100]"
       maxWidthClassName="max-w-3xl"
     >
       {usersQuery.isLoading ? (
-        <p className="text-sm text-muted-foreground">Cargando usuarios...</p>
+        <p className="text-sm text-muted-foreground">{t("Loading users...")}</p>
       ) : usersQuery.error ? (
-        <Alert title="No se pudieron cargar los usuarios">
+        <Alert title={t("Could not load users")}>
           {usersQuery.error instanceof Error
             ? usersQuery.error.message
-            : "Error desconocido al consultar el sitio."}
+            : t("Unknown error while querying the site.")}
         </Alert>
       ) : users.length === 0 ? (
-        <p className="text-sm text-muted-foreground">El sitio no tiene usuarios.</p>
+        <p className="text-sm text-muted-foreground">{t("The site has no users.")}</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border text-left text-muted-foreground">
-                <th className="pb-2 pr-4">ID</th>
-                <th className="pb-2 pr-4">Usuario</th>
-                <th className="pb-2 pr-4">Email</th>
-                <th className="pb-2 pr-4">Estado</th>
-                <th className="pb-2 pr-4">Rol</th>
-                {site?.managed && canReset ? <th className="pb-2">Acciones</th> : null}
+                <th className="pb-2 pr-4">{t("ID")}</th>
+                <th className="pb-2 pr-4">{t("User")}</th>
+                <th className="pb-2 pr-4">{t("Email")}</th>
+                <th className="pb-2 pr-4">{t("Status")}</th>
+                <th className="pb-2 pr-4">{t("Role")}</th>
+                {site?.managed && canReset ? <th className="pb-2">{t("Actions")}</th> : null}
               </tr>
             </thead>
             <tbody>
@@ -67,12 +70,12 @@ export function UsersDialog({ site, canReset, onClose, onReset }: UsersDialogPro
                   <td className="py-2 pr-4 font-mono text-xs">{user.id}</td>
                   <td className="py-2 pr-4">{user.login}</td>
                   <td className="py-2 pr-4">{user.email}</td>
-                  <td className="py-2 pr-4">{user.status === 0 ? "Activo" : "Inactivo"}</td>
+                  <td className="py-2 pr-4">{user.status === 0 ? t("Active") : t("Inactive")}</td>
                   <td className="py-2 pr-4">{user.role}</td>
                   {site?.managed && canReset ? (
                     <td className="py-2">
                       <Button size="sm" variant="secondary" onClick={() => onReset(user)}>
-                        Restablecer
+                        {t("Reset")}
                       </Button>
                     </td>
                   ) : null}
@@ -92,6 +95,7 @@ type LogsDialogProps = {
 };
 
 export function LogsDialog({ site, onClose }: LogsDialogProps) {
+  const t = useT();
   const logsQuery = useQuery({
     queryKey: ["hosting", site?.id, "logs"],
     queryFn: () => hostingSiteLogs(site!.id),
@@ -101,20 +105,20 @@ export function LogsDialog({ site, onClose }: LogsDialogProps) {
   return (
     <Dialog
       open={Boolean(site)}
-      title={`Logs de ${site?.container_name ?? ""}`}
+      title={t("Logs for {site}", { site: site?.container_name ?? "" })}
       onClose={onClose}
       zIndexClassName="z-[1100]"
       maxWidthClassName="max-w-3xl"
     >
       {logsQuery.error ? (
-        <Alert title="No se pudieron leer los logs">
+        <Alert title={t("Could not read logs")}>
           {logsQuery.error instanceof Error
             ? logsQuery.error.message
-            : "Error desconocido al consultar el sitio."}
+            : t("Unknown error while querying the site.")}
         </Alert>
       ) : (
         <pre className="max-h-80 overflow-auto whitespace-pre-wrap text-xs">
-          {logsQuery.data?.logs ?? "Cargando..."}
+          {logsQuery.data?.logs ?? t("Loading...")}
         </pre>
       )}
     </Dialog>

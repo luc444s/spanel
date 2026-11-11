@@ -106,13 +106,13 @@ def _backup_tooling(tooling: Tooling) -> backup.Tooling:
 
 def _safe_member_name(name: str) -> tuple[str, ...]:
     if not name or "\x00" in name or "\\" in name or name.startswith("/") or name.endswith("/"):
-        raise StrictVerifyError(f"entry insegura: {name!r}")
+        raise StrictVerifyError(f"unsafe entry: {name!r}")
     raw_parts = name.split("/")
     if any(part in {"", ".", ".."} for part in raw_parts):
-        raise StrictVerifyError(f"entry insegura: {name!r}")
+        raise StrictVerifyError(f"unsafe entry: {name!r}")
     parts = PurePosixPath(name).parts
     if tuple(raw_parts) != parts:
-        raise StrictVerifyError(f"entry no canónica: {name!r}")
+        raise StrictVerifyError(f"non-canonical entry: {name!r}")
     return parts
 
 
@@ -120,18 +120,18 @@ def _read_manifest(zipped: zipfile.ZipFile) -> dict:
     infos = zipped.infolist()
     names = [info.filename for info in infos]
     if len(names) != len(set(names)):
-        raise StrictVerifyError("ZIP con entries duplicadas")
+        raise StrictVerifyError("ZIP with duplicate entries")
     if names.count("manifest.json") != 1:
-        raise StrictVerifyError("ZIP sin un único manifest.json")
+        raise StrictVerifyError("ZIP without a single manifest.json")
     info = zipped.getinfo("manifest.json")
     if info.file_size > MANIFEST_MAX_BYTES:
-        raise StrictVerifyError("manifest.json demasiado grande")
+        raise StrictVerifyError("manifest.json too large")
     try:
         manifest = json.loads(zipped.read(info).decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise StrictVerifyError(f"manifest.json inválido: {exc}") from exc
+        raise StrictVerifyError(f"invalid manifest.json: {exc}") from exc
     if not isinstance(manifest, dict):
-        raise StrictVerifyError("manifest.json debe ser un objeto")
+        raise StrictVerifyError("manifest.json must be an object")
     return manifest
 
 
@@ -140,9 +140,9 @@ def _strict_extract(zip_path: Path, destination: Path, max_bytes: int) -> Restor
     try:
         resolved = zip_path.expanduser().resolve(strict=True)
     except OSError as exc:
-        raise StrictVerifyError(f"no existe el ZIP: {zip_path}") from exc
+        raise StrictVerifyError(f"zip does not exist: {zip_path}") from exc
     if not resolved.is_file() or resolved.suffix.lower() != ".zip":
-        raise StrictVerifyError(f"no es un .zip: {resolved}")
+        raise StrictVerifyError(f"not a .zip: {resolved}")
 
     try:
         with zipfile.ZipFile(resolved) as zipped:
@@ -151,68 +151,68 @@ def _strict_extract(zip_path: Path, destination: Path, max_bytes: int) -> Restor
             container = manifest.get("container")
             entries = manifest.get("entries")
             if kind not in {"wp", "static"}:
-                raise StrictVerifyError(f"kind inválido: {kind!r}")
+                raise StrictVerifyError(f"invalid kind: {kind!r}")
             if not isinstance(container, str) or not container:
-                raise StrictVerifyError("manifest sin container")
+                raise StrictVerifyError("manifest without container")
             if not isinstance(entries, dict) or not entries:
-                raise StrictVerifyError("manifest sin entries")
+                raise StrictVerifyError("manifest without entries")
 
             expected_names = set(entries) | {"manifest.json"}
             actual_names = {info.filename for info in zipped.infolist()}
             extra = sorted(actual_names - expected_names)
             missing = sorted(expected_names - actual_names)
             if extra or missing:
-                raise StrictVerifyError(f"surface distinta al manifest; extra={extra}, missing={missing}")
+                raise StrictVerifyError(f"surface differs from manifest; extra={extra}, missing={missing}")
 
             site_roots: set[str] = set()
             declared_total = 0
             infos: list[tuple[zipfile.ZipInfo, tuple[str, ...], dict]] = []
             for name, meta in entries.items():
                 if not isinstance(name, str) or not isinstance(meta, dict):
-                    raise StrictVerifyError("entry/meta inválida en manifest")
+                    raise StrictVerifyError("invalid entry/meta in manifest")
                 parts = _safe_member_name(name)
                 if parts[0] == "site":
                     if len(parts) < 3:
-                        raise StrictVerifyError(f"entry site sin raíz docker-cp: {name}")
+                        raise StrictVerifyError(f"site entry without docker-cp root: {name}")
                     site_roots.add(parts[1])
                 elif tuple(parts) != ("database", "backup.sql"):
-                    raise StrictVerifyError(f"entry fuera de site/database: {name}")
+                    raise StrictVerifyError(f"entry outside site/database: {name}")
                 info = zipped.getinfo(name)
                 mode = info.external_attr >> 16
                 if stat.S_ISLNK(mode):
-                    raise StrictVerifyError(f"symlink prohibido: {name}")
+                    raise StrictVerifyError(f"symlink not allowed: {name}")
                 file_type = stat.S_IFMT(mode)
                 if file_type not in {0, stat.S_IFREG}:
-                    raise StrictVerifyError(f"tipo de entry no regular: {name}")
+                    raise StrictVerifyError(f"entry type is not regular: {name}")
                 if info.flag_bits & 0x1:
-                    raise StrictVerifyError(f"entry cifrada no soportada: {name}")
+                    raise StrictVerifyError(f"encrypted entry not supported: {name}")
                 try:
                     declared_size = int(meta["size"])
                     expected_hash = str(meta["sha256"])
                 except (KeyError, TypeError, ValueError) as exc:
-                    raise StrictVerifyError(f"metadata inválida: {name}") from exc
+                    raise StrictVerifyError(f"invalid metadata: {name}") from exc
                 if declared_size < 0 or declared_size != info.file_size:
                     raise StrictVerifyError(f"size mismatch: {name}")
                 if len(expected_hash) != 64:
-                    raise StrictVerifyError(f"SHA256 inválido: {name}")
+                    raise StrictVerifyError(f"invalid SHA256: {name}")
                 declared_total += declared_size
                 if declared_total > max_bytes:
-                    raise StrictVerifyError(f"ZIP supera --max-bytes ({max_bytes})")
+                    raise StrictVerifyError(f"ZIP exceeds --max-bytes ({max_bytes})")
                 infos.append((info, parts, meta))
 
             if len(site_roots) != 1:
-                raise StrictVerifyError(f"se esperaba una raíz site, encontradas: {sorted(site_roots)}")
+                raise StrictVerifyError(f"expected one site root, found: {sorted(site_roots)}")
             has_sql = "database/backup.sql" in entries
             if kind == "wp" and not has_sql:
-                raise StrictVerifyError("WordPress sin database/backup.sql")
+                raise StrictVerifyError("WordPress without database/backup.sql")
             if kind == "static" and has_sql:
-                raise StrictVerifyError("estático no debe contener database/backup.sql")
+                raise StrictVerifyError("static site must not contain database/backup.sql")
             try:
                 manifest_total = int(manifest.get("total_size", -1))
             except (TypeError, ValueError) as exc:
-                raise StrictVerifyError("manifest total_size inválido") from exc
+                raise StrictVerifyError("invalid manifest total_size") from exc
             if manifest_total != declared_total:
-                raise StrictVerifyError("manifest total_size no coincide con entries")
+                raise StrictVerifyError("manifest total_size does not match entries")
 
             destination.mkdir(parents=True, mode=0o700, exist_ok=True)
             site_dir = destination / "site"
@@ -231,7 +231,7 @@ def _strict_extract(zip_path: Path, destination: Path, max_bytes: int) -> Restor
                     for chunk in iter(lambda: source.read(CHUNK_SIZE), b""):
                         written += len(chunk)
                         if written > int(meta["size"]):
-                            raise StrictVerifyError(f"entry expandió más de lo declarado: {info.filename}")
+                            raise StrictVerifyError(f"entry expanded beyond its declared size: {info.filename}")
                         digest.update(chunk)
                         target.write(chunk)
                 if written != int(meta["size"]) or digest.hexdigest() != meta["sha256"]:
@@ -241,12 +241,12 @@ def _strict_extract(zip_path: Path, destination: Path, max_bytes: int) -> Restor
                     os.chmod(output, permissions)
 
             if not any(path.is_file() for path in site_dir.rglob("*")):
-                raise StrictVerifyError("ZIP sin archivos restaurables en site/")
+                raise StrictVerifyError("ZIP without restorable files under site/")
             if sql_path is not None and not sql_path.read_bytes().strip():
-                raise StrictVerifyError("database/backup.sql vacío")
+                raise StrictVerifyError("empty database/backup.sql")
             return RestorePackage(resolved, manifest, site_dir, sql_path)
     except zipfile.BadZipFile as exc:
-        raise StrictVerifyError(f"ZIP corrupto: {exc}") from exc
+        raise StrictVerifyError(f"corrupt ZIP: {exc}") from exc
 
 
 def _target(args: argparse.Namespace, tooling: Tooling) -> backup.Target:
@@ -261,21 +261,21 @@ def _target(args: argparse.Namespace, tooling: Tooling) -> backup.Target:
     except backup.BackupError as exc:
         raise RestoreError(str(exc)) from exc
     if not bool(inspected.get("State", {}).get("Running")):
-        raise RestoreError(f"el contenedor {args.container} no está corriendo")
+        raise RestoreError(f"container {args.container} is not running")
     path = PurePosixPath(target.site_path)
     if not target.site_path.startswith("/") or ".." in path.parts or target.site_path == "/":
-        raise RestoreError(f"path de destino inseguro: {target.site_path!r}")
+        raise RestoreError(f"unsafe destination path: {target.site_path!r}")
     return target
 
 
 def _check_package_target(package: RestorePackage, target: backup.Target) -> None:
     if package.manifest["container"] != target.container:
         raise RestoreError(
-            f"el ZIP pertenece a {package.manifest['container']!r}, no a {target.container!r}"
+            f"the ZIP belongs to {package.manifest['container']!r}, not {target.container!r}"
         )
     if package.manifest["kind"] != target.kind:
         raise RestoreError(
-            f"kind del ZIP {package.manifest['kind']!r} != kind actual {target.kind!r}"
+            f"ZIP kind {package.manifest['kind']!r} != current kind {target.kind!r}"
         )
 
 
@@ -297,7 +297,7 @@ def _run(
 ) -> backup.Result:
     result = tooling.docker(args, input_bytes)
     if result.returncode != 0:
-        raise RestoreError(f"{label} falló: {_detail(result, secrets_to_hide)}")
+        raise RestoreError(f"{label} failed: {_detail(result, secrets_to_hide)}")
     return result
 
 
@@ -321,7 +321,7 @@ def _db_call(
     label: str,
 ) -> backup.Result:
     if not all((target.db_container, target.db_user, target.db_name, target.db_pass)):
-        raise RestoreError("target WordPress sin credenciales/DB container completos")
+        raise RestoreError("WordPress target without complete credentials/DB container")
     last: backup.Result | None = None
     for client in ("mariadb", "mysql"):
         command = _db_command(target, client, extra)
@@ -335,9 +335,9 @@ def _db_call(
             return result
         detail = _detail(result, (target.db_pass or "",))
         if "not found" not in detail.lower():
-            raise RestoreError(f"{label} falló: {detail}")
+            raise RestoreError(f"{label} failed: {detail}")
     assert last is not None
-    raise RestoreError(f"{label} falló: {_detail(last, (target.db_pass or '',))}")
+    raise RestoreError(f"{label} failed: {_detail(last, (target.db_pass or '',))}")
 
 
 def _drop_current_database(tooling: Tooling, target: backup.Target) -> None:
@@ -367,7 +367,7 @@ def _drop_current_database(tooling: Tooling, target: backup.Target) -> None:
         target,
         extra=[],
         input_bytes=("\n".join(statements) + "\n").encode(),
-        label="vaciar la DB del sitio",
+        label="empty the site DB",
     )
 
 
@@ -378,7 +378,7 @@ def _restore_database(tooling: Tooling, target: backup.Target, sql_path: Path) -
         target,
         extra=[],
         input_bytes=sql_path.read_bytes(),
-        label="importar database/backup.sql",
+        label="import database/backup.sql",
     )
 
 
@@ -391,12 +391,12 @@ def _apply(package: RestorePackage, target: backup.Target, tooling: Tooling) -> 
         _run(
             tooling,
             ["exec", target.container, "sh", "-c", f"rm -rf -- {q_stage} && mkdir -p -- {q_stage}"],
-            label="preparar staging",
+            label="prepare staging",
         )
         _run(
             tooling,
             ["cp", f"{package.site_dir}/.", f"{target.container}:{stage}/"],
-            label="copiar archivos al staging",
+            label="copy files to staging",
         )
         if target.kind == "wp":
             mutated = True
@@ -413,7 +413,7 @@ def _apply(package: RestorePackage, target: backup.Target, tooling: Tooling) -> 
                 label="activar mantenimiento",
             )
             if package.sql_path is None:
-                raise RestoreError("ZIP WordPress sin SQL")
+                raise RestoreError("WordPress ZIP without SQL")
             _restore_database(tooling, target, package.sql_path)
         else:
             mutated = True
@@ -466,14 +466,14 @@ def create_safety_backup(args: argparse.Namespace, tooling: Tooling) -> Path:
     try:
         code = backup.run_backup(backup_args, _backup_tooling(tooling))
     except (backup.BackupError, backup.VerifyError) as exc:
-        raise RestoreError(f"safety backup falló: {exc}") from exc
+        raise RestoreError(f"safety backup failed: {exc}") from exc
     candidates = sorted(directory.glob("*.zip"))
     if code != 0 or len(candidates) != 1:
-        raise RestoreError("safety backup no produjo exactamente un ZIP")
+        raise RestoreError("safety backup did not produce exactly one ZIP")
     try:
         backup.verify_zip(candidates[0])
     except backup.VerifyError as exc:
-        raise RestoreError(f"safety backup inválido: {exc}") from exc
+        raise RestoreError(f"invalid safety backup: {exc}") from exc
     return candidates[0]
 
 
@@ -502,10 +502,10 @@ def run_restore(args: argparse.Namespace, tooling: Tooling) -> int:
         _check_package_target(package, target)
         print(json.dumps(_plan(package, target), indent=2, ensure_ascii=False))
         if not args.yes:
-            print("PLAN: sin --yes no se creó safety backup ni se mutó el destino")
+            print("PLAN: without --yes no safety backup was created and the destination was not mutated")
             return EXIT_OK
 
-        print("ADVERTENCIA: se reemplazarán archivos" + (" y la DB del sitio" if target.kind == "wp" else ""))
+        print("WARNING: files will be replaced" + (" and the site DB" if target.kind == "wp" else ""))
         factory = tooling.safety_backup or create_safety_backup
         safety = factory(args, tooling)
         print(f"SAFETY_BACKUP: {safety}")
@@ -518,22 +518,22 @@ def run_restore(args: argparse.Namespace, tooling: Tooling) -> int:
             _apply(package, target, tooling)
         except ApplyError as exc:
             if not exc.mutated:
-                print(f"ERROR: restore falló antes de mutar: {exc}", file=sys.stderr)
+                print(f"ERROR: restore failed before mutating: {exc}", file=sys.stderr)
                 return EXIT_ERROR
-            print(f"ERROR: restore falló después de mutar: {exc}; iniciando rollback", file=sys.stderr)
+            print(f"ERROR: restore failed after mutating: {exc}; starting rollback", file=sys.stderr)
             try:
                 _apply(safety_package, target, tooling)
             except (RestoreError, OSError) as rollback_exc:
                 preserve_temp = True
                 print(
-                    f"ROLLBACK FALLÓ: {rollback_exc}; temporales conservados en {temp}",
+                    f"ROLLBACK FAILED: {rollback_exc}; temporary files kept in {temp}",
                     file=sys.stderr,
                 )
                 return EXIT_ROLLBACK_FAILED
-            print("ROLLBACK: estado previo restaurado", file=sys.stderr)
+            print("ROLLBACK: previous state restored", file=sys.stderr)
             return EXIT_ERROR
 
-        print("RESTORE: completado")
+        print("RESTORE: completed")
         return EXIT_OK
     finally:
         if not preserve_temp:
@@ -542,7 +542,7 @@ def run_restore(args: argparse.Namespace, tooling: Tooling) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Restaura al mismo contenedor un ZIP producido por site_backup.py."
+        description="Restore a ZIP produced by site_backup.py to the same container."
     )
     parser.add_argument("--zip", required=True, dest="zip_path")
     parser.add_argument("--container", required=True)
@@ -551,12 +551,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--db-user", default=None)
     parser.add_argument("--db-pass", default=None)
     parser.add_argument("--db-name", default=None)
-    parser.add_argument("--path", default=None, help="override del web root actual")
-    parser.add_argument("--yes", action="store_true", help="confirma la operación destructiva")
+    parser.add_argument("--path", default=None, help="override the current web root")
+    parser.add_argument("--yes", action="store_true", help="confirm the destructive operation")
     parser.add_argument(
         "--safety-out",
         default="/root/backups/pre-restore",
-        help="raíz donde conservar el backup previo",
+        help="root where the previous backup is kept",
     )
     parser.add_argument("--max-bytes", type=int, default=DEFAULT_MAX_BYTES)
     return parser
@@ -565,7 +565,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None, tooling: Tooling | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.max_bytes < 1:
-        print("ERROR: --max-bytes debe ser positivo", file=sys.stderr)
+        print("ERROR: --max-bytes must be positive", file=sys.stderr)
         return EXIT_ERROR
     try:
         return run_restore(args, tooling or default_tooling())

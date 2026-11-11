@@ -6,6 +6,7 @@ import { Button } from "@systutor/shell/ui/button";
 import { Dialog } from "@systutor/shell/ui/dialog";
 import { Tabs } from "@systutor/shell/ui/tabs";
 import { toast } from "@systutor/shell/ui/toast";
+import { useT } from "@/i18n/use-i18n";
 
 import { domainsKeys, listRoutes } from "../../../domains/frontend/api";
 import {
@@ -24,7 +25,7 @@ import { SourceDialog } from "./SourceDialog";
 
 type Tab = "overview" | "audit" | "deployments" | "operations";
 const ACTIONS: Array<[AppAction, string]> = [
-  ["refresh", "Actualizar todo"], ["down", "Down"],
+  ["refresh", "Refresh all"], ["down", "Down"],
 ];
 
 export function ApplicationDetail({ application, canCreate, canManage, canManageDomains,
@@ -41,6 +42,7 @@ export function ApplicationDetail({ application, canCreate, canManage, canManage
   onAccepted: (operation: OperationSummary) => void;
 }) {
   const queryClient = useQueryClient();
+  const t = useT();
   const [tab, setTab] = useState<Tab>("overview");
   const [serviceName, setServiceName] = useState<string | null>(null);
   const [deployOpen, setDeployOpen] = useState(false);
@@ -107,7 +109,7 @@ export function ApplicationDetail({ application, canCreate, canManage, canManage
       await queryClient.invalidateQueries({ queryKey: appsKeys.detail(application!.id) });
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "No se pudo aceptar la operación",
+        error instanceof Error ? error.message : t("Could not accept the operation"),
         feedback ? { id: feedback.id } : undefined,
       );
     } finally {
@@ -120,18 +122,18 @@ export function ApplicationDetail({ application, canCreate, canManage, canManage
   const tabs = [
     {
       value: "overview" as const,
-      label: "Resumen",
+      label: t("Overview"),
       content: <div className="space-y-4">
         <dl className="grid gap-3 text-sm sm:grid-cols-2">
-          <div><dt className="text-muted-foreground">Estado</dt><dd>● {current.status}</dd></div>
-          <div><dt className="text-muted-foreground">Fuente</dt><dd>GitHub · {sourceConnected ? "conectado" : "requiere reconexión"}</dd></div>
-          <div><dt className="text-muted-foreground">Compose</dt><dd>{current.compose_file ?? report.compose ?? "Autodetectar"}</dd></div>
-          <div><dt className="text-muted-foreground">Commit activo</dt><dd><code>{activeDeployment?.commit ?? "—"}</code></dd></div>
-          <div><dt className="text-muted-foreground">Proyecto runtime</dt><dd><code>{detail.data?.runtime_project ?? "—"}</code></dd></div>
-          <div><dt className="text-muted-foreground">Último deploy</dt><dd>{lastDeploy ? new Date(lastDeploy).toLocaleString() : "—"}</dd></div>
+          <div><dt className="text-muted-foreground">{t("Status")}</dt><dd>● {current.status}</dd></div>
+          <div><dt className="text-muted-foreground">{t("Source")}</dt><dd>GitHub · {sourceConnected ? t("connected") : t("requires reconnection")}</dd></div>
+          <div><dt className="text-muted-foreground">{t("Compose")}</dt><dd>{current.compose_file ?? report.compose ?? t("Autodetect")}</dd></div>
+          <div><dt className="text-muted-foreground">{t("Active commit")}</dt><dd><code>{activeDeployment?.commit ?? "—"}</code></dd></div>
+          <div><dt className="text-muted-foreground">{t("Runtime project")}</dt><dd><code>{detail.data?.runtime_project ?? "—"}</code></dd></div>
+          <div><dt className="text-muted-foreground">{t("Last deploy")}</dt><dd>{lastDeploy ? new Date(lastDeploy).toLocaleString() : "—"}</dd></div>
         </dl>
         <div className="space-y-2">
-          <h3 className="text-sm font-medium">Servicios</h3>
+          <h3 className="text-sm font-medium">{t("Services")}</h3>
           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {services.map((service) => <ServiceCard key={service.name} service={service}
               domainCount={canReadDomains
@@ -139,29 +141,29 @@ export function ApplicationDetail({ application, canCreate, canManage, canManage
                 : null}
               onOpen={() => setServiceName(service.name)} />)}
           </div>
-          {services.length === 0 ? <p className="text-sm text-muted-foreground">Sin servicios en el deployment activo.</p> : null}
-          <p className="text-xs text-muted-foreground">Doble clic sobre una tarjeta para administrarla.</p>
+          {services.length === 0 ? <p className="text-sm text-muted-foreground">{t("No services in the active deployment.")}</p> : null}
+          <p className="text-xs text-muted-foreground">{t("Double-click a card to manage it.")}</p>
         </div>
       </div>,
     },
     {
       value: "audit" as const,
-      label: "Auditoría",
+      label: t("Audit"),
       content: findings.length ? <FindingsReport findings={findings} />
-        : hasAuditReport ? <Alert title="Inspección aprobada">No se encontraron hallazgos.</Alert>
-          : <Alert title="Sin informe">Ejecutá una inspección para obtener findings.</Alert>,
+        : hasAuditReport ? <Alert title={t("Inspection approved")}>{t("No findings were found.")}</Alert>
+          : <Alert title={t("No report")}>{t("Run an inspection to get findings.")}</Alert>,
     },
     {
       value: "deployments" as const,
-      label: "Deployments",
+      label: t("Deployments"),
       content: <div className="space-y-2">
-        {(detail.data?.deployments ?? []).map((deployment) => <div key={deployment.id} className="rounded border border-border p-3 text-sm"><strong>{deployment.status}</strong> · commit <code>{deployment.commit ?? "—"}</code><br /><span className="text-muted-foreground">Servicios: {deployment.services.join(", ") || "—"}</span>{deployment.public_error ? <p>{deployment.public_error}</p> : null}</div>)}
-        {(detail.data?.deployments ?? []).length === 0 ? <p className="text-sm text-muted-foreground">Sin deployments.</p> : null}
+        {(detail.data?.deployments ?? []).map((deployment) => <div key={deployment.id} className="rounded border border-border p-3 text-sm"><strong>{deployment.status}</strong> · {t("commit")} <code>{deployment.commit ?? "—"}</code><br /><span className="text-muted-foreground">{t("Services: {value}", { value: deployment.services.join(", ") || "—" })}</span>{deployment.public_error ? <p>{deployment.public_error}</p> : null}</div>)}
+        {(detail.data?.deployments ?? []).length === 0 ? <p className="text-sm text-muted-foreground">{t("No deployments.")}</p> : null}
       </div>,
     },
     {
       value: "operations" as const,
-      label: "Operaciones",
+      label: t("Operations"),
       content: <ServiceOperations operations={appOperations} />,
     },
   ];
@@ -170,24 +172,24 @@ export function ApplicationDetail({ application, canCreate, canManage, canManage
     <Dialog open title={application.name} description={`${application.repository} · ${application.branch}`}
       maxWidthClassName="max-w-[800px]" onClose={onClose}>
       <div className="space-y-4">
-        {!sourceConnected ? <Alert title="Fuente requiere reconexión">
-          El repositorio ya no está autorizado por una instalación activa. Las inspecciones y despliegues nuevos están bloqueados; el lifecycle existente continúa.
-          {canCreate ? <Button className="ml-2" variant="secondary" disabled={pending} onClick={() => setSourceOpen(true)}>Elegir fuente</Button> : null}
+        {!sourceConnected ? <Alert title={t("Source requires reconnection")}>
+          {t("The repository is no longer authorized by an active installation. New inspections and deployments are blocked; the existing lifecycle continues.")}
+          {canCreate ? <Button className="ml-2" variant="secondary" disabled={pending} onClick={() => setSourceOpen(true)}>{t("Choose source")}</Button> : null}
         </Alert> : null}
         <Tabs value={tab} onChange={(value) => setTab(value as Tab)} tabs={tabs} />
 
         <div className="flex flex-wrap gap-2 border-t border-border pt-3">
           {canCreate ? <Button variant="secondary" disabled={pending || busy || !sourceConnected} onClick={() => {
             const id = `apps-inspect-${application.id}`;
-            toast.loading("Enviando inspección…", { id });
+            toast.loading(t("Sending inspection…"), { id });
             void accept(
               () => inspectApplication(application.id, newIdempotencyKey()),
-              { id, accepted: "Inspección aceptada; podés seguir trabajando" },
+              { id, accepted: t("Inspection accepted; you can keep working") },
             );
-          }}>Inspeccionar</Button> : null}
-          {canDeploy ? <Button disabled={busy || blocked || !sourceConnected} onClick={() => setDeployOpen(true)}>Desplegar</Button> : null}
-          {canManage ? ACTIONS.map(([action, label]) => <Button key={action} variant="secondary" disabled={pending || !actionAllowed(current, action, busy)} onClick={() => void accept(() => runApplicationAction(application.id, action, newIdempotencyKey()))}>{label}</Button>) : null}
-          {canDelete ? <Button variant="secondary" disabled={busy} className="text-destructive" onClick={() => setDeleteOpen(true)}>Eliminar aplicación</Button> : null}
+          }}>{t("Inspect")}</Button> : null}
+          {canDeploy ? <Button disabled={busy || blocked || !sourceConnected} onClick={() => setDeployOpen(true)}>{t("Deploy")}</Button> : null}
+          {canManage ? ACTIONS.map(([action, label]) => <Button key={action} variant="secondary" disabled={pending || !actionAllowed(current, action, busy)} onClick={() => void accept(() => runApplicationAction(application.id, action, newIdempotencyKey()))}>{t(label)}</Button>) : null}
+          {canDelete ? <Button variant="secondary" disabled={busy} className="text-destructive" onClick={() => setDeleteOpen(true)}>{t("Delete application")}</Button> : null}
         </div>
       </div>
     </Dialog>

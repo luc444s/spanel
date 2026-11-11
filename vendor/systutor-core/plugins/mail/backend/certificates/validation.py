@@ -30,7 +30,7 @@ class CertificateValidationError(ValueError):
 def normalize_hostname(value: str) -> str:
     candidate = (value or "").strip().lower().rstrip(".")
     if not candidate or len(candidate) > 253 or not HOSTNAME_RE.match(candidate):
-        raise CertificateValidationError("Hostname inválido")
+        raise CertificateValidationError("Invalid hostname")
     return candidate
 
 
@@ -41,7 +41,7 @@ def is_valid_job_id(value: str) -> bool:
 def normalize_job_id(value: str) -> str:
     candidate = (value or "").strip().lower()
     if not is_valid_job_id(candidate):
-        raise CertificateValidationError("Job inválido")
+        raise CertificateValidationError("Invalid job")
     return candidate
 
 
@@ -81,27 +81,29 @@ def validate_emission_request(
     """
 
     if not isinstance(payload, dict):
-        raise CertificateValidationError("La solicitud debe ser un objeto JSON")
+        raise CertificateValidationError("The request must be a JSON object")
     unknown = set(payload) - set(allowed_keys)
     if unknown:
         raise CertificateValidationError(
-            f"La solicitud contiene campos no permitidos: {sorted(unknown)}"
+            f"The request contains disallowed fields: {sorted(unknown)}"
         )
     hostname = normalize_hostname(str(payload.get("hostname", "")))
     if hostname == default_name:
-        raise CertificateValidationError("El certificado global no se regenera desde la web")
+        raise CertificateValidationError(
+            "The global certificate cannot be regenerated from the web"
+        )
     action = str(payload.get("action", "")).strip().lower()
     if action not in ACTION_VALUES:
-        raise CertificateValidationError("Acción inválida")
+        raise CertificateValidationError("Invalid action")
     reason = payload.get("reason")
     if reason is not None:
         if not isinstance(reason, str) or len(reason) > 200:
-            raise CertificateValidationError("Motivo inválido")
+            raise CertificateValidationError("Invalid reason")
         if any(ord(char) < 32 for char in reason):
-            raise CertificateValidationError("Motivo inválido")
+            raise CertificateValidationError("Invalid reason")
     request_id = payload.get("id")
     if request_id is not None and not isinstance(request_id, str):
-        raise CertificateValidationError("Identificador de solicitud inválido")
+        raise CertificateValidationError("Invalid request identifier")
     return {
         "id": request_id,
         "hostname": hostname,
@@ -114,12 +116,12 @@ def validate_emission_request(
 
 def validate_refresh_request(payload: object) -> dict[str, Any]:
     if not isinstance(payload, dict):
-        raise CertificateValidationError("La solicitud debe ser un objeto JSON")
+        raise CertificateValidationError("The request must be a JSON object")
     unknown = set(payload) - set(REFRESH_KEYS)
     if unknown:
         raise CertificateValidationError(
-            f"La solicitud contiene campos no permitidos: {sorted(unknown)}"
+            f"The request contains disallowed fields: {sorted(unknown)}"
         )
     if str(payload.get("action", "")).strip().lower() != "refresh":
-        raise CertificateValidationError("Acción inválida")
+        raise CertificateValidationError("Invalid action")
     return dict(payload)

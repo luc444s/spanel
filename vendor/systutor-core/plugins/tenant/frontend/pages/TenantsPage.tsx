@@ -21,8 +21,10 @@ import { Button } from "@systutor/shell/ui/button";
 import { Dialog } from "@systutor/shell/ui/dialog";
 import { Input, newCredentialProps, noAutofillProps } from "@systutor/shell/ui/input";
 import { Alert } from "@systutor/shell/ui/alert";
+import { useT } from "@/i18n/use-i18n";
 
 export default function TenantsPage() {
+  const t = useT();
   const queryClient = useQueryClient();
 
   const [showCreate, setShowCreate] = useState(false);
@@ -76,7 +78,7 @@ export default function TenantsPage() {
       setCreateUserPassword("");
       setCreateUserFullName("");
       setCreateError(null);
-      toast.success("Tenant creado");
+      toast.success(t("Tenant created"));
     },
     onError: (e: Error) => setCreateError(e.message),
   });
@@ -88,7 +90,7 @@ export default function TenantsPage() {
       await queryClient.invalidateQueries({ queryKey: tenantKeys.tenants });
       await queryClient.invalidateQueries({ queryKey: tenantKeys.domains(vars.tenantId) });
       setEditError(null);
-      toast.success("Dominio primario actualizado");
+      toast.success(t("Primary domain updated"));
     },
     onError: (e: Error) => setEditError(e.message),
   });
@@ -101,7 +103,7 @@ export default function TenantsPage() {
       await queryClient.invalidateQueries({ queryKey: tenantKeys.tenants });
       setNewManagedDomain("");
       setDomainError(null);
-      toast.success("Dominio añadido");
+      toast.success(t("Domain added"));
     },
     onError: (e: Error) => setDomainError(e.message),
   });
@@ -113,7 +115,7 @@ export default function TenantsPage() {
       await queryClient.invalidateQueries({ queryKey: tenantKeys.domains(vars.tenantId) });
       await queryClient.invalidateQueries({ queryKey: tenantKeys.tenants });
       setDomainError(null);
-      toast.success("Dominio quitado");
+      toast.success(t("Domain removed"));
     },
     onError: (e: Error) => setDomainError(e.message),
   });
@@ -127,7 +129,7 @@ export default function TenantsPage() {
       setNewUserPassword("");
       setNewUserFullName("");
       setNewUserError(null);
-      toast.success("Usuario creado");
+      toast.success(t("User created"));
     },
     onError: (e: Error) => setNewUserError(e.message),
   });
@@ -140,7 +142,7 @@ export default function TenantsPage() {
       setReassignUserId(null);
       setReassignTargetTenantId("");
       setReassignError(null);
-      toast.success("Usuario reasignado");
+      toast.success(t("User reassigned"));
     },
     onError: (e: Error) => setReassignError(e.message),
   });
@@ -148,11 +150,11 @@ export default function TenantsPage() {
   function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setCreateError(null);
-    if (!createName.trim()) { setCreateError("Nombre requerido"); return; }
-    if (!createSlug.trim()) { setCreateError("Slug requerido"); return; }
-    if (!createUserEmail.trim()) { setCreateError("Email del usuario requerido"); return; }
-    if (!createUserPassword.trim()) { setCreateError("Contraseña del usuario requerida"); return; }
-    if (createUserPassword.length < 8) { setCreateError("Contraseña mínimo 8 caracteres"); return; }
+    if (!createName.trim()) { setCreateError(t("Name required")); return; }
+    if (!createSlug.trim()) { setCreateError(t("Slug required")); return; }
+    if (!createUserEmail.trim()) { setCreateError(t("User email required")); return; }
+    if (!createUserPassword.trim()) { setCreateError(t("User password required")); return; }
+    if (createUserPassword.length < 8) { setCreateError(t("Password must be at least 8 characters")); return; }
     createMutation.mutate({
       name: createName,
       slug: createSlug,
@@ -177,7 +179,7 @@ export default function TenantsPage() {
   function handleAddManagedDomain() {
     setDomainError(null);
     if (!selectedTenant) return;
-    if (!newManagedDomain.trim()) { setDomainError("Dominio requerido"); return; }
+    if (!newManagedDomain.trim()) { setDomainError(t("Domain required")); return; }
     addDomainMutation.mutate({ tenantId: selectedTenant.id, domain: newManagedDomain.trim() });
   }
 
@@ -191,9 +193,9 @@ export default function TenantsPage() {
     e.preventDefault();
     setNewUserError(null);
     if (!showUsers) return;
-    if (!newUserEmail.trim()) { setNewUserError("Email requerido"); return; }
-    if (!newUserPassword.trim()) { setNewUserError("Contraseña requerida"); return; }
-    if (newUserPassword.length < 8) { setNewUserError("Contraseña mínimo 8 caracteres"); return; }
+    if (!newUserEmail.trim()) { setNewUserError(t("Email required")); return; }
+    if (!newUserPassword.trim()) { setNewUserError(t("Password required")); return; }
+    if (newUserPassword.length < 8) { setNewUserError(t("Password must be at least 8 characters")); return; }
     createUserMutation.mutate({
       tenantId: showUsers.id,
       email: newUserEmail,
@@ -203,11 +205,11 @@ export default function TenantsPage() {
   }
 
   if (tenantsQuery.isLoading) {
-    return <div className="flex min-h-[200px] items-center justify-center text-sm text-muted-foreground">Cargando...</div>;
+    return <div className="flex min-h-[200px] items-center justify-center text-sm text-muted-foreground">{t("Loading...")}</div>;
   }
 
   if (tenantsQuery.error) {
-    return <Alert title="Error">No se pudieron cargar los tenants.</Alert>;
+    return <Alert title={t("Error")}>{t("Could not load tenants.")}</Alert>;
   }
 
   const tenants = tenantsQuery.data?.tenants ?? [];
@@ -215,45 +217,45 @@ export default function TenantsPage() {
   return (
     <section className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-foreground">Tenants</h1>
+        <h1 className="text-lg font-semibold text-foreground">{t("Tenants")}</h1>
         <Button size="sm" onClick={() => { setShowCreate(true); setCreateError(null); }}>
-        Crear tenant
+        {t("Create tenant")}
       </Button>
     </div>
 
-      <Dialog open={showCreate} title="Crear tenant" onClose={() => setShowCreate(false)}>
+      <Dialog open={showCreate} title={t("Create tenant")} onClose={() => setShowCreate(false)}>
         <form className="space-y-3" onSubmit={handleCreate}>
           <label className="block space-y-1 text-sm text-foreground">
-            <span>Nombre</span>
-            <Input type="text" value={createName} onChange={(e) => setCreateName(e.target.value)} placeholder="Mi Empresa" autoFocus />
+            <span>{t("Name")}</span>
+            <Input type="text" value={createName} onChange={(e) => setCreateName(e.target.value)} placeholder={t("My Company")} autoFocus />
           </label>
           <label className="block space-y-1 text-sm text-foreground">
-            <span>Slug</span>
-            <Input type="text" value={createSlug} onChange={(e) => setCreateSlug(e.target.value)} placeholder="mi-empresa" />
+            <span>{t("Slug")}</span>
+            <Input type="text" value={createSlug} onChange={(e) => setCreateSlug(e.target.value)} placeholder={t("my-company")} />
           </label>
           <label className="block space-y-1 text-sm text-foreground">
-            <span>Dominio</span>
-            <Input type="text" value={createDomain} onChange={(e) => setCreateDomain(e.target.value)} placeholder="empresa.com" />
+            <span>{t("Domain")}</span>
+            <Input type="text" value={createDomain} onChange={(e) => setCreateDomain(e.target.value)} placeholder={t("company.com")} />
           </label>
           <div className="border-t border-border pt-3 mt-1">
-            <p className="text-xs font-semibold uppercase text-muted-foreground mb-2">Usuario base del tenant</p>
+            <p className="text-xs font-semibold uppercase text-muted-foreground mb-2">{t("Tenant base user")}</p>
           </div>
           <label className="block space-y-1 text-sm text-foreground">
-            <span>Email</span>
-            <Input type="email" value={createUserEmail} onChange={(e) => setCreateUserEmail(e.target.value)} placeholder="admin@empresa.com" {...noAutofillProps} />
+            <span>{t("Email")}</span>
+            <Input type="email" value={createUserEmail} onChange={(e) => setCreateUserEmail(e.target.value)} placeholder={t("admin@company.com")} {...noAutofillProps} />
           </label>
           <label className="block space-y-1 text-sm text-foreground">
-            <span>Contraseña</span>
-            <Input type="password" value={createUserPassword} onChange={(e) => setCreateUserPassword(e.target.value)} placeholder="Mínimo 8 caracteres" {...newCredentialProps} />
+            <span>{t("Password")}</span>
+            <Input type="password" value={createUserPassword} onChange={(e) => setCreateUserPassword(e.target.value)} placeholder={t("Minimum 8 characters")} {...newCredentialProps} />
           </label>
           <label className="block space-y-1 text-sm text-foreground">
-            <span>Nombre completo (opcional)</span>
-            <Input type="text" value={createUserFullName} onChange={(e) => setCreateUserFullName(e.target.value)} placeholder="Juan Pérez" />
+            <span>{t("Full name (optional)")}</span>
+            <Input type="text" value={createUserFullName} onChange={(e) => setCreateUserFullName(e.target.value)} placeholder={t("John Doe")} />
           </label>
-          {createError && <Alert title="Error">{createError}</Alert>}
+          {createError && <Alert title={t("Error")}>{createError}</Alert>}
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="secondary" size="sm" onClick={() => setShowCreate(false)}>Cancelar</Button>
-            <Button type="submit" size="sm" disabled={createMutation.isPending}>{createMutation.isPending ? "..." : "Crear"}</Button>
+            <Button type="button" variant="secondary" size="sm" onClick={() => setShowCreate(false)}>{t("Cancel")}</Button>
+            <Button type="submit" size="sm" disabled={createMutation.isPending}>{createMutation.isPending ? "..." : t("Create")}</Button>
           </div>
         </form>
       </Dialog>
@@ -262,24 +264,24 @@ export default function TenantsPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border text-left text-muted-foreground">
-              <th className="pb-2 pr-4">Nombre</th>
-              <th className="pb-2 pr-4">Slug</th>
-              <th className="pb-2 pr-4">Dominio</th>
-              <th className="pb-2 pr-4">Sufijo de sitios</th>
-              <th className="pb-2 pr-4">Estado</th>
-              <th className="pb-2">Acciones</th>
+              <th className="pb-2 pr-4">{t("Name")}</th>
+              <th className="pb-2 pr-4">{t("Slug")}</th>
+              <th className="pb-2 pr-4">{t("Domain")}</th>
+              <th className="pb-2 pr-4">{t("Site suffix")}</th>
+              <th className="pb-2 pr-4">{t("Status")}</th>
+              <th className="pb-2">{t("Actions")}</th>
             </tr>
           </thead>
           <tbody>
-            {tenants.map((t) => (
-              <tr key={t.id} className="border-b border-border/50">
-                <td className="py-2 pr-4 text-foreground">{t.name}</td>
-                <td className="py-2 pr-4 font-mono text-xs text-muted-foreground">{t.slug}</td>
-                <td className="py-2 pr-4 text-foreground">{t.domain ?? "—"}</td>
-                <td className="py-2 pr-4 font-mono text-xs text-muted-foreground">{t.site_suffix ?? "—"}</td>
+            {tenants.map((tenant) => (
+              <tr key={tenant.id} className="border-b border-border/50">
+                <td className="py-2 pr-4 text-foreground">{tenant.name}</td>
+                <td className="py-2 pr-4 font-mono text-xs text-muted-foreground">{tenant.slug}</td>
+                <td className="py-2 pr-4 text-foreground">{tenant.domain ?? "—"}</td>
+                <td className="py-2 pr-4 font-mono text-xs text-muted-foreground">{tenant.site_suffix ?? "—"}</td>
                 <td className="py-2 pr-4">
-                  <span className={`inline-block rounded px-1.5 py-0.5 text-xs ${t.is_active ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
-                    {t.is_active ? "Activo" : "Inactivo"}
+                  <span className={`inline-block rounded px-1.5 py-0.5 text-xs ${tenant.is_active ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
+                    {tenant.is_active ? t("Active") : t("Inactive")}
                   </span>
                 </td>
                 <td className="py-2">
@@ -287,50 +289,50 @@ export default function TenantsPage() {
                     <Button
                       size="sm"
                       variant="secondary"
-                      onClick={() => { setSelectedTenant(t); setEditDomain(t.domain ?? ""); setEditSiteSuffix(t.site_suffix ?? ""); setEditError(null); setNewManagedDomain(""); setDomainError(null); }}
+                      onClick={() => { setSelectedTenant(tenant); setEditDomain(tenant.domain ?? ""); setEditSiteSuffix(tenant.site_suffix ?? ""); setEditError(null); setNewManagedDomain(""); setDomainError(null); }}
                     >
-                      Dominios
+                      {t("Domains")}
                     </Button>
                     <Button
                       size="sm"
                       variant="secondary"
-                      onClick={() => { setShowUsers(t); setAssignUserId(""); setAssignError(null); }}
+                      onClick={() => { setShowUsers(tenant); setAssignUserId(""); setAssignError(null); }}
                     >
-                      Usuarios
+                      {t("Users")}
                     </Button>
                   </div>
                 </td>
               </tr>
             ))}
             {tenants.length === 0 && (
-              <tr><td colSpan={6} className="py-4 text-center text-muted-foreground">No hay tenants</td></tr>
+              <tr><td colSpan={6} className="py-4 text-center text-muted-foreground">{t("No tenants")}</td></tr>
             )}
           </tbody>
         </table>
       </div>
 
-      <Dialog open={Boolean(selectedTenant)} title="Dominio y sufijo" description={selectedTenant?.name} onClose={() => setSelectedTenant(null)}>
+      <Dialog open={Boolean(selectedTenant)} title={t("Domain and suffix")} description={selectedTenant?.name} onClose={() => setSelectedTenant(null)}>
         <div className="space-y-4">
           <form className="space-y-3" onSubmit={handleUpdatePrimary}>
             <label className="block space-y-1 text-sm text-foreground">
-              <span>Dominio primario (DMS)</span>
-              <Input type="text" value={editDomain} onChange={(e) => { setEditDomain(e.target.value); setEditError(null); }} placeholder="empresa.com" autoFocus />
-              <span className="text-xs text-muted-foreground">Dominio de correo por defecto del tenant.</span>
+              <span>{t("Primary domain (DMS)")}</span>
+              <Input type="text" value={editDomain} onChange={(e) => { setEditDomain(e.target.value); setEditError(null); }} placeholder={t("company.com")} autoFocus />
+              <span className="text-xs text-muted-foreground">{t("Default mail domain for the tenant.")}</span>
             </label>
             <label className="block space-y-1 text-sm text-foreground">
-              <span>Sufijo de sitios</span>
-              <Input type="text" value={editSiteSuffix} onChange={(e) => { setEditSiteSuffix(e.target.value); setEditError(null); }} placeholder="empresa.com" />
+              <span>{t("Site suffix")}</span>
+              <Input type="text" value={editSiteSuffix} onChange={(e) => { setEditSiteSuffix(e.target.value); setEditError(null); }} placeholder={t("company.com")} />
             </label>
-            {editError && <Alert title="Error">{editError}</Alert>}
+            {editError && <Alert title={t("Error")}>{editError}</Alert>}
             <div className="flex justify-end gap-2">
-              <Button type="submit" size="sm" disabled={updatePrimaryMutation.isPending}>{updatePrimaryMutation.isPending ? "..." : "Guardar"}</Button>
+              <Button type="submit" size="sm" disabled={updatePrimaryMutation.isPending}>{updatePrimaryMutation.isPending ? "..." : t("Save")}</Button>
             </div>
           </form>
 
           <div className="space-y-2 border-t border-border pt-3">
-            <p className="text-xs font-semibold uppercase text-muted-foreground">Dominios adicionales</p>
+            <p className="text-xs font-semibold uppercase text-muted-foreground">{t("Additional domains")}</p>
             {domainsQuery.isLoading && (
-              <p className="text-sm text-muted-foreground">Cargando dominios...</p>
+              <p className="text-sm text-muted-foreground">{t("Loading domains...")}</p>
             )}
             {domainsQuery.data?.domains?.filter((item) => item.domain !== selectedTenant?.domain).map((item) => (
               <div key={item.domain} className="flex items-center justify-between rounded border border-border px-3 py-1.5">
@@ -342,19 +344,19 @@ export default function TenantsPage() {
                   disabled={removeDomainMutation.isPending}
                   onClick={() => handleRemoveManagedDomain(item.domain)}
                 >
-                  Quitar
+                  {t("Remove")}
                 </Button>
               </div>
             ))}
             {domainsQuery.data && domainsQuery.data.domains.filter((item) => item.domain !== selectedTenant?.domain).length === 0 && (
-              <p className="text-sm text-muted-foreground">Sin dominios adicionales.</p>
+              <p className="text-sm text-muted-foreground">{t("No additional domains.")}</p>
             )}
             <div className="flex gap-2">
               <Input
                 type="text"
                 value={newManagedDomain}
                 onChange={(e) => { setNewManagedDomain(e.target.value); setDomainError(null); }}
-                placeholder="debug.com"
+                placeholder={t("debug.com")}
               />
               <Button
                 type="button"
@@ -362,41 +364,41 @@ export default function TenantsPage() {
                 disabled={addDomainMutation.isPending}
                 onClick={handleAddManagedDomain}
               >
-                Añadir
+                {t("Add")}
               </Button>
             </div>
-            {domainError && <Alert title="Error">{domainError}</Alert>}
+            {domainError && <Alert title={t("Error")}>{domainError}</Alert>}
           </div>
 
           <div className="flex justify-end">
-            <Button type="button" variant="secondary" size="sm" onClick={() => setSelectedTenant(null)}>Cerrar</Button>
+            <Button type="button" variant="secondary" size="sm" onClick={() => setSelectedTenant(null)}>{t("Close")}</Button>
           </div>
         </div>
       </Dialog>
 
-      <Dialog open={Boolean(showUsers)} title={`Usuarios — ${showUsers?.name ?? ""}`} onClose={() => setShowUsers(null)}>
+      <Dialog open={Boolean(showUsers)} title={t("Users — {name}", { name: showUsers?.name ?? "" })} onClose={() => setShowUsers(null)}>
         <div className="space-y-3">
           <form onSubmit={handleCreateUser} className="space-y-2 rounded-md border border-border p-3">
-            <p className="text-xs font-semibold uppercase text-muted-foreground">Crear usuario</p>
+            <p className="text-xs font-semibold uppercase text-muted-foreground">{t("Create user")}</p>
             <label className="block space-y-1 text-sm text-foreground">
-              <span>Email</span>
-              <Input type="email" value={newUserEmail} onChange={(e) => setNewUserEmail(e.target.value)} placeholder="usuario@empresa.com" {...noAutofillProps} />
+              <span>{t("Email")}</span>
+              <Input type="email" value={newUserEmail} onChange={(e) => setNewUserEmail(e.target.value)} placeholder={t("user@company.com")} {...noAutofillProps} />
             </label>
             <label className="block space-y-1 text-sm text-foreground">
-              <span>Contraseña</span>
-              <Input type="password" value={newUserPassword} onChange={(e) => setNewUserPassword(e.target.value)} placeholder="Mínimo 8 caracteres" {...newCredentialProps} />
+              <span>{t("Password")}</span>
+              <Input type="password" value={newUserPassword} onChange={(e) => setNewUserPassword(e.target.value)} placeholder={t("Minimum 8 characters")} {...newCredentialProps} />
             </label>
             <label className="block space-y-1 text-sm text-foreground">
-              <span>Nombre completo (opcional)</span>
-              <Input type="text" value={newUserFullName} onChange={(e) => setNewUserFullName(e.target.value)} placeholder="Juan Pérez" />
+              <span>{t("Full name (optional)")}</span>
+              <Input type="text" value={newUserFullName} onChange={(e) => setNewUserFullName(e.target.value)} placeholder={t("John Doe")} />
             </label>
-            {newUserError && <Alert title="Error">{newUserError}</Alert>}
+            {newUserError && <Alert title={t("Error")}>{newUserError}</Alert>}
             <div className="flex justify-end">
-              <Button type="submit" size="sm" disabled={createUserMutation.isPending}>{createUserMutation.isPending ? "..." : "Crear usuario"}</Button>
+              <Button type="submit" size="sm" disabled={createUserMutation.isPending}>{createUserMutation.isPending ? "..." : t("Create user")}</Button>
             </div>
           </form>
 
-          {usersQuery.isLoading && <div className="text-sm text-muted-foreground">Cargando usuarios...</div>}
+          {usersQuery.isLoading && <div className="text-sm text-muted-foreground">{t("Loading users...")}</div>}
 
           {usersQuery.data?.users && (
             <div className="space-y-1">
@@ -411,34 +413,34 @@ export default function TenantsPage() {
                     variant="secondary"
                     onClick={() => { setReassignUserId(u.id); setReassignTargetTenantId(""); setReassignError(null); }}
                   >
-                    Quitar
+                    {t("Remove")}
                   </Button>
                 </div>
               ))}
               {usersQuery.data.users.length === 0 && (
-                <div className="text-sm text-muted-foreground">No hay usuarios asignados</div>
+                <div className="text-sm text-muted-foreground">{t("No users assigned")}</div>
               )}
             </div>
           )}
         </div>
       </Dialog>
 
-      <Dialog open={Boolean(reassignUserId)} title="Reasignar usuario" onClose={() => setReassignUserId(null)}>
+      <Dialog open={Boolean(reassignUserId)} title={t("Reassign user")} onClose={() => setReassignUserId(null)}>
         <div className="space-y-3">
           <form onSubmit={(e) => {
             e.preventDefault();
             setReassignError(null);
-            if (!reassignTargetTenantId.trim()) { setReassignError("Target tenant ID requerido"); return; }
+            if (!reassignTargetTenantId.trim()) { setReassignError(t("Target tenant ID required")); return; }
             removeMutation.mutate({ tenantId: showUsers!.id, userId: reassignUserId!, targetTenantId: reassignTargetTenantId });
           }}>
             <label className="block space-y-1 text-sm text-foreground">
-              <span>Target Tenant ID</span>
-              <Input type="text" value={reassignTargetTenantId} onChange={(e) => setReassignTargetTenantId(e.target.value)} placeholder="UUID del tenant destino" autoFocus />
+              <span>{t("Target Tenant ID")}</span>
+              <Input type="text" value={reassignTargetTenantId} onChange={(e) => setReassignTargetTenantId(e.target.value)} placeholder={t("Destination tenant UUID")} autoFocus />
             </label>
-            {reassignError && <Alert title="Error">{reassignError}</Alert>}
+            {reassignError && <Alert title={t("Error")}>{reassignError}</Alert>}
             <div className="flex justify-end gap-2 mt-3">
-              <Button type="button" variant="secondary" size="sm" onClick={() => setReassignUserId(null)}>Cancelar</Button>
-              <Button type="submit" size="sm" disabled={removeMutation.isPending}>{removeMutation.isPending ? "..." : "Reasignar"}</Button>
+              <Button type="button" variant="secondary" size="sm" onClick={() => setReassignUserId(null)}>{t("Cancel")}</Button>
+              <Button type="submit" size="sm" disabled={removeMutation.isPending}>{removeMutation.isPending ? "..." : t("Reassign")}</Button>
             </div>
           </form>
         </div>

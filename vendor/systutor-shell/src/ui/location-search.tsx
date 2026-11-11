@@ -63,10 +63,10 @@ export function LocationSearch({ phase, onSelect, onAddStop }: Props) {
 
   const placeholder =
     phase === "picking_start"
-      ? "Buscar partida..."
+      ? "Search plot..."
       : phase === "picking_end"
-        ? "Buscar destino..."
-        : "Buscar parada...";
+        ? "Search destination..."
+        : "Search stop...";
 
   if (!isBuilding) return null;
 

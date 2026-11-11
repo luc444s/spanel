@@ -29,7 +29,7 @@ from sqlalchemy import (
 revision = "003_add_hosting_static_profiles"
 
 _BUILTIN_ID = "nginx"
-_BUILTIN_NAME = "Nginx (estático)"
+_BUILTIN_NAME = "Nginx (static)"
 _STATIC_IMAGE_ENV = "SPANEL_HOSTING_STATIC_IMAGE"
 _DEFAULT_STATIC_IMAGE = "nginx:alpine"
 

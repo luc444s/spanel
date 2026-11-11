@@ -53,7 +53,7 @@ export function ConsoleShell({
           const data = await confirmRequest!.onConfirm();
           setResult(data ?? null);
         } catch (err) {
-          setError(err instanceof Error ? err.message : "Error al confirmar");
+          setError(err instanceof Error ? err.message : "Error while confirming");
         }
       } else {
         const cancelMsg = confirmRequest?.onCancel?.() ?? "Cancelado";
@@ -180,7 +180,7 @@ export function ConsoleShell({
     currentInputRef.current = value;
   }, []);
 
-  const promptLabel = confirmRequest ? "y/n" : placeholder ?? "escribí un comando...";
+  const promptLabel = confirmRequest ? "y/n" : placeholder ?? "type a command...";
 
   return (
     <ConfirmContext.Provider value={{ requestConfirm, clearConfirm }}>
@@ -201,7 +201,7 @@ export function ConsoleShell({
               <pre className="whitespace-pre-wrap text-xs leading-relaxed text-yellow-400">
                 {confirmRequest.message}
               </pre>
-              <span className="text-yellow-400 text-xs">Confirmar? (y/n)</span>
+              <span className="text-yellow-400 text-xs">Confirm? (y/n)</span>
             </div>
           )}
 

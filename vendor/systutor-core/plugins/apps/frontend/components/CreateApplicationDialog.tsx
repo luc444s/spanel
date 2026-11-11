@@ -6,6 +6,7 @@ import { Button } from "@systutor/shell/ui/button";
 import { Dialog } from "@systutor/shell/ui/dialog";
 import { Input } from "@systutor/shell/ui/input";
 import { Select } from "@systutor/shell/ui/select";
+import { useT } from "@/i18n/use-i18n";
 
 import {
   appsKeys, createApplication, inspectApplication, listInstallations,
@@ -21,6 +22,7 @@ type Props = {
 };
 
 export function CreateApplicationDialog({ open, platform, onClose, onAccepted }: Props) {
+  const t = useT();
   const [installationId, setInstallationId] = useState("");
   const [repositoryId, setRepositoryId] = useState("");
   const [name, setName] = useState("");
@@ -58,14 +60,14 @@ export function CreateApplicationDialog({ open, platform, onClose, onAccepted }:
   async function submit(event: FormEvent) {
     event.preventDefault();
     setError(null);
-    if (!installationId || !repositoryId) return setError("Elegí instalación y repositorio autorizado");
+    if (!installationId || !repositoryId) return setError(t("Choose an authorized installation and repository"));
     const portNumber = port ? Number(port) : null;
     const ingressUsed = Boolean(domain || service || port);
     if (ingressUsed && (!domain || !service || !port)) {
-      return setError("Dominio, servicio y puerto deben completarse juntos");
+      return setError(t("Domain, service and port must be filled in together"));
     }
     if (portNumber !== null && (!Number.isInteger(portNumber) || portNumber < 1 || portNumber > 65535)) {
-      return setError("Puerto inválido");
+      return setError(t("Invalid port"));
     }
     setPending(true);
     try {
@@ -84,55 +86,57 @@ export function CreateApplicationDialog({ open, platform, onClose, onAccepted }:
       setInstallationId(""); setRepositoryId(""); setBranch("");
       onAccepted(application, operation);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "No se pudo crear e inspeccionar la aplicación");
+      setError(reason instanceof Error ? reason.message : t("Could not create and inspect the application"));
     } finally {
       setPending(false);
     }
   }
 
   return (
-    <Dialog open={open} title="Crear e inspeccionar aplicación" onClose={onClose}>
+    <Dialog open={open} title={t("Create and inspect application")} onClose={onClose}>
       <form className="space-y-3" onSubmit={(event) => void submit(event)}>
-        <p className="text-xs text-muted-foreground">Fuente autorizada · crear · inspección async</p>
+        <p className="text-xs text-muted-foreground">{t("Authorized source · create · async inspection")}</p>
         <label className="block space-y-1 text-sm">
-          <span>Instalación GitHub</span>
+          <span>{t("GitHub installation")}</span>
           <Select
             value={installationId}
             onChange={selectInstallation}
             options={activeInstallations.map((item) => ({
               value: item.id,
-              label: `@${item.account_login} · ${item.repository_count} repos`,
+              label: t("@{account} · {count} repos", {
+                account: item.account_login, count: item.repository_count,
+              }),
             }))}
-            placeholder={installations.isLoading ? "Cargando…" : "Elegir instalación"}
+            placeholder={installations.isLoading ? t("Loading…") : t("Choose installation")}
           />
         </label>
         <label className="block space-y-1 text-sm">
-          <span>Repositorio autorizado</span>
+          <span>{t("Authorized repository")}</span>
           <Select
             value={repositoryId}
             onChange={setRepositoryId}
             options={(repositories.data ?? []).map((item) => ({
               value: item.id, label: item.full_name,
             }))}
-            placeholder={repositories.isLoading ? "Cargando…" : "Elegir repositorio"}
+            placeholder={repositories.isLoading ? t("Loading…") : t("Choose repository")}
           />
         </label>
         {repositories.data?.length === 0 ? (
-          <Alert title="Sin repositorios">La instalación no expone repositorios autorizados. Sincronizá o revisá la selección en GitHub.</Alert>
+          <Alert title={t("No repositories")}>{t("The installation does not expose authorized repositories. Sync or review the selection on GitHub.")}</Alert>
         ) : null}
-        <label className="block space-y-1 text-sm"><span>Nombre</span><Input required value={name} onChange={(e) => setName(e.target.value)} /></label>
-        <label className="block space-y-1 text-sm"><span>Rama</span><Input required value={branch} onChange={(e) => setBranch(e.target.value)} /></label>
-        <label className="block space-y-1 text-sm"><span>Compose (opcional, relativo al repo)</span><Input value={compose} onChange={(e) => setCompose(e.target.value)} placeholder="compose.yaml" /></label>
+        <label className="block space-y-1 text-sm"><span>{t("Name")}</span><Input required value={name} onChange={(e) => setName(e.target.value)} /></label>
+        <label className="block space-y-1 text-sm"><span>{t("Branch")}</span><Input required value={branch} onChange={(e) => setBranch(e.target.value)} /></label>
+        <label className="block space-y-1 text-sm"><span>{t("Compose (optional, relative to the repo)")}</span><Input value={compose} onChange={(e) => setCompose(e.target.value)} placeholder="compose.yaml" /></label>
         {platform ? <fieldset className="space-y-2 rounded-md border border-border p-3">
-          <legend className="px-1 text-xs font-semibold">Ingress de plataforma (opcional)</legend>
+          <legend className="px-1 text-xs font-semibold">{t("Platform ingress (optional)")}</legend>
           <Input value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="app.example.com" />
-          <Input value={service} onChange={(e) => setService(e.target.value)} placeholder="Servicio inspeccionado" />
-          <Input type="number" min={1} max={65535} value={port} onChange={(e) => setPort(e.target.value)} placeholder="Puerto 1..65535" />
+          <Input value={service} onChange={(e) => setService(e.target.value)} placeholder={t("Inspected service")} />
+          <Input type="number" min={1} max={65535} value={port} onChange={(e) => setPort(e.target.value)} placeholder={t("Port 1..65535")} />
         </fieldset> : null}
-        {error ? <Alert title="Error">{error}</Alert> : null}
+        {error ? <Alert title={t("Error")}>{error}</Alert> : null}
         <div className="flex justify-end gap-2">
-          <Button type="button" variant="secondary" disabled={pending} onClick={onClose}>Cancelar</Button>
-          <Button type="submit" disabled={pending || !installationId || !repositoryId}>{pending ? "Creando…" : "Crear e inspeccionar"}</Button>
+          <Button type="button" variant="secondary" disabled={pending} onClick={onClose}>{t("Cancel")}</Button>
+          <Button type="submit" disabled={pending || !installationId || !repositoryId}>{pending ? t("Creating…") : t("Create and inspect")}</Button>
         </div>
       </form>
     </Dialog>

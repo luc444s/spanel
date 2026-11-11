@@ -4,6 +4,9 @@ import { Dialog } from "@systutor/shell/ui/dialog";
 import { toast } from "@systutor/shell/ui/toast";
 import { useState } from "react";
 
+import { t } from "@/i18n";
+import { useT } from "@/i18n/use-i18n";
+
 import { createPhpMyAdminSession, type HostingSiteDatabase } from "../api";
 
 type DatabaseDialogProps = {
@@ -14,9 +17,9 @@ type DatabaseDialogProps = {
 async function copy(label: string, value: string) {
   try {
     await navigator.clipboard.writeText(value);
-    toast.success(`${label} copiado`);
+    toast.success(t("{label} copied", { label }));
   } catch {
-    toast.error("No se pudo copiar al portapapeles");
+    toast.error(t("Could not copy to clipboard"));
   }
 }
 
@@ -26,6 +29,7 @@ async function copy(label: string, value: string) {
  * password only lives in this component's props and disappears on close.
  */
 export function DatabaseDialog({ access, onClose }: DatabaseDialogProps) {
+  const t = useT();
   const [opening, setOpening] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,7 +43,7 @@ export function DatabaseDialog({ access, onClose }: DatabaseDialogProps) {
     // Opening before awaiting the Bearer-authenticated POST avoids popup blockers.
     const tab = window.open("about:blank", "_blank");
     if (!tab) {
-      setError("Permití las ventanas emergentes para abrir phpMyAdmin.");
+      setError(t("Allow pop-ups to open phpMyAdmin."));
       return;
     }
     tab.opener = null;
@@ -50,7 +54,7 @@ export function DatabaseDialog({ access, onClose }: DatabaseDialogProps) {
       if (!tab.closed) tab.location.replace(new URL(session.url, window.location.origin).href);
     } catch (reason) {
       tab.close();
-      setError(reason instanceof Error ? reason.message : "No se pudo abrir phpMyAdmin.");
+      setError(reason instanceof Error ? reason.message : t("Could not open phpMyAdmin."));
     } finally {
       setOpening(false);
     }
@@ -59,63 +63,63 @@ export function DatabaseDialog({ access, onClose }: DatabaseDialogProps) {
   return (
     <Dialog
       open={Boolean(access)}
-      title={`Base de datos de ${access?.container_name ?? ""}`}
-      description="Credencial propia del sitio, con acceso solo a su base de datos."
+      title={t("Database for {site}", { site: access?.container_name ?? "" })}
+      description={t("Site-specific credential with access only to its database.")}
       onClose={close}
       zIndexClassName="z-[1100]"
       maxWidthClassName="max-w-xl"
       actions={
         <div className="flex flex-wrap justify-end gap-2">
           <Button variant="secondary" onClick={close}>
-            Cerrar
+            {t("Close")}
           </Button>
           <Button onClick={openPhpMyAdmin} disabled={opening}>
-            {opening ? "Conectando..." : "Abrir phpMyAdmin"}
+            {opening ? t("Connecting...") : t("Open phpMyAdmin")}
           </Button>
         </div>
       }
     >
       {access ? (
         <div className="space-y-4">
-          {error ? <Alert title="No se pudo abrir phpMyAdmin">{error}</Alert> : null}
+          {error ? <Alert title={t("Could not open phpMyAdmin")}>{error}</Alert> : null}
           <dl className="grid gap-3 text-sm">
             <div className="grid grid-cols-[8rem_1fr] items-center gap-2">
-              <dt className="text-muted-foreground">Servidor</dt>
+              <dt className="text-muted-foreground">{t("Server")}</dt>
               <dd className="flex items-center gap-2">
                 <span className="break-all font-mono text-xs text-foreground">{access.host}</span>
-                <Button variant="secondary" onClick={() => copy("Servidor", access.host)}>
-                  Copiar
+                <Button variant="secondary" onClick={() => copy(t("Server"), access.host)}>
+                  {t("Copy")}
                 </Button>
               </dd>
             </div>
             <div className="grid grid-cols-[8rem_1fr] items-center gap-2">
-              <dt className="text-muted-foreground">Base de datos</dt>
+              <dt className="text-muted-foreground">{t("Database")}</dt>
               <dd className="flex items-center gap-2">
                 <span className="break-all font-mono text-xs text-foreground">
                   {access.database}
                 </span>
-                <Button variant="secondary" onClick={() => copy("Base de datos", access.database)}>
-                  Copiar
+                <Button variant="secondary" onClick={() => copy(t("Database"), access.database)}>
+                  {t("Copy")}
                 </Button>
               </dd>
             </div>
             <div className="grid grid-cols-[8rem_1fr] items-center gap-2">
-              <dt className="text-muted-foreground">Usuario</dt>
+              <dt className="text-muted-foreground">{t("User")}</dt>
               <dd className="flex items-center gap-2">
                 <span className="break-all font-mono text-xs text-foreground">{access.user}</span>
-                <Button variant="secondary" onClick={() => copy("Usuario", access.user)}>
-                  Copiar
+                <Button variant="secondary" onClick={() => copy(t("User"), access.user)}>
+                  {t("Copy")}
                 </Button>
               </dd>
             </div>
             <div className="grid grid-cols-[8rem_1fr] items-center gap-2">
-              <dt className="text-muted-foreground">Contraseña</dt>
+              <dt className="text-muted-foreground">{t("Password")}</dt>
               <dd className="flex items-center gap-2">
                 <span className="break-all font-mono text-xs text-foreground">
                   {access.password}
                 </span>
-                <Button variant="secondary" onClick={() => copy("Contraseña", access.password)}>
-                  Copiar
+                <Button variant="secondary" onClick={() => copy(t("Password"), access.password)}>
+                  {t("Copy")}
                 </Button>
               </dd>
             </div>

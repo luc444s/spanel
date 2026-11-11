@@ -100,7 +100,7 @@ class CertificatesService:
         inventory = self._inventory()
         certificate = inventory.find(needle)
         if certificate is None:
-            raise NotFoundError("Certificado desconocido")
+            raise NotFoundError("Unknown certificate")
         domains = self._tenant_domains(tenant_context.current_tenant_id)
         if not certificate.visible_to(
             tenant_id=tenant_context.current_tenant_id,
@@ -108,7 +108,7 @@ class CertificatesService:
             tenant_domains=domains,
         ):
             # 404 para no filtrar la existencia de hostnames de otros tenants.
-            raise NotFoundError("Certificado desconocido")
+            raise NotFoundError("Unknown certificate")
         return certificate
 
     def _normalize_or_422(self, hostname: str) -> str:
@@ -153,7 +153,7 @@ class CertificatesService:
         certificate = self._inventory().find(needle)
         if certificate is None:
             if not self._is_new_hostname_allowed(tenant_context, needle):
-                raise NotFoundError("Certificado desconocido")
+                raise NotFoundError("Unknown certificate")
             return needle, None
         if not certificate.visible_to(
             tenant_id=tenant_context.current_tenant_id,
@@ -161,7 +161,7 @@ class CertificatesService:
             tenant_domains=self._tenant_domains(tenant_context.current_tenant_id),
         ):
             # 404 para no filtrar la existencia de hostnames de otros tenants.
-            raise NotFoundError("Certificado desconocido")
+            raise NotFoundError("Unknown certificate")
         return certificate.hostname, certificate
 
     # ---- lectura ---------------------------------------------------------
@@ -230,7 +230,7 @@ class CertificatesService:
                 str(exc), status_code=422, code="mail.certificate_job_invalid"
             ) from exc
         if job is None:
-            raise NotFoundError("Solicitud desconocida")
+            raise NotFoundError("Unknown request")
         return CertificateJobResponse(
             job_id=job.job_id,
             hostname=job.hostname,
@@ -260,13 +260,13 @@ class CertificatesService:
             or certificate.name == self._config.default_name
         ):
             raise AppError(
-                "El certificado global no se regenera desde el panel",
+                "The global certificate cannot be regenerated from the panel",
                 status_code=409,
                 code="mail.certificate_global",
             )
         if action not in ("ensure", "force"):
             raise AppError(
-                "Acción inválida", status_code=422, code="mail.certificate_invalid_action"
+                "Invalid action", status_code=422, code="mail.certificate_invalid_action"
             )
 
         try:
@@ -317,7 +317,7 @@ class CertificatesService:
     def _require_platform(self, tenant_context: TenantContext) -> None:
         if not tenant_context.is_platform:
             raise AppError(
-                "Solo el administrador de infraestructura puede ejecutar esta acción",
+                "Only the infrastructure administrator can perform this action",
                 status_code=403,
                 code="mail.certificate_admin_only",
             )
@@ -334,7 +334,7 @@ class CertificatesService:
 
         if action not in self.ADMIN_ACTIONS:
             raise AppError(
-                "Acción inválida", status_code=422, code="mail.certificate_invalid_action"
+                "Invalid action", status_code=422, code="mail.certificate_invalid_action"
             )
         certificate = self._visible_certificate(tenant_context, hostname)
         self._require_platform(tenant_context)
@@ -343,7 +343,7 @@ class CertificatesService:
             and certificate.scope == "global"
         ):
             raise AppError(
-                "El certificado global no se instala ni revierte desde el panel",
+                "The global certificate cannot be installed or rolled back from the panel",
                 status_code=409,
                 code="mail.certificate_global",
             )

@@ -20,8 +20,8 @@ export function ConfirmDialog({
   onConfirm,
   title,
   description,
-  confirmLabel = "Confirmar",
-  cancelLabel = "Cancelar",
+  confirmLabel = "Confirm",
+  cancelLabel = "Cancel",
   destructive = false,
   loading = false,
 }: ConfirmDialogProps) {
@@ -48,7 +48,7 @@ export function ConfirmDialog({
       }
     >
       <p className="text-sm text-muted-foreground">
-        {description ?? "\u00bfEst\u00e1s seguro de realizar esta acci\u00f3n?"}
+        {description ?? "Are you sure you want to perform this action?"}
       </p>
     </Dialog>
   );

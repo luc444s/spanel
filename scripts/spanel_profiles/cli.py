@@ -23,7 +23,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="spanel-profiles.py",
         description=(
-            "Verificación determinista de perfiles de estáticos "
+            "Deterministic verification of static profiles "
             "(A.SPEC 0042): plain(nginx), react(caddy), boot(httpd), astro(node)."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -31,29 +31,29 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--transport", choices=("auto", "local", "ssh"), default=None,
-        help="auto (default; usa SSH configurado si no hay daemon local)",
+        help="auto (default; uses the configured SSH if there is no local daemon)",
     )
     parser.add_argument(
         "--profile", choices=("internal", "public"), default=None,
-        help="internal (laboratorio, default) o public",
+        help="internal (lab, default) or public",
     )
-    parser.add_argument("--network", default=None, help="red Docker del proxy")
-    parser.add_argument("--wait", type=int, default=None, help="segundos máx. de health check")
+    parser.add_argument("--network", default=None, help="proxy Docker network")
+    parser.add_argument("--wait", type=int, default=None, help="max seconds for the health check")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    up = sub.add_parser("up", help="provisiona volúmenes, contenedores, seed y rutas")
-    up.add_argument("--only", action="append", help="repite para varios: --only astro")
-    up.add_argument("--force", action="store_true", help="reescribe el seed del contendio")
-    up.add_argument("--dry-run", action="store_true", help="imprime qué haría, sin ejecutar")
+    up = sub.add_parser("up", help="provision volumes, containers, seed and routes")
+    up.add_argument("--only", action="append", help="repeat for several: --only astro")
+    up.add_argument("--force", action="store_true", help="rewrite the seed content")
+    up.add_argument("--dry-run", action="store_true", help="print what it would do, without executing")
 
-    verify = sub.add_parser("verify", help="verifica contenedor, imagen, labels, health y HTTPS")
+    verify = sub.add_parser("verify", help="verify container, image, labels, health and HTTPS")
     verify.add_argument("--only", action="append", help="verifica perfiles concretos")
 
-    down = sub.add_parser("down", help="quita contenedores, volúmenes y rutas de los perfiles")
-    down.add_argument("--only", action="append", help="baja solo estos perfiles")
-    down.add_argument("--keep-routes", action="store_true", help="no toca el file provider")
+    down = sub.add_parser("down", help="remove the profiles' containers, volumes and routes")
+    down.add_argument("--only", action="append", help="only tear down these profiles")
+    down.add_argument("--keep-routes", action="store_true", help="does not touch the file provider")
 
-    sub.add_parser("status", help="lista el estado de cada perfil")
+    sub.add_parser("status", help="list the status of each profile")
 
     return parser
 

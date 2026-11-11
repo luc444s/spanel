@@ -40,7 +40,7 @@ def normalize_site_suffix(value: str | None) -> str | None:
         return None
     if _FORBIDDEN_RE.search(text) or _SUFFIX_RE.fullmatch(text) is None:
         raise ValueError(
-            "sufijo de sitios inválido: sin esquema, puerto, ruta, espacios ni comodines"
+            "invalid site suffix: no scheme, port, path, spaces or wildcards allowed"
         )
     return text
 

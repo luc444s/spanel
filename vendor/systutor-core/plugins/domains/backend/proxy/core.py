@@ -57,34 +57,34 @@ def normalize_domain(raw: str, profile: str = "internal") -> str:
     """
     value = (raw or "").strip().lower()
     if not value:
-        raise ProxyError("el dominio no puede estar vacío", EXIT_VALIDATION)
+        raise ProxyError("the domain cannot be empty", EXIT_VALIDATION)
     value = value.removesuffix(".")
     if any(token in value for token in ("/", ":", "*", " ", "\t")):
         raise ProxyError(
-            "dominio inválido: sin esquema, puerto, ruta ni comodines", EXIT_VALIDATION
+            "invalid domain: no scheme, port, path, or wildcards", EXIT_VALIDATION
         )
     labels = value.split(".")
     if len(labels) < 2:
-        raise ProxyError("dominio inválido: hace falta al menos nombre y TLD", EXIT_VALIDATION)
+        raise ProxyError("invalid domain: at least a name and a TLD are required", EXIT_VALIDATION)
     if any(not label for label in labels):
-        raise ProxyError("dominio inválido: etiqueta vacía", EXIT_VALIDATION)
+        raise ProxyError("invalid domain: empty label", EXIT_VALIDATION)
     if len(value) > 253:
-        raise ProxyError("dominio inválido: supera 253 caracteres", EXIT_VALIDATION)
+        raise ProxyError("invalid domain: exceeds 253 characters", EXIT_VALIDATION)
     for label in labels:
         if not LABEL_RE.fullmatch(label):
             raise ProxyError(
-                f"dominio inválido: la etiqueta '{label}' no es DNS válida", EXIT_VALIDATION
+                f"invalid domain: label '{label}' is not valid DNS", EXIT_VALIDATION
             )
         if label.startswith("xn--"):
             raise ProxyError(
-                "dominio inválido: usá el nombre Unicode, no punycode", EXIT_VALIDATION
+                "invalid domain: use the Unicode name, not punycode", EXIT_VALIDATION
             )
     tld = labels[-1]
     if tld.isdigit():
-        raise ProxyError("dominio inválido: el TLD no puede ser numérico", EXIT_VALIDATION)
+        raise ProxyError("invalid domain: the TLD cannot be numeric", EXIT_VALIDATION)
     if profile == "public" and (tld in INTERNAL_TLDS or any(char.isdigit() for char in tld)):
         raise ProxyError(
-            f"dominio inválido para perfil público: '{tld}' no es un TLD público",
+            f"invalid domain for public profile: '{tld}' is not a public TLD",
             EXIT_VALIDATION,
         )
     return value
@@ -95,7 +95,7 @@ def slug_for(container: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", container.strip().lower()).strip("-")
     slug = slug.removeprefix(FILE_PREFIX).removesuffix("-wp").strip("-")
     if not slug:
-        raise ProxyError(f"no se pudo derivar un nombre para '{container}'", EXIT_VALIDATION)
+        raise ProxyError(f"could not derive a name for '{container}'", EXIT_VALIDATION)
     return slug
 
 
@@ -106,7 +106,7 @@ def site_file_name(slug: str) -> str:
 def router_rule(domains: Iterable[str]) -> str:
     hosts = list(dict.fromkeys(domains))
     if not hosts:
-        raise ProxyError("el sitio no tiene dominios", EXIT_VALIDATION)
+        raise ProxyError("the site has no domains", EXIT_VALIDATION)
     return " || ".join(f"Host(`{host}`)" for host in hosts)
 
 
@@ -134,19 +134,19 @@ class PathRoute:
 def _safe_proxy_token(value: str, label: str) -> str:
     token = value.strip()
     if not token or len(token) > 255:
-        raise ProxyError(f"{label} inválido", EXIT_VALIDATION)
+        raise ProxyError(f"invalid {label}", EXIT_VALIDATION)
     if any(character in token for character in "`\r\n\t "):
-        raise ProxyError(f"{label} inválido", EXIT_VALIDATION)
+        raise ProxyError(f"invalid {label}", EXIT_VALIDATION)
     return token
 
 
 def normalize_path_prefix(value: str) -> str:
     prefix = value.strip()
     if not prefix.startswith("/") or prefix.startswith("//"):
-        raise ProxyError("el prefijo debe comenzar con una sola /", EXIT_VALIDATION)
+        raise ProxyError("the prefix must start with a single /", EXIT_VALIDATION)
     prefix = prefix.rstrip("/") or "/"
     if any(character in prefix for character in "`\r\n?#"):
-        raise ProxyError("prefijo de ruta inválido", EXIT_VALIDATION)
+        raise ProxyError("invalid route prefix", EXIT_VALIDATION)
     return prefix
 
 
@@ -235,7 +235,7 @@ def render_site_yaml(
     include_base: bool = True,
 ) -> str:
     if not 1 <= port <= 65535:
-        raise ProxyError("puerto inválido", EXIT_VALIDATION)
+        raise ProxyError("invalid port", EXIT_VALIDATION)
     slug = slug_for(container)
     rule = router_rule(domains)
     service = f"{FILE_PREFIX}{slug}"
@@ -266,9 +266,9 @@ def render_site_yaml(
 
     for index, route in enumerate(path_routes, start=1):
         if not route.container.strip():
-            raise ProxyError("contenedor de ruta vacío", EXIT_VALIDATION)
+            raise ProxyError("empty route container", EXIT_VALIDATION)
         if not 1 <= route.port <= 65535:
-            raise ProxyError("puerto de ruta inválido", EXIT_VALIDATION)
+            raise ProxyError("invalid route port", EXIT_VALIDATION)
         prefix = normalize_path_prefix(route.prefix)
         suffix = route.route_id or f"path-{index}"
         route_service = f"{service}-route-{suffix}"
@@ -327,13 +327,13 @@ def is_managed_document(text: str) -> bool:
 
 def parse_site_document(text: str) -> dict:
     if not is_managed_document(text):
-        raise ProxyError("el archivo YAML no está gestionado por spanel", EXIT_VALIDATION)
+        raise ProxyError("the YAML file is not managed by spanel", EXIT_VALIDATION)
     try:
         data = yaml.safe_load(text)
     except yaml.YAMLError as exc:  # pragma: no cover - defensivo
-        raise ProxyError(f"YAML inválido: {exc}", EXIT_VALIDATION) from exc
+        raise ProxyError(f"invalid YAML: {exc}", EXIT_VALIDATION) from exc
     if not isinstance(data, dict) or "http" not in data:
-        raise ProxyError("el YAML no tiene la estructura esperada", EXIT_VALIDATION)
+        raise ProxyError("the YAML does not have the expected structure", EXIT_VALIDATION)
     return data
 
 
@@ -392,14 +392,14 @@ def document_path_routes(data: dict) -> list[PathRoute]:
         prefix_match = re.search(r"Path\(`([^`]+)`\)", rule)
         service = services.get(router.get("service")) or {}
         if prefix_match is None:
-            raise ProxyError("router de ruta gestionada inválido", EXIT_VALIDATION)
+            raise ProxyError("invalid managed route router", EXIT_VALIDATION)
         servers = ((service or {}).get("loadBalancer") or {}).get("servers") or []
         if len(servers) != 1:
-            raise ProxyError("servicio de ruta gestionada inválido", EXIT_VALIDATION)
+            raise ProxyError("invalid managed route service", EXIT_VALIDATION)
         url = (servers[0] or {}).get("url") or ""
         match = re.match(r"^https?://([^:/]+):(\d+)$", url)
         if not match:
-            raise ProxyError("backend de ruta gestionada inválido", EXIT_VALIDATION)
+            raise ProxyError("invalid managed route backend", EXIT_VALIDATION)
         routes.append(
             PathRoute(
                 normalize_path_prefix(prefix_match.group(1)),
@@ -445,4 +445,4 @@ def timestamp() -> str:
 
 def validate_managed_path(path: Path) -> None:
     if not path.name.startswith(FILE_PREFIX) or path.suffix not in (".yml", ".yaml"):
-        raise ProxyError(f"nombre de archivo no gestionado: {path.name}", EXIT_VALIDATION)
+        raise ProxyError(f"unmanaged file name: {path.name}", EXIT_VALIDATION)

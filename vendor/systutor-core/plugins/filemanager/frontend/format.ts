@@ -1,4 +1,5 @@
 import type { Entry } from "./types";
+import { t } from "@/i18n";
 
 const SIZE_UNITS = ["B", "KB", "MB", "GB", "TB"] as const;
 
@@ -25,9 +26,9 @@ export function formatDate(modified: number): string {
 }
 
 export function formatType(name: string, directory: boolean): string {
-  if (directory) return "Carpeta";
+  if (directory) return t("Folder");
   const dot = name.lastIndexOf(".");
-  if (dot <= 0 || dot === name.length - 1) return "Archivo";
+  if (dot <= 0 || dot === name.length - 1) return t("File");
   return name.slice(dot + 1).toUpperCase();
 }
 

@@ -81,50 +81,50 @@ TRAEFIK_IP=""
 
 usage() {
   cat <<'EOF'
-Laboratorio aislado de Traefik + CA ACME local para Spanel.
+Isolated Traefik lab + local ACME CA for Spanel.
 
 Modos:
-  adopt             Inspecciona el Traefik real (solo lectura). No modifica nada.
-  plan              Imprime contenedores, red, puertos, config y comandos.
-                    No necesita Docker ni muta nada.
-  up                Crea/reutiliza el laboratorio y su CA local.
-  status            Muestra el estado del laboratorio y de la CA.
-  down              Elimina SOLO los recursos con com.spanel.lab=true.
-  down --purge      Además borra los datos y el volumen de la CA (pide confirmación).
+  adopt             Inspect the real Traefik (read-only). Modifies nothing.
+  plan              Print containers, network, ports, config and commands.
+                    Does not need Docker and mutates nothing.
+  up                Create/reuse the lab and its local CA.
+  status            Show the lab and CA status.
+  down              Delete ONLY resources with com.spanel.lab=true.
+  down --purge      Also delete the data and the CA volume (asks for confirmation).
 
 Opciones:
-  --purge           Solo con `down`: borra datos, CA y volumen propio.
-  --yes             No pregunta en `down --purge`.
-  -h, --help        Muestra esta ayuda.
+  --purge           Only with `down`: delete data, CA and its own volume.
+  --yes             Do not ask on `down --purge`.
+  -h, --help        Show this help.
 
 Entorno:
   LAB_IMAGE                Default: traefik:v3.7.8
   LAB_CA_IMAGE             Default: smallstep/step-ca:0.30.2
   LAB_DNS_IMAGE            Default: 4km3/dnsmasq:2.90-r3
   LAB_HTTP_PORT            Default: 9080   (host -> 80)
-  LAB_HTTPS_PORT           Default: auto   (443 si está libre, si no 9443)
+  LAB_HTTPS_PORT           Default: auto   (443 if free, otherwise 9443)
   LAB_DASHBOARD_PORT       Default: 9081   (host -> 8080)
-  LAB_DNS_PORT             Default: 5353   (solo si LAB_DNS_PUBLISH=1)
+  LAB_DNS_PORT             Default: 5353   (only if LAB_DNS_PUBLISH=1)
   LAB_DNS_PUBLISH          Default: 0
-  SPANEL_PROXY_ACME_EMAIL  Email para ACME staging adicional de Let's Encrypt.
+  SPANEL_PROXY_ACME_EMAIL  Email for the additional Let's Encrypt ACME staging.
 
-Puertos del laboratorio (publicados solo en 127.0.0.1):
-  <https>  HTTPS -> 443   (443 o 9443, lo decide `up`)
+Lab ports (published only on 127.0.0.1):
+  <https>  HTTPS -> 443   (443 or 9443, decided by `up`)
   9080     HTTP  -> 80
   9081     dashboard/API
 
-Recursos propios:
-  contenedor  spanel-traefik-lab
-  contenedor  spanel-step-ca        (CA ACME local)
-  contenedor  spanel-lab-dns        (DNS interno para los dominios del lab)
-  red         spanel-traefik-lab
-  volumen     spanel-step-ca-data
-  directorio  scripts/traefik-lab/
+Own resources:
+  container   spanel-traefik-lab
+  container   spanel-step-ca        (local ACME CA)
+  container   spanel-lab-dns        (internal DNS for lab domains)
+  network     spanel-traefik-lab
+  volume      spanel-step-ca-data
+  directory   scripts/traefik-lab/
 
-Resolver interno de Traefik: `internal` -> step-ca.
-Dominios internos: `python3 scripts/proxy_domain.py add --domain lucas.spanel`.
+Traefik internal resolver: `internal` -> step-ca.
+Internal domains: `python3 scripts/proxy_domain.py add --domain lucas.spanel`.
 
-Nunca se ejecuta docker system prune ni se toca /opt/stacks desde up/down.
+docker system prune is never run and /opt/stacks is never touched from up/down.
 EOF
 }
 
@@ -138,16 +138,16 @@ info() {
 }
 
 require_docker() {
-  command -v docker >/dev/null 2>&1 || fail "docker no está en PATH"
-  docker info >/dev/null 2>&1 || fail "no se puede hablar con el daemon de Docker"
+  command -v docker >/dev/null 2>&1 || fail "docker is not in PATH"
+  docker info >/dev/null 2>&1 || fail "cannot talk to the Docker daemon"
 }
 
 validate_email() {
   if [ -n "$ACME_EMAIL" ]; then
     case "$ACME_EMAIL" in
-      *[[:space:]]*|*@*@*|@*|*@) fail "SPANEL_PROXY_ACME_EMAIL no parece un email válido: $ACME_EMAIL" ;;
+      *[[:space:]]*|*@*@*|@*|*@) fail "SPANEL_PROXY_ACME_EMAIL does not look like a valid email: $ACME_EMAIL" ;;
       *@*) ;;
-      *) fail "SPANEL_PROXY_ACME_EMAIL no parece un email válido: $ACME_EMAIL" ;;
+      *) fail "SPANEL_PROXY_ACME_EMAIL does not look like a valid email: $ACME_EMAIL" ;;
     esac
   fi
 }
@@ -216,12 +216,12 @@ check_ports_free() {
   fi
   for port in "${ports[@]}"; do
     if port_in_use "$port"; then
-      echo "error: el puerto ${port} ya está ocupado; el laboratorio no arranca." >&2
+      echo "error: port ${port} is already in use; the lab will not start." >&2
       used=1
     fi
   done
   if [ "$used" = "1" ]; then
-    fail "liberá esos puertos o elegí otros con LAB_HTTP_PORT/LAB_HTTPS_PORT/LAB_DASHBOARD_PORT/LAB_DNS_PORT"
+    fail "free those ports or choose others with LAB_HTTP_PORT/LAB_HTTPS_PORT/LAB_DASHBOARD_PORT/LAB_DNS_PORT"
   fi
 }
 
@@ -239,7 +239,7 @@ preflight_ports() {
 
   if [ "$LAB_DNS_PUBLISH" = "1" ] && ! named_container_exists "$LAB_DNS_NAME"; then
     if port_in_use "$LAB_DNS_PORT"; then
-      fail "el puerto DNS ${LAB_DNS_PORT} ya está ocupado; el laboratorio no arranca"
+      fail "DNS port ${LAB_DNS_PORT} is already in use; the lab will not start"
     fi
   fi
 }
@@ -247,7 +247,7 @@ preflight_ports() {
 render_static_config() {
   cat <<'EOF'
 # managed-by: spanel traefik-lab
-# Generado por scripts/traefik-lab.sh. No editar a mano: recrear con el script.
+# Generated by scripts/traefik-lab.sh. Do not edit by hand: recreate it with the script.
 entryPoints:
   web:
     address: ":80"
@@ -407,7 +407,7 @@ wait_ca_ready() {
 
 export_ca_root() {
   if ! docker cp "${LAB_CA_NAME}:/home/step/certs/root_ca.crt" "$LAB_CA_ROOT" >/dev/null 2>&1; then
-    fail "no se pudo exportar el certificado raíz de la CA"
+    fail "could not export the CA root certificate"
   fi
   chmod 644 "$LAB_CA_ROOT" 2>/dev/null || true
 }
@@ -432,7 +432,7 @@ wait_dashboard() {
     fi
     sleep 1
   done
-  echo "aviso: el dashboard aún no responde en 127.0.0.1:${LAB_DASHBOARD_PORT}" >&2
+  echo "warning: the dashboard does not respond yet on 127.0.0.1:${LAB_DASHBOARD_PORT}" >&2
   return 1
 }
 
@@ -462,63 +462,63 @@ point_dns_at_traefik() {
 plan() {
   validate_email
   resolve_https_port
-  CA_PASSWORD="<generado en scripts/traefik-lab/ca/password>"
-  DNS_IP="<ip-de-spanel-lab-dns>"
+  CA_PASSWORD="<generated in scripts/traefik-lab/ca/password>"
+  DNS_IP="<ip-of-spanel-lab-dns>"
   build_run_args
   build_ca_args
   build_dns_args
 
-  echo "Plan del laboratorio Traefik + CA ACME local (no ejecuta nada)"
+  echo "Traefik lab + local ACME CA plan (executes nothing)"
   echo
-  echo "  contenedor:  ${LAB_NAME}  (role=traefik, version=${LAB_VERSION})"
-  echo "  contenedor:  ${LAB_CA_NAME}  (role=ca)"
-  echo "  contenedor:  ${LAB_DNS_NAME}  (role=dns)"
-  echo "  red:         ${LAB_NETWORK}"
+  echo "  container:   ${LAB_NAME}  (role=traefik, version=${LAB_VERSION})"
+  echo "  container:   ${LAB_CA_NAME}  (role=ca)"
+  echo "  container:   ${LAB_DNS_NAME}  (role=dns)"
+  echo "  network:     ${LAB_NETWORK}"
   echo "  label:       ${LAB_LABEL}"
-  echo "  volumen CA:  ${LAB_CA_VOLUME}"
-  echo "  imagen:      ${LAB_IMAGE}"
-  echo "  imagen CA:   ${LAB_CA_IMAGE}"
-  echo "  imagen DNS:  ${LAB_DNS_IMAGE}"
+  echo "  CA volume:   ${LAB_CA_VOLUME}"
+  echo "  image:       ${LAB_IMAGE}"
+  echo "  CA image:    ${LAB_CA_IMAGE}"
+  echo "  DNS image:   ${LAB_DNS_IMAGE}"
   echo "  config:      ${LAB_CONFIG}"
   echo "  dynamic:     ${LAB_DYNAMIC}"
-  echo "  datos:       ${LAB_DATA}"
-  echo "  CA pública:  ${LAB_CA_ROOT}"
+  echo "  data:        ${LAB_DATA}"
+  echo "  public CA:   ${LAB_CA_ROOT}"
   echo
-  echo "  puertos (solo 127.0.0.1):"
-  echo "    ${HTTPS_PORT}:443      (HTTPS, decisión automática)"
+  echo "  ports (127.0.0.1 only):"
+  echo "    ${HTTPS_PORT}:443      (HTTPS, automatic choice)"
   echo "    ${LAB_HTTP_PORT}:80       (HTTP)"
   echo "    ${LAB_DASHBOARD_PORT}:8080    (dashboard/API)"
   if [ "$LAB_DNS_PUBLISH" = "1" ]; then
-    echo "    ${LAB_DNS_PORT}:53/udp   (DNS interno)"
+    echo "    ${LAB_DNS_PORT}:53/udp   (internal DNS)"
   fi
   echo
-  echo "  resolver interno: internal -> step-ca (TLS-ALPN-01)"
+  echo "  internal resolver: internal -> step-ca (TLS-ALPN-01)"
   echo "  CA ACME:          https://spanel-step-ca:9000/acme/acme/directory"
   if [ -n "$ACME_EMAIL" ]; then
-    echo "  ACME extra:       letsencrypt-staging para ${ACME_EMAIL}"
+    echo "  extra ACME:       letsencrypt-staging for ${ACME_EMAIL}"
   fi
   echo
-  echo "Directorios y archivos:"
+  echo "Directories and files:"
   print_cmd mkdir -p "$LAB_ROOT" "$LAB_DYNAMIC" "$LAB_DATA" "$LAB_CA_DIR" "$LAB_DNS_DIR"
-  echo "  # escribir config estática en $LAB_CONFIG (incluye resolver internal)"
+  echo "  # write static config to $LAB_CONFIG (includes the internal resolver)"
   echo
-  echo "Comandos:"
+  echo "Commands:"
   print_cmd docker network create --label "$LAB_LABEL" "$LAB_NETWORK"
   print_cmd docker "${DNS_RUN_ARGS[@]}"
   print_cmd docker "${CA_RUN_ARGS[@]}"
   print_cmd docker cp "${LAB_CA_NAME}:/home/step/certs/root_ca.crt" "$LAB_CA_ROOT"
   print_cmd docker "${RUN_ARGS[@]}"
   echo
-  echo "No se verifica Docker ni se comprueban puertos en 'plan'; eso ocurre en 'up'."
+  echo "Docker is not checked and ports are not verified in 'plan'; that happens in 'up'."
 }
 
 ensure_network() {
   if network_exists; then
     [ "$(docker network inspect -f '{{index .Labels "com.spanel.lab"}}' "$LAB_NETWORK" 2>/dev/null || true)" = "true" ] \
-      || fail "existe una red '${LAB_NETWORK}' que no es del laboratorio; no se toca"
-    info "reutilizando red ${LAB_NETWORK}"
+      || fail "a network '${LAB_NETWORK}' exists that is not part of the lab; not touching it"
+    info "reusing network ${LAB_NETWORK}"
   else
-    info "creando red ${LAB_NETWORK}"
+    info "creating network ${LAB_NETWORK}"
     docker network create --label "$LAB_LABEL" "$LAB_NETWORK" >/dev/null
   fi
 }
@@ -526,21 +526,21 @@ ensure_network() {
 ensure_dns_container() {
   if named_container_exists "$LAB_DNS_NAME"; then
     named_container_is_lab "$LAB_DNS_NAME" \
-      || fail "existe un contenedor '${LAB_DNS_NAME}' que no es del laboratorio; no se toca"
+      || fail "a container '${LAB_DNS_NAME}' exists that is not part of the lab; not touching it"
     if container_is_running "$LAB_DNS_NAME"; then
-      info "contenedor ${LAB_DNS_NAME} ya está running; se reutiliza"
+      info "container ${LAB_DNS_NAME} is already running; reusing it"
     else
-      info "iniciando contenedor ${LAB_DNS_NAME}"
+      info "starting container ${LAB_DNS_NAME}"
       docker start "$LAB_DNS_NAME" >/dev/null
-      wait_running "$LAB_DNS_NAME" || fail "el contenedor ${LAB_DNS_NAME} no quedó running"
+      wait_running "$LAB_DNS_NAME" || fail "container ${LAB_DNS_NAME} did not stay running"
     fi
     return 0
   fi
 
   build_dns_args
-  info "creando contenedor ${LAB_DNS_NAME}"
+  info "creating container ${LAB_DNS_NAME}"
   docker "${DNS_RUN_ARGS[@]}" >/dev/null
-  wait_running "$LAB_DNS_NAME" || fail "el contenedor ${LAB_DNS_NAME} no quedó running"
+  wait_running "$LAB_DNS_NAME" || fail "container ${LAB_DNS_NAME} did not stay running"
 }
 
 ensure_ca_container() {
@@ -548,90 +548,90 @@ ensure_ca_container() {
 
   if named_container_exists "$LAB_CA_NAME"; then
     named_container_is_lab "$LAB_CA_NAME" \
-      || fail "existe un contenedor '${LAB_CA_NAME}' que no es del laboratorio; no se toca"
+      || fail "a container '${LAB_CA_NAME}' exists that is not part of the lab; not touching it"
     if container_is_running "$LAB_CA_NAME"; then
       # El DNS del CA queda fijado con --dns en la creación. Si el contenedor
       # de DNS se recreó, obtiene OTRA IP y el CA quedaría resolviendo hacia
       # una IP muerta: ACME daría 'validation target' sin éxito. El volumen
       # de la CA se conserva, así que recrear es barato.
       if [ "$(docker inspect -f '{{json .HostConfig.Dns}}' "$LAB_CA_NAME" 2>/dev/null)" != "[\"$DNS_IP\"]" ]; then
-        info "el CA ${LAB_CA_NAME} fija --dns con una IP distinta del DNS actual; se recrea (el volumen se conserva)"
+        info "CA ${LAB_CA_NAME} pins --dns to a different IP than the current DNS; recreating it (volume preserved)"
         docker rm -f "$LAB_CA_NAME" >/dev/null
         build_ca_args
         if ! docker "${CA_RUN_ARGS[@]}" >/dev/null; then
-          fail "no se pudo recrear ${LAB_CA_NAME} con el DNS actual"
+          fail "could not recreate ${LAB_CA_NAME} with the current DNS"
         fi
-        wait_running "$LAB_CA_NAME" || fail "el CA recreado no quedó running"
+        wait_running "$LAB_CA_NAME" || fail "the recreated CA did not stay running"
       else
-        info "contenedor ${LAB_CA_NAME} ya está running; se reutiliza"
+        info "container ${LAB_CA_NAME} is already running; reusing it"
       fi
     else
-      info "iniciando contenedor ${LAB_CA_NAME}"
+      info "starting container ${LAB_CA_NAME}"
       docker start "$LAB_CA_NAME" >/dev/null
     fi
   else
     build_ca_args
-    info "creando contenedor ${LAB_CA_NAME} (primera inicialización de la CA)"
+    info "creating container ${LAB_CA_NAME} (first CA initialization)"
     docker "${CA_RUN_ARGS[@]}" >/dev/null
   fi
 
   if ! wait_ca_ready; then
     docker logs --tail 40 "$LAB_CA_NAME" 2>/dev/null | sed 's/^/  /' >&2 || true
-    fail "la CA ${LAB_CA_NAME} no terminó de inicializar"
+    fail "CA ${LAB_CA_NAME} did not finish initializing"
   fi
   export_ca_root
 }
 
 ensure_traefik_config() {
   if [ -f "$LAB_CONFIG" ]; then
-    config_is_ours || fail "el archivo ${LAB_CONFIG} no fue generado por este script; no se sobrescribe"
+    config_is_ours || fail "file ${LAB_CONFIG} was not generated by this script; not overwriting it"
     if config_has_internal_resolver; then
-      info "reutilizando config existente ${LAB_CONFIG}"
+      info "reusing existing config ${LAB_CONFIG}"
       return 0
     fi
-    info "actualizando ${LAB_CONFIG} para agregar el resolver internal"
+    info "updating ${LAB_CONFIG} to add the internal resolver"
   else
-    info "escribiendo config estática en ${LAB_CONFIG}"
+    info "writing static config to ${LAB_CONFIG}"
   fi
   render_static_config > "$LAB_CONFIG"
 }
 
 ensure_traefik_container() {
   if container_exists; then
-    container_is_lab || fail "existe un contenedor '${LAB_NAME}' que no es del laboratorio; no se toca"
+    container_is_lab || fail "a container '${LAB_NAME}' exists that is not part of the lab; not touching it"
     local version mounts
     version="$(docker inspect -f '{{index .Config.Labels "com.spanel.lab.version"}}' "$LAB_NAME" 2>/dev/null || true)"
     mounts="$(docker inspect -f '{{range .Mounts}}{{.Destination}} {{end}}' "$LAB_NAME" 2>/dev/null || true)"
     if [ "$version" != "$LAB_VERSION" ] || ! printf '%s' "$mounts" | grep -q '/lab-ca'; then
-      info "el contenedor ${LAB_NAME} es de una versión anterior; se recrea (solo recursos del laboratorio)"
+      info "container ${LAB_NAME} is from an older version; recreating it (lab resources only)"
       docker rm -f "$LAB_NAME" >/dev/null
     else
       if container_is_running "$LAB_NAME"; then
-        info "contenedor ${LAB_NAME} ya está running; se reutiliza"
+        info "container ${LAB_NAME} is already running; reusing it"
         return 0
       fi
-      info "iniciando contenedor ${LAB_NAME}"
+      info "starting container ${LAB_NAME}"
       docker start "$LAB_NAME" >/dev/null
-      wait_running "$LAB_NAME" || fail "el contenedor ${LAB_NAME} no quedó running"
+      wait_running "$LAB_NAME" || fail "container ${LAB_NAME} did not stay running"
       return 0
     fi
   fi
 
   build_run_args
-  info "creando contenedor ${LAB_NAME} con ${LAB_IMAGE}"
+  info "creating container ${LAB_NAME} con ${LAB_IMAGE}"
   if ! docker "${RUN_ARGS[@]}" >/dev/null; then
-    echo "error: no se pudo arrancar ${LAB_NAME}" >&2
+    echo "error: could not start ${LAB_NAME}" >&2
     if container_exists && container_is_lab; then
       docker rm -f "$LAB_NAME" >/dev/null 2>&1 || true
     fi
-    fail "se revirtió el alta del contenedor de Traefik"
+    fail "Traefik container creation was rolled back"
   fi
   if ! wait_running "$LAB_NAME"; then
     docker logs --tail 40 "$LAB_NAME" 2>/dev/null || true
     if container_exists && container_is_lab; then
       docker rm -f "$LAB_NAME" >/dev/null 2>&1 || true
     fi
-    fail "el contenedor ${LAB_NAME} no quedó running; se revirtió el alta"
+    fail "container ${LAB_NAME} did not stay running; creation was rolled back"
   fi
 }
 
@@ -647,7 +647,7 @@ up() {
   ensure_network
   ensure_dns_container
   DNS_IP="$(container_ip "$LAB_DNS_NAME")"
-  [ -n "$DNS_IP" ] || fail "no se pudo obtener la IP de ${LAB_DNS_NAME}"
+  [ -n "$DNS_IP" ] || fail "could not get the IP of ${LAB_DNS_NAME}"
 
   ensure_ca_container
   ensure_traefik_config
@@ -671,26 +671,26 @@ print_summary() {
   fi
   cat <<EOF
 
-Laboratorio listo (aislado, sin tocar el Traefik real).
+Lab ready (isolated, without touching the real Traefik).
   traefik:     ${LAB_NAME}
   CA ACME:     ${LAB_CA_NAME} (${LAB_CA_IMAGE})
-  DNS interno: ${LAB_DNS_NAME}
-  red:         ${LAB_NETWORK}
+  internal DNS: ${LAB_DNS_NAME}
+  network:     ${LAB_NETWORK}
   HTTPS:       https://127.0.0.1:${HTTPS_PORT}
   HTTP:        http://127.0.0.1:${LAB_HTTP_PORT}
   dashboard:   http://127.0.0.1:${LAB_DASHBOARD_PORT}/dashboard/
   config:      ${LAB_CONFIG}
   dynamic:     ${LAB_DYNAMIC}
-  CA raíz:     ${LAB_CA_ROOT}
-  fingerprint: ${fingerprint:-no disponible}
+  root CA:     ${LAB_CA_ROOT}
+  fingerprint: ${fingerprint:-not available}
   ACME:        internal (CA local)$(if [ -n "$ACME_EMAIL" ]; then echo " + letsencrypt-staging"; fi)
 
-Siguiente paso:
+Next step:
   python3 scripts/proxy_domain.py doctor
-  python3 scripts/proxy_domain.py add --site <contenedor-wp> --domain lucas.spanel
+  python3 scripts/proxy_domain.py add --site <wp-container> --domain lucas.spanel
 
-Baja segura:   $0 down
-Baja + datos:  $0 down --purge
+Safe teardown: $0 down
+Teardown + data: $0 down --purge
 EOF
 }
 
@@ -703,20 +703,20 @@ status() {
   for name in "$LAB_NAME" "$LAB_CA_NAME" "$LAB_DNS_NAME"; do
     if named_container_exists "$name"; then
       named_container_is_lab "$name" \
-        || fail "el contenedor '${name}' no es del laboratorio (sin label ${LAB_LABEL}); no se inspecciona más"
+        || fail "container '${name}' is not part of the lab (missing label ${LAB_LABEL}); not inspecting further"
       any=1
       state="$(docker inspect -f '{{.State.Status}}' "$name")"
       running="$(docker inspect -f '{{.State.Running}}' "$name")"
       role="$(docker inspect -f '{{index .Config.Labels "com.spanel.lab.role"}}' "$name" 2>/dev/null || true)"
-      echo "${name}  role=${role:-?}  estado=${state}"
-      echo "  imagen:    $(docker inspect -f '{{.Config.Image}}' "$name")"
-      echo "  iniciado:  $(docker inspect -f '{{.State.StartedAt}}' "$name")"
+      echo "${name}  role=${role:-?}  state=${state}"
+      echo "  image:     $(docker inspect -f '{{.Config.Image}}' "$name")"
+      echo "  started:   $(docker inspect -f '{{.State.StartedAt}}' "$name")"
       echo "  ip:        $(container_ip "$name")"
       if [ "$running" = "true" ]; then
         case "$name" in
-          "$LAB_NAME") echo "  puertos:   $(docker port "$name" 2>/dev/null | tr '\n' ' ')" ;;
+          "$LAB_NAME") echo "  ports:     $(docker port "$name" 2>/dev/null | tr '\n' ' ')" ;;
           "$LAB_CA_NAME") echo "  acme:      https://spanel-step-ca:9000/acme/acme/directory" ;;
-          "$LAB_DNS_NAME") echo "  entradas:  $(grep -vc '^[[:space:]]*\(#\|$\)' "$LAB_DNS_HOSTS" 2>/dev/null || echo 0)" ;;
+          "$LAB_DNS_NAME") echo "  entries:   $(grep -vc '^[[:space:]]*\(#\|$\)' "$LAB_DNS_HOSTS" 2>/dev/null || echo 0)" ;;
         esac
       fi
       echo
@@ -724,26 +724,26 @@ status() {
   done
 
   if [ "$any" = "0" ]; then
-    echo "no existe ningún recurso del laboratorio"
-    echo "crealo con: $0 up"
+    echo "no lab resource exists"
+    echo "create it with: $0 up"
     exit 1
   fi
 
   if [ -f "$LAB_CA_ROOT" ] && command -v openssl >/dev/null 2>&1; then
-    echo "CA raíz local:"
+    echo "Local root CA:"
     openssl x509 -in "$LAB_CA_ROOT" -noout -subject -dates -fingerprint -sha256 2>/dev/null \
       | sed 's/^/  /'
   else
-    echo "CA raíz: no exportada (¿corriste 'up'?)"
+    echo "Root CA: not exported (did you run 'up'?)"
   fi
 
   echo
-  echo "YAML dinámico: $(count_yaml "$LAB_DYNAMIC") archivo(s) en ${LAB_DYNAMIC}"
-  echo "Dominios internos:"
+  echo "Dynamic YAML: $(count_yaml "$LAB_DYNAMIC") file(s) in ${LAB_DYNAMIC}"
+  echo "Internal domains:"
   if [ -s "$LAB_DNS_HOSTS" ]; then
     grep -v '^[[:space:]]*\(#\|$\)' "$LAB_DNS_HOSTS" | sed 's/^/  /'
   else
-    echo "  (ninguno)"
+    echo "  (none)"
   fi
 
   for name in "$LAB_NAME" "$LAB_CA_NAME" "$LAB_DNS_NAME"; do
@@ -766,7 +766,7 @@ adopt() {
   require_docker
 
   if ! docker inspect --type container "$REAL_CONTAINER" >/dev/null 2>&1; then
-    fail "no existe el contenedor '${REAL_CONTAINER}' (configurá SPANEL_PROXY_TRAEFIK_CONTAINER)"
+    fail "container '${REAL_CONTAINER}' does not exist (configure SPANEL_PROXY_TRAEFIK_CONTAINER)"
   fi
 
   local state started image restart ports networks mounts config_dir yaml_count
@@ -784,29 +784,29 @@ adopt() {
   fi
   config_dir="${config_dir:-$REAL_CONFIG_DIR}"
 
-  echo "Adopción (solo lectura) del Traefik real"
-  echo "  contenedor: ${REAL_CONTAINER} (${state})"
-  echo "  imagen:     ${image}"
+  echo "Adoption (read-only) of the real Traefik"
+  echo "  container:  ${REAL_CONTAINER} (${state})"
+  echo "  image:      ${image}"
   echo "  StartedAt:  ${started}"
   echo "  restart:    ${restart:-no}"
-  echo "  red:        ${networks:-desconocida}"
-  echo "  puertos:"
+  echo "  network:    ${networks:-unknown}"
+  echo "  ports:"
   if [ -n "$ports" ]; then
     printf '%s\n' "$ports" | sed 's/^/    /'
   else
-    echo "    (sin puertos publicados)"
+    echo "    (no published ports)"
   fi
   echo "  config dir: ${config_dir}"
   echo "  mounts:"
   if [ -n "$mounts" ]; then
     printf '%s\n' "$mounts" | sed 's/^/    /'
   else
-    echo "    (sin mounts)"
+    echo "    (no mounts)"
   fi
 
   if [ -d "$config_dir" ]; then
     yaml_count="$(count_yaml "$config_dir")"
-    echo "  YAML:       ${yaml_count} archivo(s) en ${config_dir}"
+    echo "  YAML:       ${yaml_count} file(s) in ${config_dir}"
     local static_yml="${config_dir}/../traefik.yml"
     if [ -f "$static_yml" ]; then
       echo "  entrypoints:"
@@ -815,25 +815,25 @@ adopt() {
       awk '/^certificatesResolvers:/{f=1; next} f && /^[^[:space:]]/{f=0} f && /^  [^[:space:]]+:/{gsub(/^[[:space:]]+|:.*/,""); print "    " $0}' "$static_yml" 2>/dev/null || true
     fi
   else
-    echo "  YAML:       directorio no accesible desde este host"
+    echo "  YAML:       directory not accessible from this host"
   fi
 
   echo
-  echo "No se modificó ningún recurso."
+  echo "No resource was modified."
 }
 
 remove_named_lab_container() {
   local name="$1"
   if named_container_exists "$name"; then
     if ! named_container_is_lab "$name"; then
-      echo "aviso: el contenedor ${name} no tiene ${LAB_LABEL}; no se elimina" >&2
+      echo "warning: container ${name} does not have ${LAB_LABEL}; not deleting it" >&2
       return 1
     fi
-    info "eliminando contenedor ${name}"
+    info "deleting container ${name}"
     docker rm -f "$name" >/dev/null
     return 0
   fi
-  echo "contenedor ${name}: no existe"
+  echo "container ${name}: does not exist"
   return 1
 }
 
@@ -848,24 +848,24 @@ down() {
 
   if network_exists; then
     if [ "$(docker network inspect -f '{{index .Labels "com.spanel.lab"}}' "$LAB_NETWORK" 2>/dev/null || true)" != "true" ]; then
-      echo "aviso: la red ${LAB_NETWORK} no tiene ${LAB_LABEL}; no se elimina" >&2
+      echo "warning: network ${LAB_NETWORK} does not have ${LAB_LABEL}; not deleting it" >&2
     else
-      info "eliminando red ${LAB_NETWORK}"
+      info "deleting network ${LAB_NETWORK}"
       if ! docker network rm "$LAB_NETWORK" >/dev/null; then
-        echo "aviso: no se pudo eliminar la red ${LAB_NETWORK} (¿tiene contenedores conectados?)" >&2
+        echo "warning: could not delete network ${LAB_NETWORK} (does it have connected containers?)" >&2
       else
         removed=1
       fi
     fi
   else
-    echo "red ${LAB_NETWORK}: no existe"
+    echo "network ${LAB_NETWORK}: does not exist"
   fi
 
   if [ "$PURGE" = "1" ]; then
     purge_data
   else
-    echo "datos del laboratorio conservados en ${LAB_ROOT}"
-    [ "$removed" = "0" ] || echo "para borrarlos también: $0 down --purge"
+    echo "lab data preserved in ${LAB_ROOT}"
+    [ "$removed" = "0" ] || echo "to delete them too: $0 down --purge"
   fi
 }
 
@@ -887,22 +887,22 @@ purge_data() {
   fi
 
   if [ "${#paths[@]}" -eq 0 ] && [ -z "$volume" ]; then
-    echo "no hay datos del laboratorio que borrar"
+    echo "there is no lab data to delete"
     return 0
   fi
 
-  echo "Se borrarán únicamente datos propios del laboratorio:"
+  echo "Only the lab's own data will be deleted:"
   printf '  %s\n' "${paths[@]}"
-  [ -n "$volume" ] && echo "  volumen docker: ${volume}"
+  [ -n "$volume" ] && echo "  docker volume: ${volume}"
 
   if [ "$ASSUME_YES" != "1" ]; then
-    printf '¿Confirmás el borrado? [s/N] '
+    printf 'Confirm deletion? [y/N] '
     if ! read -r answer; then
       answer=""
     fi
     case "$answer" in
       s|S|y|Y) ;;
-      *) echo "cancelado: no se borró ningún dato"; return 0 ;;
+      *) echo "cancelled: no data was deleted"; return 0 ;;
     esac
   fi
 
@@ -910,13 +910,13 @@ purge_data() {
   for p in "${paths[@]}"; do
     case "$p" in
       "${LAB_ROOT}/"*) rm -rf -- "$p" ;;
-      *) fail "ruta inesperada fuera del laboratorio: $p (no se borra)" ;;
+      *) fail "unexpected path outside the lab: $p (not deleted)" ;;
     esac
   done
   if [ -n "$volume" ]; then
-    docker volume rm "$volume" >/dev/null 2>&1 || echo "aviso: no se pudo borrar el volumen ${volume}" >&2
+    docker volume rm "$volume" >/dev/null 2>&1 || echo "warning: could not delete volume ${volume}" >&2
   fi
-  echo "datos del laboratorio eliminados"
+  echo "lab data deleted"
 }
 
 # ---- argumentos -----------------------------------------------------------
@@ -929,7 +929,7 @@ fi
 case "$1" in
   -h|--help|help) usage; exit 0 ;;
   adopt|plan|up|status|down) MODE="$1"; shift ;;
-  *) fail "modo desconocido: $1 (usá --help)" ;;
+  *) fail "unknown mode: $1 (use --help)" ;;
 esac
 
 while [ "$#" -gt 0 ]; do
@@ -937,12 +937,12 @@ while [ "$#" -gt 0 ]; do
     --purge) PURGE=1; shift ;;
     --yes|-y) ASSUME_YES=1; shift ;;
     -h|--help) usage; exit 0 ;;
-    *) fail "opción desconocida para ${MODE}: $1 (usá --help)" ;;
+    *) fail "unknown option for ${MODE}: $1 (use --help)" ;;
   esac
 done
 
 if [ "$PURGE" = "1" ] && [ "$MODE" != "down" ]; then
-  fail "--purge solo tiene sentido con 'down'"
+  fail "--purge only makes sense with 'down'"
 fi
 
 case "$MODE" in

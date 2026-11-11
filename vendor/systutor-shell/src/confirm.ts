@@ -17,7 +17,7 @@ export const ConfirmContext = createContext<ConfirmContextType | null>(null);
 export function useConfirm(): ConfirmContextType {
   const ctx = useContext(ConfirmContext);
   if (!ctx) {
-    throw new Error("useConfirm debe usarse dentro de un ConsoleShell");
+    throw new Error("useConfirm must be used inside a ConsoleShell");
   }
   return ctx;
 }

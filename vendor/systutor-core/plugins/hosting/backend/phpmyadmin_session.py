@@ -21,7 +21,7 @@ from systutor.kernel.tenants.service import validate_user_branch_scope
 from .models import HostingSite
 
 COOKIE = "spanel_pma"
-MESSAGE = "La sesión de phpMyAdmin expiró; volvé a abrir phpMyAdmin"
+MESSAGE = "The phpMyAdmin session expired; reopen phpMyAdmin"
 _ticket_lock = threading.Lock()
 
 

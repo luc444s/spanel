@@ -39,14 +39,14 @@ def _as_command(value: object) -> tuple[str, ...]:
         return tuple(shlex.split(value))
     if isinstance(value, list) and all(isinstance(item, str) for item in value):
         return tuple(value)
-    raise AgentConfigError("Comando inválido en cert-agent.toml")
+    raise AgentConfigError("Invalid command in cert-agent.toml")
 
 
 def _as_path(value: object, default: Path | None = None) -> Path | None:
     if value is None or value == "":
         return default
     if not isinstance(value, str):
-        raise AgentConfigError("Ruta inválida en cert-agent.toml")
+        raise AgentConfigError("Invalid path in cert-agent.toml")
     return Path(value).expanduser()
 
 
@@ -91,7 +91,7 @@ class VerificationConfig:
     def require_ca(self) -> Path:
         if self.ca_file is None or not self.ca_file.is_file():
             raise AgentConfigError(
-                "Falta el bundle de CA para verificar TLS (verification.ca_file)"
+                "Missing CA bundle for TLS verification (verification.ca_file)"
             )
         return self.ca_file
 
@@ -116,7 +116,7 @@ class AlertConfig:
     def require_channel(self) -> None:
         if not self.configured():
             raise AgentConfigError(
-                "Falta canal de alertas externo (alerts.webhook_command o alerts.webhook_url)"
+                "Missing external alert channel (alerts.webhook_command or alerts.webhook_url)"
             )
 
 
@@ -144,18 +144,18 @@ class AgentConfig:
 
     def require_hostname(self, hostname: str) -> None:
         if hostname == self.default_name:
-            raise AgentConfigError("El certificado global no se regenera")
+            raise AgentConfigError("The global certificate is not regenerated")
         if hostname not in self.allowlist:
-            raise AgentConfigError(f"Hostname fuera de allowlist: {hostname}")
+            raise AgentConfigError(f"Hostname outside the allowlist: {hostname}")
 
     def require_reload_config(self) -> None:
         if not self.postfix.configured():
             raise AgentConfigError(
-                "Falta configuración de Postfix (sni_map_path, postmap_command y reload_command)"
+                "Missing Postfix configuration (sni_map_path, postmap_command and reload_command)"
             )
         if not self.dovecot.configured():
             raise AgentConfigError(
-                "Falta configuración de Dovecot (local_name_path y reload_command)"
+                "Missing Dovecot configuration (local_name_path and reload_command)"
             )
 
 
@@ -178,20 +178,20 @@ def load_config(
         try:
             raw = tomllib.loads(config_path.read_text(encoding="utf-8"))
         except (OSError, tomllib.TOMLDecodeError) as exc:
-            raise AgentConfigError(f"No se pudo leer {config_path}: {exc}") from exc
+            raise AgentConfigError(f"Could not read {config_path}: {exc}") from exc
 
     allowlist = raw.get("allowlist") or []
     env_allowlist = _env(environment, "SPANEL_CERT_ALLOWLIST")
     if env_allowlist:
         allowlist = [item.strip() for item in env_allowlist.split(",") if item.strip()]
     if not isinstance(allowlist, list):
-        raise AgentConfigError("allowlist debe ser una lista")
+        raise AgentConfigError("allowlist must be a list")
     normalized_allowlist: set[str] = set()
     for item in allowlist:
         try:
             normalized_allowlist.add(normalize_hostname(item))
         except CertificateValidationError as exc:
-            raise AgentConfigError(f"Hostname inválido en allowlist: {item}") from exc
+            raise AgentConfigError(f"Invalid hostname in allowlist: {item}") from exc
     allowlist = sorted(normalized_allowlist)
 
     certbot_raw = raw.get("certbot") if isinstance(raw.get("certbot"), dict) else {}
@@ -217,7 +217,7 @@ def load_config(
         ca_file=_as_path(pick(certbot_raw, "ca_file", "SPANEL_CERTBOT_CA_FILE", None)),
     )
     if certbot.challenge not in ("auto", "webroot", "dns-01"):
-        raise AgentConfigError("challenge debe ser auto, webroot o dns-01")
+        raise AgentConfigError("challenge must be auto, webroot or dns-01")
 
     postfix = PostfixConfig(
         sni_map_path=_as_path(
@@ -244,7 +244,7 @@ def load_config(
         try:
             parsed = int(raw_value)
         except (TypeError, ValueError) as exc:
-            raise AgentConfigError(f"{key} debe ser un entero") from exc
+            raise AgentConfigError(f"{key} must be an integer") from exc
         return parsed if parsed > 0 else default
 
     def float_value(section: dict, key: str, env_name: str, default: float) -> float:
@@ -252,20 +252,20 @@ def load_config(
         try:
             parsed = float(raw_value)
         except (TypeError, ValueError) as exc:
-            raise AgentConfigError(f"{key} debe ser un número") from exc
+            raise AgentConfigError(f"{key} must be a number") from exc
         return parsed if parsed > 0 else default
 
     ports_value = pick(verify_raw, "ports", "SPANEL_CERT_PROBE_PORTS", list(DEFAULT_PROBE_PORTS))
     if isinstance(ports_value, str):
         ports_value = [item.strip() for item in ports_value.split(",") if item.strip()]
     if not isinstance(ports_value, list) or not ports_value:
-        raise AgentConfigError("verification.ports debe ser una lista no vacía")
+        raise AgentConfigError("verification.ports must be a non-empty list")
     try:
         ports = tuple(int(item) for item in ports_value)
     except (TypeError, ValueError) as exc:
-        raise AgentConfigError("verification.ports debe contener puertos") from exc
+        raise AgentConfigError("verification.ports must contain ports") from exc
     if any(port < 1 or port > 65535 for port in ports):
-        raise AgentConfigError("verification.ports fuera de rango")
+        raise AgentConfigError("verification.ports out of range")
 
     ca_candidate = pick(verify_raw, "ca_file", "SPANEL_CERT_VERIFY_CA_FILE", None) or pick(
         certbot_raw, "ca_file", "SPANEL_CERTBOT_CA_FILE", None

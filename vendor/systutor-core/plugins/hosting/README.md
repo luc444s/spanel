@@ -1,5 +1,7 @@
 # WordPress Hosting
 
+English | [Español](README.es.md)
+
 A.SPEC 0013/0014. This plugin lets a tenant administrator see the WordPress sites
 that **their tenant owns**, list the users of one of those sites, and reset the
 password of exactly one user by numeric WordPress ID.
@@ -51,7 +53,7 @@ All three routes require the kernel `TenantContext`:
   `phpmyadmin`, `users`, `secrets/salts` and password reset answer
   `409 hosting_site_wrong_kind` on a static site.
 - `GET /api/v1/plugins/hosting/static-profiles` — `hosting.sites.read`; lists
-  the static profiles the selector of "crear sitio" consumes (A.SPEC 0042).
+  the static profiles the "create site" selector consumes (A.SPEC 0042).
   Responses carry the env variable NAMES, never their values.
 - `POST/PUT/DELETE /api/v1/plugins/hosting/static-profiles/{profile_id}` —
   `hosting.profiles.manage` (platform RBAC, no `is_superadmin`). Every change
@@ -92,16 +94,16 @@ tenant is indistinguishable from a missing site and returns 404.
 
 ## Configuration UI
 
-The site detail dialog has a `Configuración` action. It opens the editable
+The site detail dialog has a `Settings` action. It opens the editable
 environment and the names of the secrets; values are never shown. Without
 `hosting.sites.manage`, or on a site with `spanel.managed=false`, it is
 read-only. Saving sends only changed, non-empty values and recreates the
-container, so the dialog warns about the brief downtime. `Rotar claves de seguridad` asks for
+container, so the dialog warns about the brief downtime. `Rotate security keys` asks for
 confirmation first, because rotating the salts closes every WordPress session.
 
 ## Database access
 
-`Base de datos`, next to `Configuración` and visible only with
+`Database`, next to `Settings` and visible only with
 `hosting.sites.manage`, reveals the site's own WordPress database user and
 opens phpMyAdmin in a new same-origin tab. It is the credential the site already
 uses, so

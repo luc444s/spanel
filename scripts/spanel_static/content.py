@@ -20,7 +20,7 @@ FILES = ("index.html", "styles.css", "app.js")
 def template_path(name: str) -> Path:
     path = TEMPLATES / name
     if not path.is_file():
-        raise FileNotFoundError(f"falta la plantilla {path}")
+        raise FileNotFoundError(f"missing template {path}")
     return path
 
 

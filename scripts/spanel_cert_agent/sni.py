@@ -67,7 +67,7 @@ def _run(command: Sequence[str], runner) -> None:
     process = runner(list(command), None)
     if process.returncode != 0:
         detail = (process.stderr or process.stdout or b"").decode("utf-8", "replace").strip()
-        raise SniError(f"Falló {' '.join(command)}: {detail[:300]}")
+        raise SniError(f"Failed {' '.join(command)}: {detail[:300]}")
 
 
 def apply_sni(

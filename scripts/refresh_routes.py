@@ -55,23 +55,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         with factory() as db:
             applications = select_applications(db, args.application_id, args.slug)
             if not applications:
-                print("No hay aplicaciones que coincidan")
+                print("No applications match")
                 return 2
             for application in applications:
                 if args.dry_run:
-                    print(f"{application.slug}: se refrescarían sus rutas")
+                    print(f"{application.slug}: its routes would be refreshed")
                     continue
                 refresh_application_routes(
                     db, fastapi_app, application.tenant_id, application.id
                 )
-                print(f"{application.slug}: rutas refrescadas")
+                print(f"{application.slug}: routes refreshed")
         if args.restart_proxy and not args.dry_run:
             subprocess.run(
                 ["docker", "restart", args.proxy_container],
                 check=True,
                 stdout=subprocess.DEVNULL,
             )
-            print(f"{args.proxy_container}: reiniciado para reintentar ACME")
+            print(f"{args.proxy_container}: restarted to retry ACME")
         return 0
     except Exception as exc:  # noqa: BLE001 - mensaje operativo sin secretos
         print(f"refresh_routes: {exc}", file=sys.stderr)

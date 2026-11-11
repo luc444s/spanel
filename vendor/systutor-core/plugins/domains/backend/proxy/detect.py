@@ -54,7 +54,7 @@ def _run(runner, argv: Sequence[str]):
     try:
         return runner.run(list(argv))
     except OSError as exc:
-        raise ProxyError(f"docker no está disponible: {exc}", EXIT_TRANSPORT) from exc
+        raise ProxyError(f"docker is not available: {exc}", EXIT_TRANSPORT) from exc
 
 
 # ---- lectura del daemon ----------------------------------------------------
@@ -86,7 +86,7 @@ def choose_container(rows: Sequence[tuple[str, str]], override: str | None) -> s
     )
     if not candidates:
         raise ProxyError(
-            "no se encontró un contenedor Traefik; definí SPANEL_PROXY_TRAEFIK_CONTAINER",
+            "no Traefik container found; set SPANEL_PROXY_TRAEFIK_CONTAINER",
             EXIT_TRANSPORT,
         )
     if len(candidates) == 1:
@@ -95,8 +95,8 @@ def choose_container(rows: Sequence[tuple[str, str]], override: str | None) -> s
         if preference in candidates:
             return preference
     raise ProxyError(
-        "contenedores Traefik ambiguos: "
-        f"{', '.join(candidates)}; definí SPANEL_PROXY_TRAEFIK_CONTAINER",
+        "ambiguous Traefik containers: "
+        f"{', '.join(candidates)}; set SPANEL_PROXY_TRAEFIK_CONTAINER",
         EXIT_TRANSPORT,
     )
 
@@ -107,7 +107,7 @@ def discover_container(runner, override: str | None) -> str:
     result = _run(runner, ["docker", "ps", "--format", "{{.Names}}\t{{.Image}}"])
     if not result.ok:
         raise ProxyError(
-            f"docker ps falló: {result.text().strip() or 'sin detalle'}", EXIT_TRANSPORT
+            f"docker ps failed: {result.text().strip() or 'no details'}", EXIT_TRANSPORT
         )
     return choose_container(parse_ps(result.stdout), None)
 
@@ -172,14 +172,14 @@ def container_mounts(runner, container: str) -> list[dict]:
     )
     if not result.ok:
         raise ProxyError(
-            f"no se pudieron leer los mounts de {container}: {result.text().strip()}",
+            f"could not read mounts for {container}: {result.text().strip()}",
             EXIT_TRANSPORT,
         )
     try:
         data = json.loads(result.stdout or "[]")
     except json.JSONDecodeError as exc:
         raise ProxyError(
-            f"mounts ilegibles de {container}: {exc}", EXIT_TRANSPORT
+            f"unreadable mounts for {container}: {exc}", EXIT_TRANSPORT
         ) from exc
     return [item for item in data if isinstance(item, dict)] if isinstance(data, list) else []
 
@@ -193,19 +193,19 @@ def destination_mount(mounts: Sequence[dict], destination: str) -> dict:
     ]
     if not matches:
         raise ProxyError(
-            f"no hay mount en {target} dentro del contenedor; "
-            "definí SPANEL_PROXY_CONFIG_DIR con la ruta dentro de Traefik",
+            f"no mount at {target} inside the container; "
+            "set SPANEL_PROXY_CONFIG_DIR to the path inside Traefik",
             EXIT_TRANSPORT,
         )
     if len(matches) > 1:
         raise ProxyError(
-            f"hay más de un mount en {target}; "
-            "definí SPANEL_PROXY_CONFIG_DIR con la ruta dentro de Traefik",
+            f"more than one mount at {target}; "
+            "set SPANEL_PROXY_CONFIG_DIR to the path inside Traefik",
             EXIT_TRANSPORT,
         )
     mount = matches[0]
     if mount.get("RW") is False:
-        raise ProxyError(f"el mount en {target} es de solo lectura", EXIT_TRANSPORT)
+        raise ProxyError(f"the mount at {target} is read-only", EXIT_TRANSPORT)
     return mount
 
 
@@ -280,7 +280,7 @@ def detect_profile(
     if override:
         if override not in PROFILES:
             raise ProxyError(
-                f"perfil inválido: {override} (usá {' o '.join(PROFILES)})",
+                f"invalid profile: {override} (use {' or '.join(PROFILES)})",
                 EXIT_VALIDATION,
             )
         return override
@@ -301,15 +301,15 @@ def detect_resolver(profile: str, env: Mapping[str, str]) -> str:
 
 def _local_viable(settings: Settings) -> tuple[bool, str]:
     if not settings.config_dir_override:
-        return False, "SPANEL_PROXY_CONFIG_DIR no definido"
+        return False, "SPANEL_PROXY_CONFIG_DIR is not set"
     target = settings.config_dir
     if target.is_dir() and os.access(target, os.W_OK):
-        return True, f"{target} escribible"
+        return True, f"{target} is writable"
     parent = target.parent
     if parent.is_dir() and os.access(parent, os.W_OK):
         # atomic_write crea el directorio; el padre escribible alcanza.
-        return True, f"{target} se creará en {parent}"
-    return False, f"{target} no existe ni es escribible"
+        return True, f"{target} will be created in {parent}"
+    return False, f"{target} does not exist and is not writable"
 
 
 def _local(settings: Settings, reason: str) -> Detection:
@@ -342,12 +342,12 @@ def detect_docker(
     """Detecta el Traefik, su file provider y cómo sondearlo. Sólo lecturas."""
     env = os.environ if env is None else env
     if not docker_available(runner):
-        raise ProxyError("docker no responde", EXIT_TRANSPORT)
+        raise ProxyError("docker is not responding", EXIT_TRANSPORT)
 
     container = discover_container(runner, settings.traefik_container_override)
     if not container_running(runner, container):
         raise ProxyError(
-            f"el contenedor {container} no está running", EXIT_TRANSPORT
+            f"container {container} is not running", EXIT_TRANSPORT
         )
 
     static_text = read_static_config(runner, container)
@@ -360,7 +360,7 @@ def detect_docker(
     destination = normalize_dir(mount.get("Destination") or destination)
     if not writable_dir(runner, container, destination):
         raise ProxyError(
-            f"el directorio {destination} dentro de {container} no es escribible",
+            f"directory {destination} inside {container} is not writable",
             EXIT_TRANSPORT,
         )
 
@@ -375,7 +375,7 @@ def detect_docker(
 
     if shared:
         probe_host, probe_port = container, 443
-        probe_reason = f"red compartida con {container}"
+        probe_reason = f"shared network with {container}"
     elif settings.probe_address:
         probe_host = settings.probe_address
         probe_port = published_port(runner, container) or settings.fallback_https_port
@@ -384,22 +384,22 @@ def detect_docker(
         published = published_port(runner, container)
         if not published:
             probe_host, probe_port = None, None
-            probe_reason = "sin red compartida ni puerto 443"
+            probe_reason = "no shared network and no port 443"
         elif own and (gateway := container_gateway(runner, own)):
             # El proceso vive en un contenedor sin red compartida: 127.0.0.1
             # sería él mismo. El gateway del propio contenedor es el host.
             probe_host, probe_port = gateway, published
-            probe_reason = f"gateway {gateway} y puerto publicado {published}"
+            probe_reason = f"gateway {gateway} and published port {published}"
         elif own:
             probe_host, probe_port = None, None
-            probe_reason = "contenedor sin red compartida ni gateway alcanzable"
+            probe_reason = "container with no shared network and no reachable gateway"
         else:
             probe_host, probe_port = "127.0.0.1", published
-            probe_reason = f"puerto publicado {published}"
+            probe_reason = f"published port {published}"
 
-    reason = f"contenedor {container}, {destination} escribible"
+    reason = f"container {container}, {destination} is writable"
     if not shared:
-        reason = f"{reason}; sondeo por {probe_reason}"
+        reason = f"{reason}; probing via {probe_reason}"
     return Detection(
         transport="docker",
         reason=reason,
@@ -430,19 +430,19 @@ def select_transport(
     if mode == "ssh":
         if not settings.ssh_host:
             raise ProxyError(
-                "transporte ssh forzado pero falta SPANEL_PROXY_SSH_HOST",
+                "ssh transport forced but SPANEL_PROXY_SSH_HOST is missing",
                 EXIT_TRANSPORT,
             )
-        return _ssh(settings, "SPANEL_PROXY_SSH_HOST definido")
+        return _ssh(settings, "SPANEL_PROXY_SSH_HOST is set")
     if mode == "local":
-        return _local(settings, f"modo local forzado ({settings.config_dir})")
+        return _local(settings, f"local mode forced ({settings.config_dir})")
     if mode == "docker":
         return detect_docker(settings, runner, env)
 
     checks: list[str] = []
     if settings.ssh_host:
-        return _ssh(settings, "SPANEL_PROXY_SSH_HOST definido")
-    checks.append("ssh: SPANEL_PROXY_SSH_HOST no definido")
+        return _ssh(settings, "SPANEL_PROXY_SSH_HOST is set")
+    checks.append("ssh: SPANEL_PROXY_SSH_HOST is not set")
 
     try:
         return detect_docker(settings, runner, env)
@@ -455,6 +455,6 @@ def select_transport(
     checks.append(f"local: {detail}")
 
     raise ProxyError(
-        "no hay transporte de proxy disponible (" + "; ".join(checks) + ")",
+        "no proxy transport is available (" + "; ".join(checks) + ")",
         EXIT_TRANSPORT,
     )

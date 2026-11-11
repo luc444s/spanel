@@ -60,23 +60,23 @@ export function PluginsView() {
     <Card>
       <CardHeader>
         <CardTitle>Plugins</CardTitle>
-        <CardDescription>Ciclo de vida del plugin runtime</CardDescription>
+        <CardDescription>Plugin runtime lifecycle</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {error && <Alert title="Error">{error}</Alert>}
         {loading ? (
-          <p className="text-sm text-muted-foreground">Cargando…</p>
+          <p className="text-sm text-muted-foreground">Loading…</p>
         ) : plugins.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Sin plugins descubiertos.</p>
+          <p className="text-sm text-muted-foreground">No plugins discovered.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-muted-foreground">
                   <th className="py-2 pr-4 font-medium">Plugin</th>
-                  <th className="py-2 pr-4 font-medium">Versión</th>
-                  <th className="py-2 pr-4 font-medium">Estado</th>
-                  <th className="py-2 font-medium">Acciones</th>
+                  <th className="py-2 pr-4 font-medium">Version</th>
+                  <th className="py-2 pr-4 font-medium">Status</th>
+                  <th className="py-2 font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>

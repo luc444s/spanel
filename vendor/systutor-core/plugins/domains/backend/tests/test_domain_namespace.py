@@ -292,7 +292,7 @@ def test_check_other_tenant_owner_is_unavailable() -> None:
     result = service.check_domain(_context(), "other.com")
 
     assert result.available is False
-    assert "otro tenant" in (result.reason or "")
+    assert "another tenant" in (result.reason or "")
 
 
 def test_check_primary_mentions_container() -> None:

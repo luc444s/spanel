@@ -36,10 +36,10 @@ describe("Apps GitHub card state", () => {
   it("renders exactly one error surface and no disconnected label on error", () => {
     const error = githubCardContent("error");
     expect(error.label).toBeNull();
-    expect(error.alert).toBe("No se pudo leer el estado de GitHub");
-    expect(error.alert).not.toContain("Sin conexión");
+    expect(error.alert).toBe("Could not read GitHub status");
+    expect(error.alert).not.toContain("Not connected");
     const disconnected = githubCardContent("unconfigured");
-    expect(disconnected.label).toBe("Sin conexión");
+    expect(disconnected.label).toBe("Not connected");
     expect(disconnected.alert).toBeNull();
     for (const state of ["loading", "registering", "pending_installation", "syncing", "connected", "suspended"] as const) {
       expect(githubCardContent(state).alert).toBeNull();

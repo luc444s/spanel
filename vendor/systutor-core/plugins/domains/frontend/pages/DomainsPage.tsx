@@ -18,14 +18,15 @@ import { Button } from "@systutor/shell/ui/button";
 import { Dialog } from "@systutor/shell/ui/dialog";
 import { Input } from "@systutor/shell/ui/input";
 import { toast } from "@systutor/shell/ui/toast";
+import { t } from "@/i18n";
 
 const RESERVAR = "";
 
 function certificateLabel(info: CertificateInfo | undefined) {
-  if (!info) return "Sin datos";
-  if (info.state === "active" && info.verified) return "Válido";
-  if (info.state === "pending_dns") return "Sin DNS";
-  return "Pendiente";
+  if (!info) return t("No data");
+  if (info.state === "active" && info.verified) return t("Valid");
+  if (info.state === "pending_dns") return t("No DNS");
+  return t("Pending");
 }
 
 function certificateTone(info: CertificateInfo | undefined) {
@@ -46,8 +47,8 @@ function CertificateCell({ domain, published }: { domain: string; published: boo
   // Un dominio reservado no tiene ruta ni certificado: no se consulta la red.
   if (!published) {
     return (
-      <span className="text-sm text-muted-foreground" title="Dominio reservado sin publicar">
-        Sin publicar
+      <span className="text-sm text-muted-foreground" title={t("Reserved domain, not published")}>
+        {t("Not published")}
       </span>
     );
   }
@@ -55,7 +56,7 @@ function CertificateCell({ domain, published }: { domain: string; published: boo
   const info = query.data;
   const tooltip = info
     ? [info.issuer, info.not_after, info.error].filter(Boolean).join(" · ")
-    : "Todavía no se verificó";
+    : t("Not verified yet");
 
   return (
     <div className="flex items-center gap-2">
@@ -69,7 +70,7 @@ function CertificateCell({ domain, published }: { domain: string; published: boo
         onClick={() => void query.refetch()}
         disabled={query.isFetching}
       >
-        {query.isFetching ? "..." : "Verificar"}
+        {query.isFetching ? "..." : t("Verify")}
       </Button>
     </div>
   );
@@ -121,7 +122,7 @@ export default function DomainsPage() {
   const createMutation = useMutation({
     mutationFn: createDomain,
     onSuccess: () => {
-      toast.success("Dominio agregado");
+      toast.success(t("Domain added"));
       void queryClient.invalidateQueries({ queryKey: domainsKeys.list });
       setAddOpen(false);
       setDomain("");
@@ -137,7 +138,7 @@ export default function DomainsPage() {
         www: payload.www,
       }),
     onSuccess: () => {
-      toast.success("Dominio vinculado");
+      toast.success(t("Domain linked"));
       void queryClient.invalidateQueries({ queryKey: domainsKeys.list });
       setLinking(null);
     },
@@ -147,7 +148,7 @@ export default function DomainsPage() {
   const removeMutation = useMutation({
     mutationFn: removeDomain,
     onSuccess: () => {
-      toast.success("Dominio quitado");
+      toast.success(t("Domain removed"));
       void queryClient.invalidateQueries({ queryKey: domainsKeys.list });
       setRemoving(null);
     },
@@ -182,47 +183,47 @@ export default function DomainsPage() {
     <section className="space-y-4 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-lg font-semibold text-foreground">Dominios</h1>
+          <h1 className="text-lg font-semibold text-foreground">{t("Domains")}</h1>
         </div>
-        {canManage && <Button size="sm" onClick={openAdd}>Agregar dominio</Button>}
+        {canManage && <Button size="sm" onClick={openAdd}>{t("Add domain")}</Button>}
       </div>
 
       {domainsQuery.isError && (
-        <Alert title="No se pudieron cargar los dominios">
+        <Alert title={t("Could not load domains")}>
           {(domainsQuery.error as Error).message}
         </Alert>
       )}
 
       {domainsQuery.data && domainsQuery.data.proxy_available === false && (
-        <Alert title="El proxy no responde">
+        <Alert title={t("The proxy is not responding")}>
           {domainsQuery.data.proxy_error ??
-            "Se muestran solo los dominios con propiedad registrada; faltan las rutas publicadas."}
+            t("Only domains with registered ownership are shown; published routes are missing.")}
         </Alert>
       )}
 
       {domainsQuery.isLoading ? (
-        <p className="text-sm text-muted-foreground">Cargando dominios...</p>
+        <p className="text-sm text-muted-foreground">{t("Loading domains...")}</p>
       ) : items.length === 0 ? (
         <p
           className="rounded-md border border-border bg-card px-3 py-4 text-sm
             text-muted-foreground"
         >
           {sites.length === 0
-            ? "Todavía no hay dominios. Podés reservar uno sin sitio y vincularlo después."
-            : "Todavía no hay dominios. Agregá uno para publicarlo en este tenant."}
+            ? t("No domains yet. You can reserve one without a site and link it later.")
+            : t("No domains yet. Add one to publish it in this tenant.")}
         </p>
       ) : (
         <div className="overflow-x-auto rounded-md border border-border">
           <table className="w-full min-w-[760px] border-collapse text-sm">
             <thead className="bg-muted text-left text-xs uppercase text-muted-foreground">
               <tr>
-                <th className="px-3 py-2">Dominio</th>
-                <th className="px-3 py-2">Sitio</th>
-                <th className="px-3 py-2">Estado</th>
-                <th className="px-3 py-2">Dueño</th>
-                <th className="px-3 py-2">Certificado</th>
-                {canReadMail && <th className="px-3 py-2">Buzones</th>}
-                <th className="px-3 py-2 text-right">Acciones</th>
+                <th className="px-3 py-2">{t("Domain")}</th>
+                <th className="px-3 py-2">{t("Site")}</th>
+                <th className="px-3 py-2">{t("Status")}</th>
+                <th className="px-3 py-2">{t("Owner")}</th>
+                <th className="px-3 py-2">{t("Certificate")}</th>
+                {canReadMail && <th className="px-3 py-2">{t("Mailboxes")}</th>}
+                <th className="px-3 py-2 text-right">{t("Actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -238,7 +239,7 @@ export default function DomainsPage() {
                           className="ml-2 rounded bg-red-100 px-1.5 py-0.5 text-xs
                             text-red-700"
                         >
-                          Dos dueños
+                          {t("Two owners")}
                         </span>
                       )}
                     </td>
@@ -247,20 +248,20 @@ export default function DomainsPage() {
                     </td>
                     <td className="px-3 py-2">
                       {published ? (
-                        <span className="text-muted-foreground">Publicado</span>
+                        <span className="text-muted-foreground">{t("Published")}</span>
                       ) : (
-                        <span className="text-amber-600">Sin publicar</span>
+                        <span className="text-amber-600">{t("Not published")}</span>
                       )}
                     </td>
                     <td className="px-3 py-2">
                       {item.owner === "hosting" ? (
-                        <span className="text-muted-foreground" title="Gestionado por Hosting">
-                          Hosting 🔒
+                        <span className="text-muted-foreground" title={t("Managed by Hosting")}>
+                          {t("Hosting")} 🔒
                         </span>
                       ) : published ? (
-                        <span className="text-foreground">Extra</span>
+                        <span className="text-foreground">{t("Extra")}</span>
                       ) : (
-                        <span className="text-foreground">Dominio</span>
+                        <span className="text-foreground">{t("Domain")}</span>
                       )}
                     </td>
                     <td className="px-3 py-2">
@@ -272,7 +273,7 @@ export default function DomainsPage() {
                         title={
                           mailQuery.data && mailQuery.data.domain !== "all" &&
                           item.domain.toLowerCase() !== mailQuery.data.domain.toLowerCase()
-                            ? "El correo también existe en dominios del tenant"
+                            ? t("Mail also exists in tenant domains")
                             : undefined
                         }
                       >
@@ -292,7 +293,7 @@ export default function DomainsPage() {
                               size="sm"
                               onClick={() => openLink(item)}
                             >
-                              Vincular
+                              {t("Link")}
                             </Button>
                           )}
                           <Button
@@ -300,7 +301,7 @@ export default function DomainsPage() {
                             size="sm"
                             onClick={() => setRemoving(item)}
                           >
-                            Quitar
+                            {t("Remove")}
                           </Button>
                         </span>
                       )}
@@ -310,7 +311,7 @@ export default function DomainsPage() {
                           size="sm"
                           onClick={() => setRemoving(item)}
                         >
-                          Quitar extra
+                          {t("Remove extra")}
                         </Button>
                       )}
                     </td>
@@ -322,25 +323,25 @@ export default function DomainsPage() {
         </div>
       )}
 
-      <Dialog open={addOpen} title="Agregar dominio" onClose={() => setAddOpen(false)}>
+      <Dialog open={addOpen} title={t("Add domain")} onClose={() => setAddOpen(false)}>
         <form className="space-y-3" onSubmit={submit}>
           <label className="block space-y-1 text-sm text-foreground">
-            <span>Dominio</span>
+            <span>{t("Domain")}</span>
             <Input
               value={domain}
               onChange={(event) => setDomain(event.target.value)}
-              placeholder="ejemplo.com"
+              placeholder={t("example.com")}
               autoFocus
             />
           </label>
           <label className="block space-y-1 text-sm text-foreground">
-            <span>Destino</span>
+            <span>{t("Destination")}</span>
             <select
               className="w-full rounded-md border border-input bg-background px-2 py-2 text-sm"
               value={siteId}
               onChange={(event) => setSiteId(event.target.value)}
             >
-              <option value={RESERVAR}>Solo reservar (sin publicar)</option>
+              <option value={RESERVAR}>{t("Reserve only (do not publish)")}</option>
               {sites.map((site) => (
                 <option key={site.site_id} value={site.site_id}>
                   {site.container}
@@ -350,8 +351,8 @@ export default function DomainsPage() {
             </select>
             <span className="text-xs text-muted-foreground">
               {selectedSite
-                ? `El dominio se publicará en ${selectedSite.container}. Se creará la ruta en Traefik y se solicitará el certificado.`
-                : "Reserva el dominio para este tenant. No se publica en Traefik ni se emite certificado hasta que lo vincules a un sitio."}
+                ? t("The domain will be published on {container}. The Traefik route will be created and the certificate requested.", { container: selectedSite.container })
+                : t("Reserve the domain for this tenant. It is not published in Traefik and no certificate is issued until you link it to a site.")}
             </span>
           </label>
           <label className="flex items-center gap-2 text-sm text-foreground">
@@ -360,9 +361,9 @@ export default function DomainsPage() {
               checked={www}
               onChange={(event) => setWww(event.target.checked)}
             />
-            <span>Agregar también www.{domain.trim() || "dominio"}</span>
+            <span>{t("Also add www.{domain}", { domain: domain.trim() || t("domain") })}</span>
           </label>
-          {formError && <Alert title="No se pudo agregar">{formError}</Alert>}
+          {formError && <Alert title={t("Could not add")}>{formError}</Alert>}
           <div className="flex justify-end gap-2">
             <Button
               type="button"
@@ -370,10 +371,10 @@ export default function DomainsPage() {
               size="sm"
               onClick={() => setAddOpen(false)}
             >
-              Cancelar
+              {t("Cancel")}
             </Button>
             <Button type="submit" size="sm" disabled={createMutation.isPending}>
-              Agregar
+              {t("Add")}
             </Button>
           </div>
         </form>
@@ -381,15 +382,15 @@ export default function DomainsPage() {
 
       <Dialog
         open={Boolean(linking)}
-        title="Vincular dominio"
+        title={t("Link domain")}
         description={linking?.domain}
         onClose={() => setLinking(null)}
       >
         <p className="text-sm text-muted-foreground">
-          El dominio se publicará en {linkTarget?.container ?? "el sitio elegido"}.
+          {t("The domain will be published on {container}.", { container: linkTarget?.container ?? t("the chosen site") })}
         </p>
         <label className="mt-3 block space-y-1 text-sm text-foreground">
-          <span>Sitio</span>
+          <span>{t("Site")}</span>
           <select
             className="w-full rounded-md border border-input bg-background px-2 py-2 text-sm"
             value={linkTarget?.site_id ?? ""}
@@ -409,11 +410,11 @@ export default function DomainsPage() {
             checked={www}
             onChange={(event) => setWww(event.target.checked)}
           />
-          <span>Agregar también www.{linking?.domain ?? "dominio"}</span>
+          <span>{t("Also add www.{domain}", { domain: linking?.domain ?? t("domain") })}</span>
         </label>
         <div className="mt-4 flex justify-end gap-2">
           <Button variant="secondary" size="sm" onClick={() => setLinking(null)}>
-            Cancelar
+            {t("Cancel")}
           </Button>
           <Button
             size="sm"
@@ -428,32 +429,32 @@ export default function DomainsPage() {
                 })
             }
           >
-            Vincular
+            {t("Link")}
           </Button>
         </div>
       </Dialog>
 
       <Dialog
         open={Boolean(removing)}
-        title="Quitar dominio"
+        title={t("Remove domain")}
         description={removing?.domain}
         onClose={() => setRemoving(null)}
       >
         <p className="text-sm text-muted-foreground">
           {(removing?.published ?? true)
-            ? "Se elimina la ruta del proxy. El sitio y su dominio primario no cambian."
-            : "Se libera la reserva del dominio. No hay ruta publicada ni certificado."}
+            ? t("The proxy route is removed. The site and its primary domain are unchanged.")
+            : t("The domain reservation is released. There is no published route or certificate.")}
         </p>
         <div className="mt-4 flex justify-end gap-2">
           <Button variant="secondary" size="sm" onClick={() => setRemoving(null)}>
-            Cancelar
+            {t("Cancel")}
           </Button>
           <Button
             size="sm"
             disabled={removeMutation.isPending}
             onClick={() => removing && removeMutation.mutate(removing.domain)}
           >
-            Quitar
+            {t("Remove")}
           </Button>
         </div>
       </Dialog>

@@ -32,13 +32,13 @@ def _validate(entries: list[tuple[str, str]]) -> dict[str, str]:
         name = str(raw_name)
         value = str(raw_value)
         if not _NAME.fullmatch(name):
-            raise _invalid(f"Nombre de variable inválido: {name}")
+            raise _invalid(f"Invalid variable name: {name}")
         if name in MANAGED_DATABASE_NAMES:
-            raise _invalid(f"Apps administra la variable {name}")
+            raise _invalid(f"Apps manages the variable {name}")
         if name in values:
-            raise _invalid(f"Variable duplicada: {name}")
+            raise _invalid(f"Duplicate variable: {name}")
         if any(character in value for character in "\x00\r\n") or len(value) > 8192:
-            raise _invalid(f"Valor inválido para {name}")
+            raise _invalid(f"Invalid value for {name}")
         values[name] = value
     return values
 
@@ -55,7 +55,7 @@ def saved_tenant_environment(
     if all(value is None for value in encrypted):
         return []
     if any(value is None for value in encrypted):
-        raise _invalid("Las variables guardadas están incompletas")
+        raise _invalid("The stored variables are incomplete")
     try:
         plaintext = cipher.decrypt_scoped(
             _PURPOSE,
@@ -65,12 +65,12 @@ def saved_tenant_environment(
         )
         values = json.loads(plaintext)
     except Exception as exc:
-        raise _invalid("Las variables guardadas no se pueden descifrar") from exc
+        raise _invalid("The stored variables cannot be decrypted") from exc
     if not isinstance(values, dict) or not all(
         isinstance(name, str) and isinstance(value, str)
         for name, value in values.items()
     ):
-        raise _invalid("Las variables guardadas son inválidas")
+        raise _invalid("The stored variables are invalid")
     return list(values.items())
 
 

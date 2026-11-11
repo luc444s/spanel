@@ -98,12 +98,12 @@ def init_cache(redis_url: str | None = None) -> CacheBackend:
     if redis_url:
         try:
             _cache = RedisCacheBackend(redis_url)
-            logger.info("cache: usando RedisCacheBackend")
+            logger.info("cache: using RedisCacheBackend")
             return _cache
         except Exception as exc:
-            logger.warning("cache: Redis no disponible (%s), usando MemoryCacheBackend", exc)
+            logger.warning("cache: Redis unavailable (%s), using MemoryCacheBackend", exc)
     _cache = MemoryCacheBackend()
-    logger.info("cache: usando MemoryCacheBackend")
+    logger.info("cache: using MemoryCacheBackend")
     return _cache
 
 

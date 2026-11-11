@@ -135,26 +135,26 @@ export function UsersView() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div className="space-y-1">
-            <CardTitle>Usuarios</CardTitle>
-            <CardDescription>Cuentas del tenant</CardDescription>
+            <CardTitle>Users</CardTitle>
+            <CardDescription>Tenant accounts</CardDescription>
           </div>
-          <Button onClick={openCreate}>Nuevo usuario</Button>
+          <Button onClick={openCreate}>New user</Button>
         </CardHeader>
         <CardContent className="space-y-4">
           {error && <Alert title="Error">{error}</Alert>}
           {loading ? (
-            <p className="text-sm text-muted-foreground">Cargando…</p>
+            <p className="text-sm text-muted-foreground">Loading…</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border text-left text-muted-foreground">
-                    <th className="py-2 pr-4 font-medium">Nombre</th>
+                    <th className="py-2 pr-4 font-medium">Name</th>
                     <th className="py-2 pr-4 font-medium">Email</th>
-                    <th className="py-2 pr-4 font-medium">Categoría</th>
+                    <th className="py-2 pr-4 font-medium">Category</th>
                     <th className="py-2 pr-4 font-medium">Roles</th>
-                    <th className="py-2 pr-4 font-medium">Estado</th>
-                    <th className="py-2 font-medium">Acciones</th>
+                    <th className="py-2 pr-4 font-medium">Status</th>
+                    <th className="py-2 font-medium">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -206,7 +206,7 @@ export function UsersView() {
 
       <Dialog
         open={creating || editing !== null}
-        title={creating ? "Nuevo usuario" : "Editar usuario"}
+        title={creating ? "New user" : "Edit user"}
         onClose={() => {
           setCreating(false);
           setEditing(null);
@@ -221,10 +221,10 @@ export function UsersView() {
                 setEditing(null);
               }}
             >
-              Cancelar
+              Cancel
             </Button>
             <Button type="submit" form="user-form" disabled={busy === "form"}>
-              Guardar
+              Save
             </Button>
           </div>
         }
@@ -233,7 +233,7 @@ export function UsersView() {
           {error && <Alert title="Error">{error}</Alert>}
           <div className="grid gap-4 md:grid-cols-2">
             <label className="block space-y-2 text-sm text-foreground">
-              <span>Nombre</span>
+              <span>Name</span>
               <Input
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -250,7 +250,7 @@ export function UsersView() {
             </label>
           </div>
           <label className="block space-y-2 text-sm text-foreground">
-            <span>{creating ? "Password" : "Nuevo password (opcional)"}</span>
+            <span>{creating ? "Password" : "New password (optional)"}</span>
             <Input
               type="password"
               value={form.password}
@@ -259,12 +259,12 @@ export function UsersView() {
             />
           </label>
           <label className="block space-y-2 text-sm text-foreground">
-            <span>Categoría</span>
+            <span>Category</span>
             <Select
               value={form.category ?? ""}
               onChange={(value) => setForm({ ...form, category: value || null })}
               options={categories.map((c) => ({ value: c.value, label: c.label }))}
-              placeholder="Sin categoría"
+              placeholder="No category"
             />
           </label>
           <fieldset className="space-y-2 text-sm">

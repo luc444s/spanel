@@ -7,6 +7,8 @@ import { Dialog } from "@systutor/shell/ui/dialog";
 import { Input } from "@systutor/shell/ui/input";
 import { toast } from "@systutor/shell/ui/toast";
 
+import { useT } from "@/i18n/use-i18n";
+
 import {
   exportHostingBackup,
   hostingKeys,
@@ -30,6 +32,7 @@ function errorMessage(error: unknown, fallback: string) {
 
 /** Backup actions and their overlay dialogs for one owned, manageable site. */
 export function BackupDialogs({ site }: BackupDialogsProps) {
+  const t = useT();
   const queryClient = useQueryClient();
   const [exportOpen, setExportOpen] = useState(false);
   const [exportPending, setExportPending] = useState(false);
@@ -44,6 +47,7 @@ export function BackupDialogs({ site }: BackupDialogsProps) {
   const running = site.status === "running";
   const validFile = Boolean(file?.name.toLowerCase().endsWith(".zip"));
   const canImport = validFile && confirmation === site.container_name && !importPending;
+  const filesExtra = site.kind === "wordpress" ? t(" and the database") : "";
 
   function closeExport() {
     exportGeneration.current += 1;
@@ -68,7 +72,7 @@ export function BackupDialogs({ site }: BackupDialogsProps) {
       });
     } catch (error) {
       if (generation === exportGeneration.current) {
-        setExportError(errorMessage(error, "No se pudo generar el respaldo."));
+        setExportError(errorMessage(error, t("Could not generate the backup.")));
       }
     } finally {
       setExportPending(false);
@@ -79,9 +83,9 @@ export function BackupDialogs({ site }: BackupDialogsProps) {
     if (!exportLink) return;
     try {
       await navigator.clipboard.writeText(exportLink.url);
-      toast.success("Enlace copiado");
+      toast.success(t("Link copied"));
     } catch {
-      toast.error("No se pudo copiar el enlace");
+      toast.error(t("Could not copy the link"));
     }
   }
 
@@ -103,9 +107,9 @@ export function BackupDialogs({ site }: BackupDialogsProps) {
       })
       .finally(() => setImportPending(false));
     toast.promise(task, {
-      loading: "Restaurando respaldo…",
-      success: "Respaldo restaurado",
-      error: (error: Error) => error.message || "No se pudo restaurar el respaldo",
+      loading: t("Restoring backup…"),
+      success: t("Backup restored"),
+      error: (error: Error) => error.message || t("Could not restore the backup"),
     });
     void task.catch(() => undefined);
   }
@@ -118,7 +122,7 @@ export function BackupDialogs({ site }: BackupDialogsProps) {
         disabled={!running || importPending}
         onClick={() => setImportOpen(true)}
       >
-        Importar
+        {t("Import")}
       </Button>
       <Button
         type="button"
@@ -126,52 +130,52 @@ export function BackupDialogs({ site }: BackupDialogsProps) {
         disabled={!running || exportPending}
         onClick={() => setExportOpen(true)}
       >
-        Exportar
+        {t("Export")}
       </Button>
 
       <Dialog
         open={exportOpen}
-        title={`Exportar respaldo de ${site.container_name}`}
-        description={site.domain ?? "Sin dominio"}
+        title={t("Export backup of {site}", { site: site.container_name })}
+        description={site.domain ?? t("No domain")}
         onClose={closeExport}
         zIndexClassName="z-[1100]"
         maxWidthClassName="max-w-xl"
       >
         <div className="space-y-4">
-          <Alert title="Enlace temporal de una sola descarga">
-            El ZIP incluye los archivos{site.kind === "wordpress" ? " y la base de datos" : ""}.
-            Cualquiera que tenga el enlace puede descargarlo. El enlace expira, funciona una sola
-            vez y una vista previa o bot puede consumirlo antes que vos.
+          <Alert title={t("Temporary single-download link")}>
+            {t("The ZIP includes the files{extra}. Anyone with the link can download it. The link expires, works only once, and a preview or bot may consume it before you.", { extra: filesExtra })}
           </Alert>
-          {exportError ? <Alert title="No se pudo exportar">{exportError}</Alert> : null}
+          {exportError ? <Alert title={t("Could not export")}>{exportError}</Alert> : null}
           {exportLink ? (
             <div className="space-y-3">
               <p className="text-sm text-foreground">
-                <span className="font-medium">{exportLink.filename}</span> · expira en {exportLink.expiresIn}
-                segundos
+                {t("{filename} · expires in {seconds} seconds", {
+                  filename: exportLink.filename,
+                  seconds: exportLink.expiresIn,
+                })}
               </p>
               <code className="block overflow-x-auto rounded-md border border-border bg-muted px-3 py-2 font-mono text-xs text-foreground">
                 {exportLink.url}
               </code>
               <div className="flex flex-wrap justify-end gap-2">
                 <Button type="button" variant="secondary" onClick={() => void copyExportLink()}>
-                  Copiar enlace
+                  {t("Copy link")}
                 </Button>
                 <Button
                   type="button"
                   onClick={() => window.open(exportLink.url, "_blank", "noopener,noreferrer")}
                 >
-                  Abrir/descargar
+                  {t("Open/download")}
                 </Button>
               </div>
             </div>
           ) : null}
           <div className="flex flex-wrap justify-end gap-2">
             <Button type="button" variant="secondary" onClick={closeExport}>
-              Cerrar
+              {t("Close")}
             </Button>
             <Button type="button" disabled={exportPending} onClick={() => void generateExport()}>
-              {exportPending ? "Generando respaldo…" : "Generar enlace temporal"}
+              {exportPending ? t("Generating backup…") : t("Generate temporary link")}
             </Button>
           </div>
         </div>
@@ -179,8 +183,8 @@ export function BackupDialogs({ site }: BackupDialogsProps) {
 
       <Dialog
         open={importOpen}
-        title={`Importar respaldo en ${site.container_name}`}
-        description={site.domain ?? "Sin dominio"}
+        title={t("Import backup into {site}", { site: site.container_name })}
+        description={site.domain ?? t("No domain")}
         onClose={closeImport}
         zIndexClassName="z-[1100]"
         maxWidthClassName="max-w-xl"
@@ -192,13 +196,11 @@ export function BackupDialogs({ site }: BackupDialogsProps) {
             submitImport();
           }}
         >
-          <Alert title="Esta operación reemplaza el sitio">
-            Se reemplazarán los archivos{site.kind === "wordpress" ? " y la base de datos" : ""}.
-            El sistema crea un respaldo de seguridad e intenta rollback si algo falla. No
-            interrumpas la operación una vez iniciada.
+          <Alert title={t("This operation replaces the site")}>
+            {t("The files{extra} will be replaced. The system creates a safety backup and attempts a rollback if something fails. Do not interrupt the operation once it has started.", { extra: filesExtra })}
           </Alert>
           <label className="block space-y-1 text-sm text-foreground">
-            <span>Archivo de respaldo</span>
+            <span>{t("Backup file")}</span>
             <Input
               type="file"
               accept=".zip,application/zip"
@@ -207,7 +209,7 @@ export function BackupDialogs({ site }: BackupDialogsProps) {
           </label>
           <label className="block space-y-1 text-sm text-foreground">
             <span>
-              Escribí <strong className="font-mono">{site.container_name}</strong> para confirmar
+              {t("Type {name} to confirm", { name: site.container_name })}
             </span>
             <Input
               value={confirmation}
@@ -217,10 +219,10 @@ export function BackupDialogs({ site }: BackupDialogsProps) {
           </label>
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={closeImport}>
-              Cancelar
+              {t("Cancel")}
             </Button>
             <Button type="submit" disabled={!canImport}>
-              Importar
+              {t("Import")}
             </Button>
           </div>
         </form>

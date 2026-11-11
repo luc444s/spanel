@@ -141,7 +141,7 @@ def test_builtin_nginx_argv_matches_the_0031_shape() -> None:
     legacy = StaticNames("pagina", image=settings.static_image)
     builtin_names = StaticNames.for_profile(
         "pagina",
-        ProfileSpec(id="nginx", name="Nginx (estático)", image=settings.static_image),
+        ProfileSpec(id="nginx", name="Nginx (static)", image=settings.static_image),
     )
     args_legacy = build_static_run_args(legacy, settings, "t1", "pagina.spanel")
     args_builtin = build_static_run_args(builtin_names, settings, "t1", "pagina.spanel")

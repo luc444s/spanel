@@ -192,7 +192,7 @@ def test_ambiguous_traefik_fails_and_override_wins(tmp_path: Path) -> None:
     )
     with pytest.raises(ProxyError) as exc:
         detect_docker(settings, runner, env=env)
-    assert "ambiguos" in str(exc.value)
+    assert "ambiguous" in str(exc.value)
     assert "SPANEL_PROXY_TRAEFIK_CONTAINER" in str(exc.value)
 
     chosen, chosen_env = make_settings(

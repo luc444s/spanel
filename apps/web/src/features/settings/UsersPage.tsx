@@ -24,6 +24,7 @@ import { DataTable } from "@systutor/shell/ui/data-table";
 import { Dialog } from "@systutor/shell/ui/dialog";
 import { Input, newCredentialProps, noAutofillProps } from "@systutor/shell/ui/input";
 import { Select } from "@systutor/shell/ui/select";
+import { useT } from "@/i18n/use-i18n";
 
 type UserFormState = {
   id?: string;
@@ -47,6 +48,7 @@ function getAssignableRoles(roles: CoreRole[]) {
 }
 
 export function UsersPage() {
+  const t = useT();
   const queryClient = useQueryClient();
   const permissions = useAuthStore((state) => state.permissions);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -136,14 +138,14 @@ export function UsersPage() {
     setFormError(null);
 
     if (!formState.id && !formState.password) {
-      setFormError("Password es obligatorio al crear el usuario.");
+      setFormError(t("Password is required when creating a user."));
       return;
     }
 
     try {
       await saveUserMutation.mutateAsync(formState);
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : "No se pudo guardar el usuario.");
+      setFormError(error instanceof Error ? error.message : t("Could not save the user."));
     }
   }
 
@@ -212,42 +214,43 @@ export function UsersPageContent({
   onFieldChange,
   onToggleUser,
 }: UsersPageContentProps) {
+  const t = useT();
   return (
     <section className="space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-2">
-          <h1 className="text-2xl font-semibold text-foreground">Usuarios</h1>
+          <h1 className="text-2xl font-semibold text-foreground">{t("Users")}</h1>
           <p className="text-sm text-muted-foreground">
-            Administracion tenant-aware de usuarios, branch y roles efectivos del core.
+            {t("Tenant-aware administration of users, branches, and effective core roles.")}
           </p>
         </div>
-        {canCreate ? <Button onClick={onCreate}>Crear usuario</Button> : null}
+        {canCreate ? <Button onClick={onCreate}>{t("Create user")}</Button> : null}
       </div>
 
       {hasError ? (
-        <Alert title="No se pudieron cargar los usuarios">
-          Revisa permisos o conectividad con el backend.
+        <Alert title={t("Could not load users")}>
+          {t("Check permissions or backend connectivity.")}
         </Alert>
       ) : null}
 
       <Card>
         <CardHeader>
-          <CardTitle>Usuarios</CardTitle>
-          <CardDescription>Lista mínima operativa del tenant actual.</CardDescription>
+          <CardTitle>{t("Users")}</CardTitle>
+          <CardDescription>{t("Minimal operational list for the current tenant.")}</CardDescription>
         </CardHeader>
         <CardContent>
           <DataTable
             columns={[
-              { key: "name", header: "Nombre", render: (user) => user.name },
-              { key: "email", header: "Correo", render: (user) => user.email },
+              { key: "name", header: t("Name"), render: (user) => user.name },
+              { key: "email", header: t("Email"), render: (user) => user.email },
               {
                 key: "branch",
-                header: "Sucursal",
+                header: t("Branch"),
                 render: (user) => branches.find((branch) => branch.id === user.branch_id)?.name ?? "-",
               },
               {
                 key: "roles",
-                header: "Roles",
+                header: t("Roles"),
                 render: (user) => (
                   <div className="flex flex-wrap gap-2">
                     {user.roles.length > 0 ? user.roles.map((role) => <Badge key={role}>{role}</Badge>) : "-"}
@@ -256,23 +259,23 @@ export function UsersPageContent({
               },
               {
                 key: "status",
-                header: "Estado",
+                header: t("Status"),
                 render: (user) => <StatusBadge active={user.active} />,
               },
               {
                 key: "actions",
-                header: "Acciones",
+                header: t("Actions"),
                 className: "w-56",
                 render: (user) => (
                   <div className="flex flex-wrap gap-2">
                     {canUpdate ? (
                       <Button variant="secondary" onClick={() => onEdit(user)}>
-                        Editar
+                        {t("Edit")}
                       </Button>
                     ) : null}
                     {canDisable ? (
                       <Button variant="secondary" disabled={isToggling} onClick={() => onToggleUser(user)}>
-                        {user.active ? "Desactivar" : "Activar"}
+                        {user.active ? t("Deactivate") : t("Activate")}
                       </Button>
                     ) : null}
                   </div>
@@ -281,30 +284,30 @@ export function UsersPageContent({
             ]}
             rows={users}
             rowKey={(user) => user.id}
-            emptyMessage="No hay usuarios en este tenant."
+            emptyMessage={t("No users in this tenant.")}
           />
         </CardContent>
       </Card>
 
       <Dialog
         open={isDialogOpen}
-        title={formState.id ? "Editar usuario" : "Crear usuario"}
-        description="Formulario mínimo del core management."
+        title={formState.id ? t("Edit user") : t("Create user")}
+        description={t("Minimal core management form.")}
         onClose={onCloseDialog}
       >
         <form className="space-y-4" onSubmit={onSubmit}>
           <label className="block space-y-2 text-sm text-foreground">
-            <span>Nombre</span>
+            <span>{t("Name")}</span>
             <Input value={formState.name} onChange={(event) => onFieldChange({ name: event.target.value })} />
           </label>
 
           <label className="block space-y-2 text-sm text-foreground">
-            <span>Correo</span>
+            <span>{t("Email")}</span>
             <Input type="email" value={formState.email} onChange={(event) => onFieldChange({ email: event.target.value })} {...noAutofillProps} />
           </label>
 
           <label className="block space-y-2 text-sm text-foreground">
-            <span>Contraseña</span>
+            <span>{t("Password")}</span>
             <Input
               type="password"
               value={formState.password}
@@ -314,19 +317,19 @@ export function UsersPageContent({
           </label>
 
           <label className="block space-y-2 text-sm text-foreground">
-            <span>Sucursal</span>
+            <span>{t("Branch")}</span>
             <Select
               value={formState.branch_id || ""}
               onChange={(value) => onFieldChange({ branch_id: value })}
               options={[
-                { value: "", label: "Sin sucursal" },
-                ...branches.map((branch) => ({ value: branch.id, label: `${branch.code} - ${branch.name}` })),
+                { value: "", label: t("No branch") },
+                ...branches.map((branch) => ({ value: branch.id, label: t("{code} - {name}", { code: branch.code, name: branch.name }) })),
               ]}
             />
           </label>
 
           <fieldset className="space-y-2">
-            <legend className="text-sm text-foreground">Roles</legend>
+            <legend className="text-sm text-foreground">{t("Roles")}</legend>
             <div className="grid gap-2 rounded-md border border-border bg-muted/60 p-3 sm:grid-cols-2 max-h-64 overflow-y-auto">
               {roles.map((role) => {
                 const checked = formState.role_ids.includes(role.id);
@@ -350,14 +353,14 @@ export function UsersPageContent({
             </div>
           </fieldset>
 
-          {formError ? <Alert title="No se pudo guardar el usuario">{formError}</Alert> : null}
+          {formError ? <Alert title={t("Could not save the user")}>{formError}</Alert> : null}
 
           <div className="flex justify-end gap-3">
             <Button type="button" variant="secondary" onClick={onCloseDialog}>
-              Cancelar
+              {t("Cancel")}
             </Button>
             <Button type="submit" disabled={isSaving}>
-              {formState.id ? "Guardar cambios" : "Crear usuario"}
+              {formState.id ? t("Save changes") : t("Create user")}
             </Button>
           </div>
         </form>
@@ -367,5 +370,6 @@ export function UsersPageContent({
 }
 
 function StatusBadge({ active }: { active: boolean }) {
-  return <Badge>{active ? "Activo" : "Inactivo"}</Badge>;
+  const t = useT();
+  return <Badge>{active ? t("Active") : t("Inactive")}</Badge>;
 }

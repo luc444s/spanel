@@ -37,7 +37,7 @@ JOB_STATES = frozenset({"queued", "running", "succeeded", "failed"})
 
 class ActiveJobError(Exception):
     def __init__(self, job_id: str, hostname: str) -> None:
-        super().__init__(f"Ya hay una solicitud activa para {hostname}")
+        super().__init__(f"There is already an active request for {hostname}")
         self.job_id = job_id
         self.hostname = hostname
 
@@ -123,7 +123,7 @@ def _safe_text(value: object, limit: int = 500) -> str | None:
     if not isinstance(value, str) or not value.strip():
         return None
     if contains_secret_material(value):
-        return "Detalle no disponible"
+        return "Detail not available"
     return value.strip()[:limit]
 
 

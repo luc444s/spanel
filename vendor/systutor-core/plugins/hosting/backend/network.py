@@ -28,7 +28,7 @@ def validate_network_name(value: str) -> str:
     """
     name = value.strip()
     if not _NETWORK_NAME.fullmatch(name):
-        raise ValueError(f"Nombre de red Docker inválido: {value!r}")
+        raise ValueError(f"Invalid Docker network name: {value!r}")
     return name
 
 
@@ -36,7 +36,7 @@ def validate_container_name(value: str) -> str:
     """The container part of a database host, with no scheme or port."""
     name = value.strip()
     if not _CONTAINER_NAME.fullmatch(name):
-        raise ValueError(f"Nombre de contenedor inválido: {value!r}")
+        raise ValueError(f"Invalid container name: {value!r}")
     return name
 
 

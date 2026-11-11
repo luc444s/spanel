@@ -77,11 +77,11 @@ def database_container(info: dict) -> str:
 
     host = variables.get("WORDPRESS_DB_HOST", "").strip()
     if not host:
-        raise Fallo("el contenedor de WordPress no declara WORDPRESS_DB_HOST")
+        raise Fallo("the WordPress container does not declare WORDPRESS_DB_HOST")
     name = host.split(":", 1)[0].strip()
     if not name or name in {"localhost", "127.0.0.1", "::1"}:
         raise Fallo(
-            "WORDPRESS_DB_HOST no apunta a un contenedor de Docker "
-            f"({host!r}); no se puede ejecutar SQL ahi"
+            "WORDPRESS_DB_HOST does not point to a Docker container "
+            f"({host!r}); SQL cannot be run there"
         )
     return name

@@ -91,11 +91,11 @@ def _material_error(
     """Comprueba clave/cadena/SAN/vigencia del par instalado (solo lectura)."""
 
     if str(entry.get("status")) in ("missing", "error"):
-        return safe_error(entry.get("last_error")) or "Certificado ausente o ilegible"
+        return safe_error(entry.get("last_error")) or "Certificate missing or unreadable"
     cert = Path(str(entry.get("cert_path") or ""))
     key = Path(str(entry.get("key_path") or ""))
     if not cert.is_file() or not key.is_file():
-        return "Faltan archivos del par instalado"
+        return "Installed pair files are missing"
     kwargs = {"runner": runner} if runner is not None else {}
     try:
         info = validate_pair(
@@ -107,7 +107,7 @@ def _material_error(
             **kwargs,
         )
     except CertificateValidationError as exc:
-        return safe_error(str(exc)) or "Par inválido"
+        return safe_error(str(exc)) or "Invalid pair"
     if not _hostname_in_sans(hostname, info.sans):
         return "SAN incorrecto"
     return None

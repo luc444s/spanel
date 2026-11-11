@@ -85,9 +85,9 @@ def _registered_site(db: Session, container: str) -> HostingSite:
         select(HostingSite).where(HostingSite.container_name == container)
     )
     if site is None:
-        raise DownError(f"{container!r} no está registrado en Hosting")
+        raise DownError(f"{container!r} is not registered in Hosting")
     if not site.domain:
-        raise DownError("el sitio no tiene dominio primario para liberar")
+        raise DownError("the site has no primary domain to release")
     return site
 
 
@@ -117,7 +117,7 @@ def build_plan(
     site = _registered_site(db, container)
     tenant = db.get(Tenant, site.tenant_id)
     if tenant is None:
-        raise DownError(f"el tenant {site.tenant_id!r} ya no existe")
+        raise DownError(f"tenant {site.tenant_id!r} no longer exists")
     domain = site.domain.strip().lower().removesuffix(".")
 
     hosting = get_hosting_settings()
@@ -129,27 +129,27 @@ def build_plan(
     try:
         claims = [row for row in operations.managed_domains() if row.domain == domain]
     except ProxyError as exc:
-        raise DownError(f"no se pudo inspeccionar el proxy: {exc}") from exc
+        raise DownError(f"could not inspect the proxy: {exc}") from exc
     if len(claims) > 1:
-        raise DownError(f"el dominio {domain} aparece en múltiples rutas administradas")
+        raise DownError(f"domain {domain} appears in multiple managed routes")
     claim = claims[0] if claims else None
     blocked: str | None = None
     if labels_route and not keep_labeled_route:
         blocked = (
-            "el contenedor publica el dominio mediante labels Traefik; "
-            "usá --keep-labeled-route para ocultarlo conservando temporalmente esa ruta"
+            "the container publishes the domain through Traefik labels; "
+            "use --keep-labeled-route to hide it while temporarily keeping that route"
         )
     elif claim is not None and claim.container != container:
-        blocked = f"la ruta pertenece a otro contenedor: {claim.container}"
+        blocked = f"the route belongs to another container: {claim.container}"
 
     reservation = db.get(TenantDomain, domain)
     if reservation is not None and reservation.tenant_id != site.tenant_id:
-        raise DownError(f"el dominio {domain} está reservado por otro tenant")
+        raise DownError(f"domain {domain} is reserved by another tenant")
     primary_owner = db.scalar(
         select(Tenant).where(func.lower(Tenant.domain) == domain)
     )
     if primary_owner is not None and primary_owner.id != site.tenant_id:
-        raise DownError(f"el dominio {domain} es primario de otro tenant")
+        raise DownError(f"domain {domain} is another tenant's primary domain")
     reserved = reservation is not None or primary_owner is not None
 
     return DownPlan(
@@ -169,23 +169,23 @@ def build_plan(
 
 
 def print_plan(plan: DownPlan) -> None:
-    print("PLAN DE BAJA LÓGICA")
-    print(f"  sitio:       {plan.container} ({plan.kind})")
+    print("LOGICAL TEARDOWN PLAN")
+    print(f"  site:        {plan.container} ({plan.kind})")
     print(f"  tenant:      {plan.tenant_slug} ({plan.tenant_id})")
-    print(f"  dominio:     {plan.domain}")
-    print(f"  contenedor:  {'presente; no se tocará' if plan.container_present else 'ausente'}")
+    print(f"  domain:      {plan.domain}")
+    print(f"  container:   {'present; will not be touched' if plan.container_present else 'absent'}")
     if plan.labeled_route_retained:
-        print("  ruta proxy:  labels del contenedor; se conservará temporalmente")
+        print("  proxy route: container labels; will be kept temporarily")
     else:
-        print(f"  ruta proxy:  {plan.route_file or 'ya ausente'}")
+        print(f"  proxy route: {plan.route_file or 'already absent'}")
     if plan.reserve_domain:
-        print("  namespace:   se reservará para el mismo tenant")
+        print("  namespace:   will be reserved for the same tenant")
     else:
-        print("  namespace:   se conservará reservado al mismo tenant")
-    print("  Hosting:     se ocultará del panel")
-    print("  Docker/DB:   sin cambios")
+        print("  namespace:   will remain reserved for the same tenant")
+    print("  Hosting:     will be hidden from the panel")
+    print("  Docker/DB:   unchanged")
     if plan.blocked_reason:
-        print(f"  BLOQUEADO:   {plan.blocked_reason}")
+        print(f"  BLOCKED:     {plan.blocked_reason}")
 
 
 def execute_plan(db: Session, plan: DownPlan, operations: ProxyOperations) -> None:
@@ -206,17 +206,17 @@ def execute_plan(db: Session, plan: DownPlan, operations: ProxyOperations) -> No
         try:
             operations.remove(plan.domain)
         except ProxyError as exc:
-            raise DownError(f"no se pudo retirar la ruta: {exc}") from exc
+            raise DownError(f"could not remove the route: {exc}") from exc
 
     site = db.get(HostingSite, plan.site_id)
     if site is None or site.container_name != plan.container:
-        raise DownError("el registro Hosting cambió durante la operación")
+        raise DownError("the Hosting record changed during the operation")
 
     if plan.reserve_domain:
         current = db.get(TenantDomain, plan.domain)
         if current is not None:
             if current.tenant_id != plan.tenant_id:
-                raise DownError("la propiedad del dominio cambió durante la operación")
+                raise DownError("domain ownership changed during the operation")
         else:
             db.add(TenantDomain(domain=plan.domain, tenant_id=plan.tenant_id))
             db.flush()
@@ -253,16 +253,16 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("--container", required=True, help="nombre exacto registrado")
+    parser.add_argument("--container", required=True, help="exact registered name")
     parser.add_argument(
         "--profile", choices=("internal", "public"), default="public"
     )
-    parser.add_argument("--execute", action="store_true", help="aplica la baja lógica")
-    parser.add_argument("--confirm", default="", help="debe coincidir con --container")
+    parser.add_argument("--execute", action="store_true", help="apply the logical teardown")
+    parser.add_argument("--confirm", default="", help="must match --container")
     parser.add_argument(
         "--keep-labeled-route",
         action="store_true",
-        help="oculta el sitio pero conserva temporalmente su ruta por labels Traefik",
+        help="hide the site but temporarily keep its route via Traefik labels",
     )
     args = parser.parse_args(argv)
 
@@ -272,7 +272,7 @@ def main(argv: list[str] | None = None) -> int:
         proxy_settings = ProxySettings.from_env(args.profile)
         operations = ProxyOperations(proxy_settings, build_runner(proxy_settings))
     except (ValueError, ProxyError) as exc:
-        print(f"FALLO: configuración de proxy inválida: {exc}")
+        print(f"FAILED: invalid proxy configuration: {exc}")
         return 1
 
     settings = Settings(**env_settings_kwargs())
@@ -287,24 +287,24 @@ def main(argv: list[str] | None = None) -> int:
             )
             print_plan(plan)
             if not args.execute:
-                print("\nSolo dry-run. Para ejecutar agregá --execute --confirm " + plan.container)
+                print("\nDry-run only. To execute add --execute --confirm " + plan.container)
                 return 0
             if args.confirm != plan.container:
-                print("FALLO: --confirm debe coincidir exactamente con el contenedor")
+                print("FAILED: --confirm must exactly match the container")
                 return 2
             execute_plan(db, plan, operations)
             db.commit()
         except DownError as exc:
             db.rollback()
-            print(f"FALLO: {exc}")
+            print(f"FAILED: {exc}")
             return 1
         except Exception as exc:  # noqa: BLE001
             db.rollback()
-            print(f"FALLO: no se pudo completar la baja lógica: {exc}")
+            print(f"FAILED: could not complete the logical teardown: {exc}")
             return 1
 
-    print(f"BAJA LÓGICA COMPLETA: {plan.container}")
-    print(f"DOMINIO RESERVADO PARA REEMPLAZO: {plan.domain}")
+    print(f"LOGICAL TEARDOWN COMPLETE: {plan.container}")
+    print(f"DOMAIN RESERVED FOR REPLACEMENT: {plan.domain}")
     return 0
 
 

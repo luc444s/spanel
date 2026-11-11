@@ -25,7 +25,7 @@ class FakeOperations:
 
     def remove(self, domain: str) -> int:
         if self.fail_remove:
-            raise ProxyError(f"el dominio {domain} no está gestionado por spanel")
+            raise ProxyError(f"the domain {domain} is not managed by spanel")
         self.removed.append(domain)
         return 0
 

@@ -5,6 +5,7 @@ import { useAuthStore } from "../auth/store";
 import { hasRequiredPermissions } from "../shell/permissions";
 import { usePluginFrontendRuntime } from "./runtime";
 import { Alert } from "@systutor/shell/ui/alert";
+import { useT } from "../../i18n/use-i18n";
 
 const EMPTY_PERMISSIONS: string[] = [];
 
@@ -19,18 +20,19 @@ export function PluginRouteBoundary({
   requiredPermissions,
   children,
 }: PluginRouteBoundaryProps) {
+  const t = useT();
   const runtime = usePluginFrontendRuntime();
   const userPermissions = useAuthStore((state) => state.permissions ?? EMPTY_PERMISSIONS);
   const record = runtime.recordsById.get(pluginId);
 
   if (runtime.isLoading) {
-    return <div className="text-sm text-slate-400">Cargando runtime del plugin...</div>;
+    return <div className="text-sm text-slate-400">{t("Loading plugin runtime...")}</div>;
   }
 
   if (runtime.error) {
     return (
-      <Alert title="No se pudo validar el runtime del plugin">
-        Revisa el backend o los permisos del usuario actual.
+      <Alert title={t("Could not validate the plugin runtime")}>
+        {t("Check the backend or the current user's permissions.")}
       </Alert>
     );
   }

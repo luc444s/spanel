@@ -151,7 +151,7 @@ def test_4_mariadb_no_es_sitio() -> None:
 
     assert candidato.es_sitio is False
     assert candidato.gestionable is False
-    assert "base de datos" in candidato.por_que
+    assert "database" in candidato.por_que
     # Y no se le gasta un `docker inspect`.
     assert discovery.es_prefiltrado(contenedor) is False
 

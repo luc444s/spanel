@@ -4,6 +4,7 @@ import { Alert } from "@systutor/shell/ui/alert";
 import { Button } from "@systutor/shell/ui/button";
 import { Dialog } from "@systutor/shell/ui/dialog";
 
+import { useT } from "@/i18n/use-i18n";
 import type { MailCertificate } from "../api";
 import { CertificateDetailDialog } from "./certificates/CertificateDetailDialog";
 import { CertificateRow } from "./certificates/CertificateRow";
@@ -31,6 +32,7 @@ export function CertificatesDialog({
   onlyHostname,
   onClose,
 }: CertificatesDialogProps) {
+  const t = useT();
   const manager = useCertificateManager(open);
   const [selected, setSelected] = useState<string | null>(null);
 
@@ -81,8 +83,8 @@ export function CertificatesDialog({
     <>
       <Dialog
         open={open}
-        title="Certificados TLS"
-        description="Spanel · Infraestructura de correo"
+        title={t("TLS certificates")}
+        description={t("Spanel · Mail infrastructure")}
         onClose={closeAll}
         zIndexClassName="z-[1150]"
         maxWidthClassName="max-w-3xl"
@@ -90,8 +92,10 @@ export function CertificatesDialog({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs text-muted-foreground">
               {data?.generated_at
-                ? `Última lectura: ${new Date(data.generated_at).toLocaleString()}`
-                : "Sin lectura del agente"}
+                ? t("Last read: {time}", {
+                    time: new Date(data.generated_at).toLocaleString(),
+                  })
+                : t("No agent reading")}
             </p>
             <div className="flex gap-2">
               {canManage ? (
@@ -105,7 +109,7 @@ export function CertificatesDialog({
                     manager.setNewOpen(true);
                   }}
                 >
-                  Agregar certificado
+                  {t("Add certificate")}
                 </Button>
               ) : null}
               <Button
@@ -118,10 +122,10 @@ export function CertificatesDialog({
                   manager.refreshMutation.mutate();
                 }}
               >
-                {manager.refreshMutation.isPending ? "Solicitando..." : "Actualizar estado"}
+                {manager.refreshMutation.isPending ? t("Requesting...") : t("Refresh status")}
               </Button>
               <Button type="button" variant="secondary" size="sm" onClick={closeAll}>
-                Cerrar
+                {t("Close")}
               </Button>
             </div>
           </div>
@@ -130,44 +134,50 @@ export function CertificatesDialog({
         <div className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-xs text-muted-foreground">
             <span>
-              Estado del agente: <strong>{agentStateLabel(agentState)}</strong>
+              {t("Agent status:")} <strong>{agentStateLabel(agentState)}</strong>
             </span>
             <span>
-              Última verificación:{" "}
+              {t("Last check:")}{" "}
               {timestampLabel(manager.health?.agent_last_run_at ?? manager.health?.generated_at)}
             </span>
             <span>
               {manager.health
-                ? `${visibleCritical} críticas · ${visibleWarning} avisos`
-                : "Sin salud publicada"}
+                ? t("{critical} critical · {warning} warnings", {
+                    critical: visibleCritical,
+                    warning: visibleWarning,
+                  })
+                : t("No published health")}
             </span>
           </div>
 
           {manager.unavailableMessage ? (
-            <Alert title="Estado no disponible">
-              {manager.unavailableMessage}. Las acciones de emisión quedan deshabilitadas
-              hasta que el agente publique estado reciente.
+            <Alert title={t("Status unavailable")}>
+              {manager.unavailableMessage}.{" "}
+              {t(
+                "Issuing actions remain disabled until the agent publishes recent status."
+              )}
             </Alert>
           ) : null}
           {manager.actionError ? (
-            <Alert title="No se pudo completar la acción">{manager.actionError}</Alert>
+            <Alert title={t("Could not complete the action")}>{manager.actionError}</Alert>
           ) : null}
           {manager.globalCritical ? (
-            <Alert title="Alerta crítica global">
-              El certificado predeterminado o el agente tienen una alerta crítica. Las
-              acciones destructivas están deshabilitadas.
+            <Alert title={t("Global critical alert")}>
+              {t(
+                "The default certificate or the agent has a critical alert. Destructive actions are disabled."
+              )}
             </Alert>
           ) : null}
 
           {manager.listLoading ? (
-            <p className="text-sm text-muted-foreground">Leyendo certificados...</p>
+            <p className="text-sm text-muted-foreground">{t("Reading certificates...")}</p>
           ) : null}
 
           {!manager.listLoading && items.length === 0 ? (
             <p className="rounded-md border border-border px-3 py-4 text-sm text-muted-foreground">
               {onlyHostname
-                ? `No hay certificado para ${onlyHostname}.`
-                : "No hay certificados visibles para este tenant."}
+                ? t("No certificate for {hostname}.", { hostname: onlyHostname })
+                : t("No certificates visible for this tenant.")}
             </p>
           ) : null}
 

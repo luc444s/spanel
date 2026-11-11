@@ -253,7 +253,7 @@ export function Combobox({
             aria-haspopup="listbox"
             aria-required={required}
             onChange={(event) => updateQuery(event.target.value)}
-            placeholder={searchPlaceholder ?? placeholder ?? "Buscar..."}
+            placeholder={searchPlaceholder ?? placeholder ?? "Search..."}
             className={cn(
               "w-full rounded-md border border-input bg-surface pl-9 pr-3 py-2 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus:border-ring focus:ring-1 focus:ring-ring",
               className,
@@ -281,7 +281,7 @@ export function Combobox({
             className,
           )}
         >
-          <span className="truncate text-left">{displayLabel ?? placeholder ?? "Seleccionar"}</span>
+          <span className="truncate text-left">{displayLabel ?? placeholder ?? "Select"}</span>
           <ChevronsUpDown className="h-4 w-4 shrink-0 text-muted-foreground" />
         </button>
       )}
@@ -293,7 +293,7 @@ export function Combobox({
             ref={inputRef}
             value={query}
             onChange={(event) => updateQuery(event.target.value)}
-            placeholder={searchPlaceholder ?? "Buscar..."}
+            placeholder={searchPlaceholder ?? "Search..."}
             aria-expanded={open}
             aria-haspopup="listbox"
             aria-required={required}

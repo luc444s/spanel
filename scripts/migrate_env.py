@@ -59,7 +59,7 @@ def release_env_path(deployment: Deployment, state_root: Path) -> Path:
     manifest = deployment.manifest or {}
     release_value = str(manifest.get("release") or "").strip()
     if not release_value:
-        raise RuntimeError("El deployment activo no registra un release")
+        raise RuntimeError("The active deployment does not register a release")
     release = Path(release_value)
     candidates = [release / "app.env"]
     if release.parent.name == "releases":
@@ -69,7 +69,7 @@ def release_env_path(deployment: Deployment, state_root: Path) -> Path:
         if candidate.is_file():
             return candidate
     raise RuntimeError(
-        "No se encontró app.env del release activo; usá --env-file con una copia local"
+        "app.env was not found for the active release; use --env-file with a local copy"
     )
 
 
@@ -80,13 +80,13 @@ def find_application(db, application_id: str | None, slug: str | None) -> Applic
     elif slug:
         stmt = stmt.where(Application.slug == slug)
     else:
-        raise RuntimeError("Indicá --application-id o --slug")
+        raise RuntimeError("Specify --application-id or --slug")
     rows = list(db.scalars(stmt).all())
     if not rows:
-        raise RuntimeError("Aplicación no encontrada")
+        raise RuntimeError("Application not found")
     if len(rows) > 1:
         names = ", ".join(f"{row.slug} ({row.id})" for row in rows)
-        raise RuntimeError(f"Hay más de una aplicación con ese slug: {names}")
+        raise RuntimeError(f"There is more than one application with that slug: {names}")
     return rows[0]
 
 
@@ -114,7 +114,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             app = find_application(db, args.application_id, args.slug)
             if app.has_saved_environment and not args.force:
                 print(
-                    f"{app.slug} ya tiene variables guardadas; usá --force para reemplazarlas"
+                    f"{app.slug} already has stored variables; use --force to replace them"
                 )
                 return 2
             deployment = (
@@ -126,22 +126,22 @@ def main(argv: Sequence[str] | None = None) -> int:
             elif deployment is not None:
                 source = release_env_path(deployment, apps.state_root)
             else:
-                print("La aplicación no tiene deployment activo ni --env-file")
+                print("The application has no active deployment or --env-file")
                 return 2
             if not source.is_file():
-                print(f"No existe el archivo indicado: {source}")
+                print(f"The specified file does not exist: {source}")
                 return 2
             entries = tenant_entries(parse_env_text(source.read_text(encoding="utf-8")))
             if not entries:
-                print("No se encontraron variables del tenant para guardar")
+                print("No tenant variables were found to save")
                 return 2
             names = ", ".join(name for name, _value in entries)
             if args.dry_run:
-                print(f"{app.slug}: se guardarían {len(entries)} variables: {names}")
+                print(f"{app.slug}: would save {len(entries)} variables: {names}")
                 return 0
             save_tenant_environment(db, app, cipher, entries)
             db.commit()
-            print(f"{app.slug}: {len(entries)} variables guardadas cifradas: {names}")
+            print(f"{app.slug}: {len(entries)} variables saved encrypted: {names}")
             return 0
     except Exception as exc:  # noqa: BLE001 - mensaje operativo sin secretos
         print(f"migrate_env: {exc}", file=sys.stderr)

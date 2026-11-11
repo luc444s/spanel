@@ -308,7 +308,7 @@ def test_doctor_fails_without_lab(tmp_path: Path, capsys: pytest.CaptureFixture[
     assert code == 4
     out = capsys.readouterr().out
     assert "docker" in out
-    assert "FALLA" in out
+    assert "failed" in out
 
 
 def test_cli_accepts_profile_before_and_after_command() -> None:

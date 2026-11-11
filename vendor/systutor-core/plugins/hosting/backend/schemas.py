@@ -36,7 +36,7 @@ class CreateSiteRequest(BaseModel):
     def valid_profile(cls, value: str, info) -> str:
         value = value.strip()
         if info.data.get("kind") == "wordpress" and value != "nginx":
-            raise ValueError("El perfil solo se acepta para sitios estáticos")
+            raise ValueError("The profile is only accepted for static sites")
         if not value or len(value) > 32:
             raise ValueError("Invalid profile")
         import re

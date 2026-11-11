@@ -123,7 +123,7 @@ class OneTimeHandler(BaseHTTPRequestHandler):
 
     def _send_error(self, status: str) -> None:
         if status == "missing":
-            code, body = 404, b"No encontrado\n"
+            code, body = 404, b"Not found\n"
         else:
             code, body = 410, b"Enlace expirado o consumido\n"
         self.send_response(code)
@@ -186,13 +186,13 @@ def _validated_zip(path_text: str) -> Path:
     try:
         path = Path(path_text).expanduser().resolve(strict=True)
     except OSError as exc:
-        raise LinkError(f"no existe el ZIP: {path_text}") from exc
+        raise LinkError(f"zip does not exist: {path_text}") from exc
     if not path.is_file() or path.suffix.lower() != ".zip":
-        raise LinkError(f"no es un archivo .zip: {path}")
+        raise LinkError(f"not a .zip file: {path}")
     try:
         verify_zip(path)
     except (VerifyError, OSError, ValueError, TypeError) as exc:
-        raise LinkError(f"ZIP inválido: {exc}") from exc
+        raise LinkError(f"invalid ZIP: {exc}") from exc
     return path
 
 
@@ -217,22 +217,22 @@ def _public_base(
             or parsed.path not in {"", "/"}
         ):
             raise LinkError(
-                f"--public-base-url debe ser un origen {expected_scheme}, sin path/query/credenciales"
+                f"--public-base-url must be an origin {expected_scheme}, without path/query/credentials"
             )
         if bind not in {"127.0.0.1", "localhost"} and not tls_enabled and not allow_insecure_http:
             raise LinkError(
-                "HTTP público expondría el respaldo; usar --tls-cert/--tls-key "
-                "o confirmar --allow-insecure-http"
+                "Public HTTP would expose the backup; use --tls-cert/--tls-key "
+                "or confirm --allow-insecure-http"
             )
         return value.rstrip("/")
     if bind not in {"127.0.0.1", "localhost"}:
-        raise LinkError("un --bind no-local exige --public-base-url explícito")
+        raise LinkError("a non-local --bind requires an explicit --public-base-url")
     return f"{expected_scheme}://{bind}:{port}"
 
 
 def _enable_tls(server: OneTimeServer, cert: str | None, key: str | None) -> bool:
     if bool(cert) != bool(key):
-        raise LinkError("--tls-cert y --tls-key deben declararse juntos")
+        raise LinkError("--tls-cert and --tls-key must be given together")
     if not cert:
         return False
     try:
@@ -240,7 +240,7 @@ def _enable_tls(server: OneTimeServer, cert: str | None, key: str | None) -> boo
         context.load_cert_chain(certfile=cert, keyfile=key)
         server.socket = context.wrap_socket(server.socket, server_side=True)
     except (OSError, ssl.SSLError) as exc:
-        raise LinkError(f"no se pudo habilitar TLS: {exc}") from exc
+        raise LinkError(f"could not enable TLS: {exc}") from exc
     return True
 
 
@@ -269,23 +269,23 @@ def serve(server: OneTimeServer) -> bool:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Genera un enlace temporal de un uso para un ZIP válido de A.SPEC 0047."
+        description="Generate a one-time temporary link for a valid A.SPEC 0047 ZIP."
     )
-    parser.add_argument("--zip", required=True, dest="zip_path", help="respaldo .zip a servir")
-    parser.add_argument("--bind", default="127.0.0.1", help="interfaz de escucha")
-    parser.add_argument("--port", type=int, default=8765, help="puerto; 0 elige uno libre")
-    parser.add_argument("--ttl", type=int, default=DEFAULT_TTL, help="vigencia en segundos")
+    parser.add_argument("--zip", required=True, dest="zip_path", help=".zip backup to serve")
+    parser.add_argument("--bind", default="127.0.0.1", help="listening interface")
+    parser.add_argument("--port", type=int, default=8765, help="port; 0 picks a free one")
+    parser.add_argument("--ttl", type=int, default=DEFAULT_TTL, help="lifetime in seconds")
     parser.add_argument(
         "--public-base-url",
         default=None,
-        help="origen público anunciado, obligatorio si --bind no es local",
+        help="advertised public origin, required if --bind is not local",
     )
-    parser.add_argument("--tls-cert", default=None, help="certificado PEM para HTTPS")
-    parser.add_argument("--tls-key", default=None, help="clave privada PEM para HTTPS")
+    parser.add_argument("--tls-cert", default=None, help="PEM certificate for HTTPS")
+    parser.add_argument("--tls-key", default=None, help="PEM private key for HTTPS")
     parser.add_argument(
         "--allow-insecure-http",
         action="store_true",
-        help="acepta HTTP no-local conscientemente (no recomendado)",
+        help="accept non-local HTTP knowingly (not recommended)",
     )
     return parser
 
@@ -295,9 +295,9 @@ def main(argv: list[str] | None = None) -> int:
     server: OneTimeServer | None = None
     try:
         if not 0 <= args.port <= 65535:
-            raise LinkError("--port debe estar entre 0 y 65535")
+            raise LinkError("--port must be between 0 and 65535")
         if not 1 <= args.ttl <= MAX_TTL:
-            raise LinkError(f"--ttl debe estar entre 1 y {MAX_TTL} segundos")
+            raise LinkError(f"--ttl must be between 1 and {MAX_TTL} seconds")
         zip_path = _validated_zip(args.zip_path)
         token = secrets.token_urlsafe(32)
         state = DownloadState(
@@ -323,17 +323,17 @@ def main(argv: list[str] | None = None) -> int:
 
     link = f"{base}/download/{token}"
     print(f"LINK: {link}")  # única salida intencional que contiene el token
-    print(f"EXPIRA_EN: {args.ttl}s")
-    print(f"ARCHIVO: {zip_path.name} ({zip_path.stat().st_size} bytes)")
+    print(f"EXPIRES_IN: {args.ttl}s")
+    print(f"FILE: {zip_path.name} ({zip_path.stat().st_size} bytes)")
     sys.stdout.flush()
     completed = serve(server)
     if completed:
-        print("DESCARGA: completada; enlace consumido")
+        print("DOWNLOAD: completed; link consumed")
         return EXIT_OK
     if state.claimed:
-        print("DESCARGA: interrumpida; enlace consumido", file=sys.stderr)
+        print("DOWNLOAD: interrupted; link consumed", file=sys.stderr)
         return EXIT_ERROR
-    print("EXPIRADO: enlace no utilizado", file=sys.stderr)
+    print("EXPIRED: link not used", file=sys.stderr)
     return EXIT_EXPIRED
 
 

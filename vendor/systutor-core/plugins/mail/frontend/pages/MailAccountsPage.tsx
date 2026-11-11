@@ -11,6 +11,8 @@ import { Pagination } from "@systutor/shell/ui/pagination";
 import { toast } from "@systutor/shell/ui/toast";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
+import { useT } from "@/i18n/use-i18n";
+
 const ACCOUNT_ROWS_PER_COLUMN = 15;
 const ACCOUNT_COLUMNS = 3;
 const ACCOUNT_PAGE_SIZE = ACCOUNT_ROWS_PER_COLUMN * ACCOUNT_COLUMNS;
@@ -102,6 +104,7 @@ function useIsPortrait() {
 }
 
 export default function MailAccountsPage() {
+  const t = useT();
   const queryClient = useQueryClient();
   const permissions = useAuthStore((state) => state.permissions);
   const tenantId = useAuthStore((state) => state.currentTenant?.id ?? "");
@@ -190,7 +193,7 @@ export default function MailAccountsPage() {
 
   const changeMutation = useMutation({
     mutationFn: ({ email, password }: { email: string; password: string }) => changeMailAccountPassword(email, { password }),
-    onSuccess: () => toast.success("Contraseña modificada", { id: PASSWORD_TOAST }),
+    onSuccess: () => toast.success(t("Password changed"), { id: PASSWORD_TOAST }),
     // A password change does not alter the account list, so there is nothing to
     // invalidate: the only refetch that mattered was a wasted round trip to the
     // mail server sitting in front of the success toast.
@@ -212,7 +215,7 @@ export default function MailAccountsPage() {
           return { ...previous, accounts: [...previous.accounts, email].sort() };
         });
       }
-      toast.success("Cuenta creada", { id: CREATE_TOAST });
+      toast.success(t("Account created"), { id: CREATE_TOAST });
     },
     onError: (e: Error) => toast.error(e.message, { id: CREATE_TOAST }),
   });
@@ -220,12 +223,12 @@ export default function MailAccountsPage() {
   function handleSubmitPassword(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
-    if (newPass !== confirmPass) { setError("Las contraseñas no coinciden"); return; }
-    if (newPass.length < 8) { setError("Mínimo 8 caracteres"); return; }
+    if (newPass !== confirmPass) { setError(t("Passwords do not match")); return; }
+    if (newPass.length < 8) { setError(t("Minimum 8 characters")); return; }
     const email = selected;
     if (!email) return;
     closePasswordDialog();
-    toast.loading("Cambiando contraseña...", { id: PASSWORD_TOAST });
+    toast.loading(t("Changing password..."), { id: PASSWORD_TOAST });
     changeMutation.mutate({ email, password: newPass });
   }
 
@@ -233,21 +236,21 @@ export default function MailAccountsPage() {
     e.preventDefault();
     setCreateError(null);
     const username = createUser.trim();
-    if (!username) { setCreateError("Usuario requerido"); return; }
-    if (createPass !== createConfirm) { setCreateError("Las contraseñas no coinciden"); return; }
-    if (createPass.length < 8) { setCreateError("Mínimo 8 caracteres"); return; }
+    if (!username) { setCreateError(t("Username required")); return; }
+    if (createPass !== createConfirm) { setCreateError(t("Passwords do not match")); return; }
+    if (createPass.length < 8) { setCreateError(t("Minimum 8 characters")); return; }
     const password = createPass;
     closeCreateDialog();
-    toast.loading("Creando cuenta...", { id: CREATE_TOAST });
+    toast.loading(t("Creating account..."), { id: CREATE_TOAST });
     createMutation.mutate({ username, password, domain: selectedCreateDomain || undefined });
   }
 
   if (accountsQuery.isLoading && !accountsQuery.data) {
-    return <div className="flex min-h-[200px] items-center justify-center text-sm text-muted-foreground">Cargando...</div>;
+    return <div className="flex min-h-[200px] items-center justify-center text-sm text-muted-foreground">{t("Loading...")}</div>;
   }
 
   if (accountsQuery.error && !accountsQuery.data) {
-    return <Alert title="Error">No se pudieron cargar las cuentas.</Alert>;
+    return <Alert title={t("Error")}>{t("Could not load accounts.")}</Alert>;
   }
 
   const domain = accountsQuery.data?.domain ?? "";
@@ -264,34 +267,34 @@ export default function MailAccountsPage() {
     <section className="space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <h1 className="text-lg font-semibold text-foreground">Correos — {domain}</h1>
+          <h1 className="text-lg font-semibold text-foreground">{t("Mail — {domain}", { domain })}</h1>
           {accountsQuery.isFetching && (
-            <span className="text-xs text-muted-foreground">Actualizando...</span>
+            <span className="text-xs text-muted-foreground">{t("Refreshing...")}</span>
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {canReadCertificates ? (
             <Button size="sm" variant="secondary" onClick={() => setShowCertificates(true)}>
-              Certificados TLS
+              {t("TLS certificates")}
             </Button>
           ) : null}
           <Button size="sm" onClick={() => { setShowCreate(true); setCreateError(null); }}>
-            Agregar correo
+            {t("Add mail")}
           </Button>
         </div>
       </div>
 
       {accountsQuery.error && (
-        <Alert title="No se pudo actualizar">
-          Se muestra la última lista conocida. {accountsQuery.error.message}
+        <Alert title={t("Could not refresh")}>
+          {t("Showing the last known list. {error}", { error: accountsQuery.error.message })}
         </Alert>
       )}
 
-      <Dialog open={showCreate} title="Crear correo" onClose={closeCreateDialog}>
+      <Dialog open={showCreate} title={t("Create mail")} onClose={closeCreateDialog}>
         <form className="space-y-3" onSubmit={handleSubmitCreate}>
           {tenantDomains.length > 1 && (
             <label className="block space-y-1 text-sm text-foreground">
-              <span>Dominio</span>
+              <span>{t("Domain")}</span>
               <select
                 className="w-full rounded-md border border-input bg-background px-2 py-2 text-sm"
                 value={selectedCreateDomain}
@@ -304,24 +307,24 @@ export default function MailAccountsPage() {
             </label>
           )}
           <label className="block space-y-1 text-sm text-foreground">
-            <span>Usuario</span>
+            <span>{t("Username")}</span>
             <div className="flex items-center gap-0">
-              <Input type="text" value={createUser} onChange={(e) => setCreateUser(e.target.value)} placeholder="ventas" autoFocus className="rounded-r-none" {...noAutofillProps} />
+              <Input type="text" value={createUser} onChange={(e) => setCreateUser(e.target.value)} placeholder={t("sales")} autoFocus className="rounded-r-none" {...noAutofillProps} />
               <span className="inline-flex items-center rounded-r-md border border-l-0 border-input bg-muted px-2 text-sm text-muted-foreground">@{selectedCreateDomain || domain}</span>
             </div>
           </label>
           <label className="block space-y-1 text-sm text-foreground">
-            <span>Contraseña</span>
-            <Input type="password" value={createPass} onChange={(e) => setCreatePass(e.target.value)} placeholder="Mínimo 8 caracteres" {...newCredentialProps} />
+            <span>{t("Password")}</span>
+            <Input type="password" value={createPass} onChange={(e) => setCreatePass(e.target.value)} placeholder={t("Minimum 8 characters")} {...newCredentialProps} />
           </label>
           <label className="block space-y-1 text-sm text-foreground">
-            <span>Confirmar contraseña</span>
-            <Input type="password" value={createConfirm} onChange={(e) => setCreateConfirm(e.target.value)} placeholder="Repetir contraseña" {...newCredentialProps} />
+            <span>{t("Confirm password")}</span>
+            <Input type="password" value={createConfirm} onChange={(e) => setCreateConfirm(e.target.value)} placeholder={t("Repeat password")} {...newCredentialProps} />
           </label>
-          {createError && <Alert title="Error">{createError}</Alert>}
+          {createError && <Alert title={t("Error")}>{createError}</Alert>}
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="secondary" size="sm" onClick={closeCreateDialog}>Cancelar</Button>
-            <Button type="submit" size="sm">Crear</Button>
+            <Button type="button" variant="secondary" size="sm" onClick={closeCreateDialog}>{t("Cancel")}</Button>
+            <Button type="submit" size="sm">{t("Create")}</Button>
           </div>
         </form>
       </Dialog>
@@ -329,7 +332,7 @@ export default function MailAccountsPage() {
       <div className="space-y-3">
         {accounts.length === 0 ? (
           <p className="rounded-md border border-border bg-card px-3 py-4 text-sm text-muted-foreground">
-            No hay correos creados para este dominio.
+            {t("No mailboxes have been created for this domain.")}
           </p>
         ) : (
           <div className={isPortrait ? "pb-2" : "overflow-x-auto pb-2"}>
@@ -362,26 +365,34 @@ export default function MailAccountsPage() {
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-muted-foreground">
-            {accounts.length} correos
+            {accounts.length === 1
+              ? t("{count} mailbox", { count: accounts.length })
+              : t("{count} mailboxes", { count: accounts.length })}
           </p>
-          <Pagination page={accountsPage} totalPages={totalAccountPages} onChange={setAccountsPage} />
+          <Pagination
+            page={accountsPage}
+            totalPages={totalAccountPages}
+            onChange={setAccountsPage}
+            previousLabel={t("Previous page")}
+            nextLabel={t("Next page")}
+          />
         </div>
       </div>
 
-      <Dialog open={Boolean(selected)} title="Cambiar contraseña" description={selected} onClose={closePasswordDialog}>
+      <Dialog open={Boolean(selected)} title={t("Change password")} description={selected} onClose={closePasswordDialog}>
         <form className="space-y-3" onSubmit={handleSubmitPassword}>
           <label className="block space-y-1 text-sm text-foreground">
-            <span>Nueva contraseña</span>
-            <Input type="password" value={newPass} onChange={(e) => setNewPass(e.target.value)} placeholder="Mínimo 8 caracteres" {...newCredentialProps} />
+            <span>{t("New password")}</span>
+            <Input type="password" value={newPass} onChange={(e) => setNewPass(e.target.value)} placeholder={t("Minimum 8 characters")} {...newCredentialProps} />
           </label>
           <label className="block space-y-1 text-sm text-foreground">
-            <span>Confirmar contraseña</span>
-            <Input type="password" value={confirmPass} onChange={(e) => setConfirmPass(e.target.value)} placeholder="Repetir contraseña" {...newCredentialProps} />
+            <span>{t("Confirm password")}</span>
+            <Input type="password" value={confirmPass} onChange={(e) => setConfirmPass(e.target.value)} placeholder={t("Repeat password")} {...newCredentialProps} />
           </label>
-          {error && <Alert title="Error">{error}</Alert>}
+          {error && <Alert title={t("Error")}>{error}</Alert>}
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="secondary" size="sm" onClick={closePasswordDialog}>Cancelar</Button>
-            <Button type="submit" size="sm">Guardar</Button>
+            <Button type="button" variant="secondary" size="sm" onClick={closePasswordDialog}>{t("Cancel")}</Button>
+            <Button type="submit" size="sm">{t("Save")}</Button>
           </div>
         </form>
       </Dialog>

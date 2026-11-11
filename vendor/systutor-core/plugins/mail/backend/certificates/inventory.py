@@ -95,25 +95,25 @@ def load_inventory(
     try:
         text = path.read_text(encoding="utf-8")
     except OSError:
-        raise InventoryError("No se pudo leer el estado de certificados") from None
+        raise InventoryError("Could not read the certificate state") from None
 
     if contains_secret_material(text):
         # No se loguea ni se devuelve el contenido: solo el rechazo.
-        raise InventoryError("El estado de certificados contiene material privado")
+        raise InventoryError("The certificate state contains private material")
 
     try:
         payload = json.loads(text)
     except json.JSONDecodeError:
-        raise InventoryError("El estado de certificados no es JSON válido") from None
+        raise InventoryError("The certificate state is not valid JSON") from None
 
     if isinstance(payload, list):
         payload = {"certificates": payload}
     if not isinstance(payload, dict):
-        raise InventoryError("El estado de certificados tiene un formato inválido")
+        raise InventoryError("The certificate state has an invalid format")
 
     raw_items = payload.get("certificates") or payload.get("items") or []
     if not isinstance(raw_items, list):
-        raise InventoryError("El estado de certificados tiene un formato inválido")
+        raise InventoryError("The certificate state has an invalid format")
 
     certificates: list[Certificate] = []
     seen: set[str] = set()

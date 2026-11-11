@@ -74,11 +74,11 @@ def list_sites(
 ) -> HostingSiteListResponse:
     if scope not in ("tenant", "all"):
         raise AppError(
-            "scope debe ser 'tenant' o 'all'", status_code=422, code="hosting.invalid_scope"
+            "scope must be 'tenant' or 'all'", status_code=422, code="hosting.invalid_scope"
         )
     if scope == "all" and not tenant_context.is_platform:
         raise AppError(
-            "Solo el administrador de plataforma puede ver todos los tenants",
+            "Only the platform administrator can view all tenants",
             status_code=403,
             code="hosting.platform_scope_forbidden",
         )
@@ -265,7 +265,7 @@ async def phpmyadmin_proxy(
         if exc.status_code != 401:
             raise
         return HTMLResponse(
-            "La sesión de phpMyAdmin expiró; volvé a abrir phpMyAdmin",
+            "The phpMyAdmin session expired; reopen phpMyAdmin",
             status_code=401,
             headers={"Cache-Control": "no-store"},
         )
@@ -298,7 +298,7 @@ async def phpmyadmin_proxy(
             )
         if forbidden:
             raise AppError(
-                "Login deshabilitado", status_code=403, code="hosting_phpmyadmin_login_disabled"
+                "Login disabled", status_code=403, code="hosting_phpmyadmin_login_disabled"
             )
     settings = get_hosting_settings()
     client = PmaClient(validate_url(settings.phpmyadmin_internal_url), settings.phpmyadmin_timeout)

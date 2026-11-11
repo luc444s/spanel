@@ -54,7 +54,7 @@ def install_pair(
     cert_source = lineage / "fullchain.pem"
     key_source = lineage / "privkey.pem"
     if not cert_source.is_file() or not key_source.is_file():
-        raise InstallError(f"El linaje de Certbot está incompleto: {lineage}")
+        raise InstallError(f"The Certbot lineage is incomplete: {lineage}")
 
     kwargs = {}
     if now is not None:

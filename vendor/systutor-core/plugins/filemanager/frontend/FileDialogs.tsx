@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@systutor/shell/ui/button";
 import { Dialog } from "@systutor/shell/ui/dialog";
 import { Input } from "@systutor/shell/ui/input";
+import { useT } from "@/i18n/use-i18n";
 
 export type PromptRequest = {
   title: string;
@@ -17,6 +18,7 @@ export function PromptDialog({ request, onClose }: {
   request: PromptRequest | null;
   onClose: () => void;
 }) {
+  const t = useT();
   const [value, setValue] = useState(request?.initial ?? "");
 
   useEffect(() => {
@@ -40,8 +42,8 @@ export function PromptDialog({ request, onClose }: {
       maxWidthClassName="max-w-md"
       actions={
         <div className="flex justify-end gap-2">
-          <Button variant="secondary" onClick={onClose}>Cancelar</Button>
-          <Button onClick={submit} disabled={!trimmed}>{request.confirmLabel ?? "Aceptar"}</Button>
+          <Button variant="secondary" onClick={onClose}>{t("Cancel")}</Button>
+          <Button onClick={submit} disabled={!trimmed}>{request.confirmLabel ?? t("OK")}</Button>
         </div>
       }
     >
@@ -69,6 +71,7 @@ export function ConflictDialog({ name, onChoose }: {
   name: string | null;
   onChoose: (choice: ConflictChoice) => void;
 }) {
+  const t = useT();
   const [renaming, setRenaming] = useState(false);
   const [newName, setNewName] = useState(name ?? "");
 
@@ -87,24 +90,24 @@ export function ConflictDialog({ name, onChoose }: {
   return (
     <Dialog
       open
-      title="El archivo ya existe"
-      description={`${name} ya está en esta carpeta. ¿Qué querés hacer?`}
+      title={t("The file already exists")}
+      description={t("{name} is already in this folder. What do you want to do?", { name })}
       onClose={() => choose({ action: "skip" })}
       maxWidthClassName="max-w-md"
       actions={
         <div className="flex flex-wrap justify-end gap-2">
-          <Button variant="secondary" onClick={() => choose({ action: "skip" })}>Omitir</Button>
+          <Button variant="secondary" onClick={() => choose({ action: "skip" })}>{t("Skip")}</Button>
           {renaming ? (
             <>
-              <Button variant="secondary" onClick={() => setRenaming(false)}>Volver</Button>
+              <Button variant="secondary" onClick={() => setRenaming(false)}>{t("Back")}</Button>
               <Button disabled={!trimmed || trimmed === name} onClick={() => choose({ action: "rename", name: trimmed })}>
-                Subir con este nombre
+                {t("Upload with this name")}
               </Button>
             </>
           ) : (
             <>
-              <Button variant="secondary" onClick={() => setRenaming(true)}>Renombrar</Button>
-              <Button onClick={() => choose({ action: "replace" })}>Reemplazar</Button>
+              <Button variant="secondary" onClick={() => setRenaming(true)}>{t("Rename")}</Button>
+              <Button onClick={() => choose({ action: "replace" })}>{t("Replace")}</Button>
             </>
           )}
         </div>
@@ -112,12 +115,12 @@ export function ConflictDialog({ name, onChoose }: {
     >
       {renaming ? (
         <label className="block space-y-1 text-sm">
-          <span className="text-muted-foreground">Nuevo nombre</span>
+          <span className="text-muted-foreground">{t("New name")}</span>
           <Input autoFocus value={newName} onChange={(event) => setNewName(event.target.value)} />
         </label>
       ) : (
         <p className="text-sm text-muted-foreground">
-          Reemplazar sobrescribe el contenido actual. Renombrar sube el archivo con otro nombre.
+          {t("Replace overwrites the current content. Rename uploads the file under a different name.")}
         </p>
       )}
     </Dialog>

@@ -24,7 +24,7 @@ def slugify(name: str) -> str:
     plain = unicodedata.normalize("NFKD", (name or "")).encode("ascii", "ignore").decode()
     slug = re.sub(r"[^a-z0-9]+", "-", plain.strip().lower()).strip("-")
     if not re.fullmatch(r"[a-z0-9-]{3,40}", slug):
-        raise ValueError("El nombre debe producir un slug de 3 a 40 caracteres")
+        raise ValueError("The name must produce a slug of 3 to 40 characters")
     return slug
 
 
@@ -36,23 +36,23 @@ def validate_domain(raw: str, profile: str = "internal") -> str:
     """
     value = (raw or "").strip().lower().removesuffix(".")
     if not value:
-        raise ValueError("El dominio no puede estar vacío")
+        raise ValueError("The domain cannot be empty")
     if any(token in value for token in ("/", ":", "*", " ", "\t")):
-        raise ValueError("Dominio inválido: sin esquema, puerto, ruta ni comodines")
+        raise ValueError("Invalid domain: no scheme, port, path or wildcards")
     labels = value.split(".")
     if len(labels) < 2:
-        raise ValueError("Dominio inválido: hace falta al menos nombre y TLD")
+        raise ValueError("Invalid domain: at least a name and TLD are required")
     if any(not label for label in labels):
-        raise ValueError("Dominio inválido: etiqueta vacía")
+        raise ValueError("Invalid domain: empty label")
     for label in labels:
         if not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label):
-            raise ValueError(f"Dominio inválido: etiqueta {label!r}")
+            raise ValueError(f"Invalid domain: label {label!r}")
     tld = labels[-1]
     if profile == "public":
         if tld == "spanel":
-            raise ValueError("El TLD .spanel es solo del laboratorio; usá un dominio público")
+            raise ValueError("The .spanel TLD is lab-only; use a public domain")
         if not re.fullmatch(r"[a-z]{2,63}", tld):
-            raise ValueError("Dominio público inválido: el TLD debe tener letras")
+            raise ValueError("Invalid public domain: the TLD must contain letters")
     return value
 
 

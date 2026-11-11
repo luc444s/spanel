@@ -104,13 +104,13 @@ def _starttls(
         raw.settimeout(timeout)
         banner = _read_smtp_reply(raw)
         if not banner.startswith(b"220"):
-            raise ProbeError("El servidor SMTP no respondió 220")
+            raise ProbeError("The SMTP server did not respond 220")
         raw.sendall(b"EHLO spanel-cert-agent\r\n")
         _read_smtp_reply(raw)
         raw.sendall(b"STARTTLS\r\n")
         reply = _read_smtp_reply(raw)
         if not reply.startswith(b"220"):
-            raise ProbeError("El servidor SMTP rechazó STARTTLS")
+            raise ProbeError("The SMTP server rejected STARTTLS")
         with context.wrap_socket(raw, server_hostname=servername) as tls:
             return _peer_metadata(tls)
 
@@ -173,7 +173,7 @@ def probe(
         return ProbeResult(
             port=port,
             ok=False,
-            error=str(exc)[:300] or "Fallo TLS",
+            error=str(exc)[:300] or "TLS failure",
             duration_ms=_elapsed_ms(start),
         )
     serial = metadata.get("serial")
@@ -185,7 +185,7 @@ def probe(
             fingerprint=metadata.get("fingerprint"),
             not_after=metadata.get("not_after"),
             sans=list(metadata.get("sans") or []),
-            error=f"Serial servido distinto al inventario ({serial or 'sin serial'})",
+            error=f"Presented serial differs from the inventory ({serial or 'no serial'})",
             duration_ms=_elapsed_ms(start),
         )
     return ProbeResult(

@@ -1,0 +1,177 @@
+const messages: Record<string, string> = {
+  Mail: "Correo",
+
+  // Estado de certificados
+  Valid: "Válido",
+  "Expiring soon": "Por vencer",
+  Expired: "Vencido",
+  "No certificate": "Sin certificado",
+  Error: "Error",
+  "Global · Default": "Global · Predeterminado",
+  Certbot: "Certbot",
+  "step-ca": "step-ca",
+  Static: "Estático",
+  "{source} · SNI": "{source} · SNI",
+  "{source} · Not deployed": "{source} · Sin desplegar",
+  "{source} · Failed": "{source} · Falló",
+  "{source} · Default": "{source} · Predeterminado",
+  SNI: "SNI",
+  Default: "Predeterminado",
+  "Not deployed": "Sin desplegar",
+  Failed: "Falló",
+  "No data": "Sin datos",
+  "No date": "Sin fecha",
+  "Expired {count} day ago": "Venció hace {count} día",
+  "Expired {count} days ago": "Venció hace {count} días",
+  "Expires today": "Vence hoy",
+  "Expires in {count} day": "Vence en {count} día",
+  "Expires in {count} days": "Vence en {count} días",
+  "Not verified": "Sin verificar",
+  "Agent OK": "Agente OK",
+  "Agent with failures": "Agente con fallos",
+  "Agent without status": "Agente sin estado",
+
+  // Validación de hostname
+  "Enter the certificate hostname.": "Ingresa el hostname del certificado.",
+  "Invalid hostname: only letters, numbers, hyphens, and periods.":
+    "Hostname inválido: solo letras, números, guiones y puntos.",
+  "The hostname must have the form mail.<domain>.":
+    "El hostname debe tener la forma mail.<dominio>.",
+  "Missing the domain after mail.": "Falta el dominio después de mail.",
+
+  // Gestor de certificados
+  "Request queued for {hostname}": "Solicitud encolada para {hostname}",
+  "Could not queue the request": "No se pudo encolar la solicitud",
+  "Status refresh requested from the agent": "Refresco de estado solicitado al agente",
+  "Could not request the refresh": "No se pudo solicitar el refresco",
+  "Action {action} queued for {hostname}": "Acción {action} encolada para {hostname}",
+  "Could not run the administrative action": "No se pudo ejecutar la acción administrativa",
+  "Certificate updated: {hostname}": "Certificado actualizado: {hostname}",
+  "The agent could not process {hostname}": "El agente no pudo procesar {hostname}",
+  "Status unavailable": "Estado no disponible",
+  "Status unavailable: the agent has not published recent status":
+    "Estado no disponible: el agente no publicó estado reciente",
+
+  // Cuentas de correo
+  "Password changed": "Contraseña modificada",
+  "Account created": "Cuenta creada",
+  "Passwords do not match": "Las contraseñas no coinciden",
+  "Minimum 8 characters": "Mínimo 8 caracteres",
+  "Changing password...": "Cambiando contraseña...",
+  "Username required": "Usuario requerido",
+  "Creating account...": "Creando cuenta...",
+  "Loading...": "Cargando...",
+  "Could not load accounts.": "No se pudieron cargar las cuentas.",
+  "Mail — {domain}": "Correos — {domain}",
+  "Refreshing...": "Actualizando...",
+  "TLS certificates": "Certificados TLS",
+  "Add mail": "Agregar correo",
+  "Could not refresh": "No se pudo actualizar",
+  "Showing the last known list. {error}": "Se muestra la última lista conocida. {error}",
+  "Create mail": "Crear correo",
+  Domain: "Dominio",
+  Username: "Usuario",
+  sales: "ventas",
+  Password: "Contraseña",
+  "Confirm password": "Confirmar contraseña",
+  "Repeat password": "Repetir contraseña",
+  Cancel: "Cancelar",
+  Create: "Crear",
+  "No mailboxes have been created for this domain.":
+    "No hay correos creados para este dominio.",
+  "{count} mailbox": "{count} correo",
+  "{count} mailboxes": "{count} correos",
+  "Change password": "Cambiar contraseña",
+  "New password": "Nueva contraseña",
+  Save: "Guardar",
+  Pending: "Pendiente",
+
+  // Fila y detalle de certificado
+  "Double click to manage this certificate": "Doble clic para administrar este certificado",
+  "{hostname}. Double click to manage": "{hostname}. Doble clic para administrar",
+  "Health:": "Salud:",
+  OK: "OK",
+  Failing: "Fallo",
+  "Has critical alerts": "Tiene alertas críticas",
+  "Critical alert": "Alerta crítica",
+  Warning: "Advertencia",
+  "No alerts": "Sin alertas",
+  "The certificate has no active alerts.": "El certificado no tiene alertas activas.",
+  "A job is in progress; the result appears when it finishes.":
+    "Hay un job en curso; el resultado se refleja al terminar.",
+  Deployment: "Despliegue",
+  Expiry: "Vencimiento",
+  Health: "Salud",
+  "With failures": "Con fallos",
+  "Last check": "Última verificación",
+  "Last OK": "Último OK",
+  "Consecutive failures": "Fallos consecutivos",
+  "Stored serial": "Serial almacenado",
+  "Served serial": "Serial servido",
+  "SNI probes": "Sondas SNI",
+  "{port}: ok": "{port}: ok",
+  "{port}: fails": "{port}: falla",
+  "No SNI: fails": "Sin SNI: falla",
+  "Force read-only verification": "Forzar verificación de solo lectura",
+  Verify: "Verificar",
+  "Force reissue with Certbot": "Forzar reemisión con Certbot",
+  Force: "Forzar",
+  Regenerate: "Regenerar",
+  "Install the Certbot-renewed lineage if it changed":
+    "Instala el linaje renovado por Certbot si cambió",
+  Sync: "Sincronizar",
+  "Revert to the previous generation": "Revierte a la generación anterior",
+  "Roll back": "Revertir",
+  "Global default": "Predeterminado global",
+
+  // Diálogos de certificados
+  "Spanel · Mail infrastructure": "Spanel · Infraestructura de correo",
+  "Last read: {time}": "Última lectura: {time}",
+  "No agent reading": "Sin lectura del agente",
+  "Add certificate": "Agregar certificado",
+  "Requesting...": "Solicitando...",
+  "Refresh status": "Actualizar estado",
+  Close: "Cerrar",
+  "Agent status:": "Estado del agente:",
+  "Last check:": "Última verificación:",
+  "{critical} critical · {warning} warnings": "{critical} críticas · {warning} avisos",
+  "No published health": "Sin salud publicada",
+  "Issuing actions remain disabled until the agent publishes recent status.":
+    "Las acciones de emisión quedan deshabilitadas hasta que el agente publique estado reciente.",
+  "Could not complete the action": "No se pudo completar la acción",
+  "Global critical alert": "Alerta crítica global",
+  "The default certificate or the agent has a critical alert. Destructive actions are disabled.":
+    "El certificado predeterminado o el agente tienen una alerta crítica. Las acciones destructivas están deshabilitadas.",
+  "Reading certificates...": "Leyendo certificados...",
+  "No certificate for {hostname}.": "No hay certificado para {hostname}.",
+  "No certificates visible for this tenant.":
+    "No hay certificados visibles para este tenant.",
+
+  // Forzar reemisión
+  "Force reissue": "Forzar reemisión",
+  "Rate limit warning": "Advertencia de límite de solicitudes",
+  "Let’s Encrypt limits duplicate certificates per domain. Forcing an unnecessary issuance can block new requests for a week.":
+    "Let’s Encrypt limita los certificados duplicados por dominio. Forzar una emisión innecesaria puede bloquear nuevas solicitudes durante una semana.",
+  "Certbot will be asked to replace the certificate for":
+    "Se pedirá a Certbot que reemplace el certificado de",
+  "Mail keeps working with the current certificate until the new one is validated and installed.":
+    "El correo sigue funcionando con el certificado actual hasta que el nuevo se valide e instale.",
+  "Force issuance": "Forzar emisión",
+
+  // Alta de certificado
+  "Issuance request for a new domain": "Solicitud de emisión para un dominio nuevo",
+  "Certificate hostname": "Hostname del certificado",
+  "mail.newdomain.com": "mail.nuevodominio.com",
+  "Before issuing": "Antes de emitir",
+  "The hostname must be in the agent allowlist":
+    "El hostname debe estar en la lista de permitidos del agente",
+  "If it is a newly added domain, run": "Si es un dominio recién agregado, ejecuta primero",
+  "and refresh the status; without the allowlist the agent rejects issuance.":
+    "y refresca el estado; sin la lista de permitidos el agente rechaza la emisión.",
+  "mail.<domain>": "mail.<dominio>",
+  "Request certificate": "Solicitar certificado",
+  "Previous page": "Página anterior",
+  "Next page": "Página siguiente",
+};
+
+export default messages;

@@ -38,13 +38,24 @@ export type PluginRuntimeRecord = {
   updated_at: string;
 };
 
+export type ApiErrorLocalizer = (code: string | null, message: string) => string;
+
+let apiErrorLocalizer: ApiErrorLocalizer = (_code, message) => message;
+
+/** The app registers this once so API errors follow the UI language. */
+export function setApiErrorLocalizer(localizer: ApiErrorLocalizer) {
+  apiErrorLocalizer = localizer;
+}
+
 export class ApiError extends Error {
   status: number;
+  code: string | null;
 
-  constructor(message: string, status: number) {
-    super(message);
+  constructor(message: string, status: number, code: string | null = null) {
+    super(apiErrorLocalizer(code, message));
     this.name = "ApiError";
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -130,6 +141,14 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
     // The kernel serializes every AppError as {"error": {"code", "message"}}.
     // Without this branch the UI only ever showed "HTTP 409 ...".
     const errorPayload = payload?.error;
+    let code: string | null = null;
+    if (
+      typeof errorPayload === "object" &&
+      errorPayload !== null &&
+      "code" in errorPayload
+    ) {
+      code = String((errorPayload as Record<string, unknown>).code);
+    }
     let message: string;
     if (
       typeof errorPayload === "object" &&
@@ -152,7 +171,7 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
     } else {
       message = (payload?.message as string) ?? `HTTP ${response.status} al consultar la API`;
     }
-    throw new ApiError(message, response.status);
+    throw new ApiError(message, response.status, code);
   }
 
   return payload as T;

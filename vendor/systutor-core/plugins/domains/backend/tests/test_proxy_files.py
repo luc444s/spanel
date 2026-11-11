@@ -181,7 +181,7 @@ def test_rewrite_mismatch_fails_without_success() -> None:
     with pytest.raises(ProxyError) as exc:
         files.write_text(CONFIG / "spanel-x.yml", managed())
     assert exc.value.exit_code == EXIT_TRANSPORT
-    assert "no coincide" in str(exc.value)
+    assert "does not match" in str(exc.value)
 
 
 def test_write_exec_failure_is_transport_error_without_retry() -> None:
@@ -213,11 +213,11 @@ def test_writable_reports_container_path() -> None:
     files, runner = make_files()
     ok, detail = files.writable()
     assert ok is True
-    assert detail == "/config dentro de traefik"
+    assert detail == "/config inside traefik"
     runner.writable = False
     ok, detail = files.writable()
     assert ok is False
-    assert "no es escribible" in detail
+    assert "is not writable" in detail
 
 
 # ---- regresión local -------------------------------------------------------

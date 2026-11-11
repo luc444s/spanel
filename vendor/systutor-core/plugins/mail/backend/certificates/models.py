@@ -71,7 +71,7 @@ class Certificate:
     ) -> Certificate:
         hostname = str(payload.get("hostname") or payload.get("name") or "").strip().lower()
         if not hostname:
-            raise ValueError("certificado sin hostname")
+            raise ValueError("certificate without hostname")
         scope = _one_of(payload.get("scope"), SCOPES, "tenant")
         if scope not in ("global", "tenant"):
             scope = "tenant"

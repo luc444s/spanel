@@ -5,6 +5,7 @@ import { Button } from "@systutor/shell/ui/button";
 import { Dialog } from "@systutor/shell/ui/dialog";
 import { Input } from "@systutor/shell/ui/input";
 
+import { useT } from "@/i18n/use-i18n";
 import {
   certificateHostnameError,
   normalizeCertificateHostname,
@@ -30,6 +31,7 @@ export function NewCertificateDialog({
   onSubmit: (hostname: string) => void;
   onClose: () => void;
 }) {
+  const t = useT();
   const [hostname, setHostname] = useState("");
 
   useEffect(() => {
@@ -47,8 +49,8 @@ export function NewCertificateDialog({
   return (
     <Dialog
       open={open}
-      title="Agregar certificado"
-      description="Solicitud de emisión para un dominio nuevo"
+      title={t("Add certificate")}
+      description={t("Issuance request for a new domain")}
       onClose={onClose}
       zIndexClassName="z-[1250]"
       maxWidthClassName="max-w-md"
@@ -56,14 +58,14 @@ export function NewCertificateDialog({
       <div className="space-y-4 text-sm text-foreground">
         <div className="space-y-1">
           <label htmlFor="new-certificate-hostname" className="text-xs text-muted-foreground">
-            Hostname del certificado
+            {t("Certificate hostname")}
           </label>
           <Input
             id="new-certificate-hostname"
             value={hostname}
             autoComplete="off"
             spellCheck={false}
-            placeholder="mail.nuevodominio.com"
+            placeholder={t("mail.newdomain.com")}
             disabled={pending}
             onChange={(event) => setHostname(event.target.value)}
             onKeyDown={(event) => {
@@ -74,27 +76,32 @@ export function NewCertificateDialog({
             <p className="text-xs text-destructive">{validationError}</p>
           ) : null}
         </div>
-        <Alert title="Antes de emitir">
-          El hostname debe estar en la allowlist del agente
-          (<span className="font-mono text-xs">/etc/spanel/cert-agent.toml</span>).
-          Si es un dominio recién agregado, ejecutá primero
+        <Alert title={t("Before issuing")}>
+          {t("The hostname must be in the agent allowlist")}
+          {" ("}
+          <span className="font-mono text-xs">/etc/spanel/cert-agent.toml</span>
+          {"). "}
+          {t("If it is a newly added domain, run")}
           <span className="font-mono text-xs">
             {" "}
-            python3 scripts/install_cert_agent.py --add-allowlist {normalized || "mail.<dominio>"}
+            python3 scripts/install_cert_agent.py --add-allowlist{" "}
+            {normalized || t("mail.<domain>")}
           </span>{" "}
-          y refrescá el estado; sin allowlist el agente rechaza la emisión.
+          {t(
+            "and refresh the status; without the allowlist the agent rejects issuance."
+          )}
         </Alert>
-        {error ? <Alert title="No se pudo encolar la solicitud">{error}</Alert> : null}
+        {error ? <Alert title={t("Could not queue the request")}>{error}</Alert> : null}
         <div className="flex justify-end gap-2">
           <Button type="button" variant="secondary" onClick={onClose} disabled={pending}>
-            Cancelar
+            {t("Cancel")}
           </Button>
           <Button
             type="button"
             onClick={submit}
             disabled={pending || Boolean(validationError)}
           >
-            {pending ? "Solicitando..." : "Solicitar certificado"}
+            {pending ? t("Requesting...") : t("Request certificate")}
           </Button>
         </div>
       </div>

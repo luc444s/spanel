@@ -131,7 +131,7 @@ def create_generation(config: AgentConfig, hostname: str, lineage: Path, *, runn
     cert_source = lineage / "fullchain.pem"
     key_source = lineage / "privkey.pem"
     if not cert_source.is_file() or not key_source.is_file():
-        raise InstallError(f"El linaje de Certbot está incompleto: {lineage}")
+        raise InstallError(f"The Certbot lineage is incomplete: {lineage}")
     validate_pair(
         cert_source,
         key_source,
@@ -163,7 +163,7 @@ def activate_generation(config: AgentConfig, hostname: str, name: str) -> None:
 
     directory = generation_root(config, hostname) / name
     if not (directory / "fullchain.pem").is_file():
-        raise InstallError(f"Generación incompleta: {name}")
+        raise InstallError(f"Incomplete generation: {name}")
     link = _active_link(config, hostname)
     link.parent.mkdir(parents=True, exist_ok=True)
     temporary = link.with_name(f".active.{uuid.uuid4().hex}")
@@ -381,7 +381,7 @@ def _rollback(
     try:
         restore_backup(config, hostname, backup)
     except (OSError, InstallError) as exc:
-        warnings.append(f"No se pudo restaurar el backup: {safe_error(str(exc))}")
+        warnings.append(f"Could not restore the backup: {safe_error(str(exc))}")
     for command in (
         config.postfix.reload_command,
         config.dovecot.reload_command,
@@ -389,11 +389,11 @@ def _rollback(
         try:
             _run_step(command, runner)
         except SniError as exc:
-            warnings.append(safe_error(str(exc)) or "Falló una recarga de rollback")
+            warnings.append(safe_error(str(exc)) or "A rollback reload failed")
     try:
         return bool(verifier("all"))
     except Exception:  # noqa: BLE001 - el rollback debe reportar, no propagar
-        warnings.append("La verificación posterior al rollback falló")
+        warnings.append("Post-rollback verification failed")
         return False
 
 
@@ -415,7 +415,7 @@ def transactional_install(
     lock_path = config.locks_dir / f"{hostname}.lock"
     with try_file_lock(lock_path) as acquired:
         if not acquired:
-            raise InstallBusy(f"Otra instalación está en curso para {hostname}")
+            raise InstallBusy(f"Another installation is in progress for {hostname}")
         check = verifier or default_verifier(config, hostname, connector=connector)
         previous = previous_state if previous_state is not None else read_json(config.state_path)
         try:
@@ -426,7 +426,7 @@ def transactional_install(
                 ok=False,
                 changed=False,
                 previous_generation=current_generation(config, hostname),
-                error=safe_error(str(exc)) or "Validación de staging fallida",
+                error=safe_error(str(exc)) or "Staging validation failed",
             )
 
         backup = create_backup(
@@ -441,14 +441,14 @@ def transactional_install(
                 _run_step(config.postfix.postmap_command, runner)
             _run_step(config.postfix.reload_command, runner)
             if not check("postfix"):
-                raise InstallError("Postfix no verifica 465/587 tras la activación")
+                raise InstallError("Postfix does not verify 465/587 after activation")
             _run_step(config.dovecot.reload_command, runner)
             if not check("dovecot"):
-                raise InstallError("Dovecot no verifica 993 tras la activación")
+                raise InstallError("Dovecot does not verify 993 after activation")
             if not check("all"):
-                raise InstallError("La verificación SNI/sin SNI falló tras la activación")
+                raise InstallError("SNI/no-SNI verification failed after activation")
         except ACTIVATION_ERRORS as exc:
-            warnings.append(safe_error(str(exc)) or "Fallo de activación")
+            warnings.append(safe_error(str(exc)) or "Activation failure")
             rolled = _rollback(
                 config, hostname, backup, runner=runner, verifier=check, warnings=warnings
             )
@@ -459,11 +459,11 @@ def transactional_install(
                 generation=generation,
                 previous_generation=backup.previous_generation,
                 rolled_back=rolled,
-                error=safe_error(str(exc)) or "Fallo de activación",
+                error=safe_error(str(exc)) or "Activation failure",
                 warnings=warnings,
             )
         except Exception as exc:  # noqa: BLE001 - cualquier fallo 5-10 debe revertir
-            warnings.append(safe_error(str(exc)) or "Fallo inesperado de activación")
+            warnings.append(safe_error(str(exc)) or "Unexpected activation failure")
             rolled = _rollback(
                 config, hostname, backup, runner=runner, verifier=check, warnings=warnings
             )
@@ -474,7 +474,7 @@ def transactional_install(
                 generation=generation,
                 previous_generation=backup.previous_generation,
                 rolled_back=rolled,
-                error=safe_error(str(exc)) or "Fallo inesperado de activación",
+                error=safe_error(str(exc)) or "Unexpected activation failure",
                 warnings=warnings,
             )
 
@@ -482,7 +482,7 @@ def transactional_install(
         try:
             _prune(config, hostname)
         except OSError as exc:
-            warnings.append(f"Poda de generaciones fallida: {safe_error(str(exc))}")
+            warnings.append(f"Generation pruning failed: {safe_error(str(exc))}")
         return InstallOutcome(
             hostname=hostname,
             ok=True,
@@ -516,7 +516,7 @@ def rollback_hostname(
     lock_path = config.locks_dir / f"{hostname}.lock"
     with try_file_lock(lock_path) as acquired:
         if not acquired:
-            raise InstallBusy(f"Otra instalación está en curso para {hostname}")
+            raise InstallBusy(f"Another installation is in progress for {hostname}")
         check = verifier or default_verifier(config, hostname, connector=connector)
         active = current_generation(config, hostname)
         target = previous_generation(config, hostname)
@@ -526,7 +526,7 @@ def rollback_hostname(
                 ok=False,
                 changed=False,
                 generation=active,
-                error="No hay una generación anterior para revertir",
+                error="There is no previous generation to revert to",
             )
         warnings: list[str] = []
         try:
@@ -538,7 +538,7 @@ def rollback_hostname(
             _run_step(config.postfix.reload_command, runner)
             _run_step(config.dovecot.reload_command, runner)
             if not check("all"):
-                raise InstallError("La verificación posterior al rollback falló")
+                raise InstallError("Post-rollback verification failed")
         except ACTIVATION_ERRORS as exc:
             return InstallOutcome(
                 hostname=hostname,

@@ -1,40 +1,42 @@
-# Gestor de certificados TLS de correo
+# Mail TLS certificate manager
 
-Implementa las A.SPEC 0035 y 0036: inventario de certificados de correo, API en
-el plugin `mail`, modal **Certificados TLS** en Correos, emisión bajo demanda
-mediante un agente privilegiado, verificación continua, alertas, instalación
-transaccional y rollback.
+Implements A.SPEC 0035 and 0036: mail certificate inventory, API in
+the `mail` plugin, **TLS Certificates** modal in Mail, on-demand issuance
+through a privileged agent, continuous verification, alerts, transactional
+installation and rollback.
 
-Certbot sigue siendo el dueño de la emisión y la renovación. Spanel **no**
-implementa ACME, no guarda claves privadas y no recrea Docker Mailserver.
+Certbot remains the owner of issuance and renewal. Spanel does **not**
+implement ACME, does not store private keys, and does not recreate Docker Mailserver.
 
-## Reparto de responsabilidades
+English | [Español](certificate-manager.es.md)
 
-| Componente | Puede | No puede |
+## Division of responsibilities
+
+| Component | Can | Cannot |
 |---|---|---|
-| Web / API `domains` | leer `state.json`, escribir `requests/`, leer `jobs/` | leer `privkey.pem`, ejecutar Certbot, tocar Docker |
-| `spanel-cert-agent` (root) | validar, ejecutar Certbot, instalar el par, generar SNI, recargar | aceptar flags, rutas o entorno desde la solicitud |
-| Certbot del host | emitir y renovar | se invoca solo con argv fijo |
+| Web / `domains` API | read `state.json`, write `requests/`, read `jobs/` | read `privkey.pem`, run Certbot, touch Docker |
+| `spanel-cert-agent` (root) | validate, run Certbot, install the pair, generate SNI, reload | accept flags, paths or environment from the request |
+| Host Certbot | issue and renew | only invoked with a fixed argv |
 
-`cf-mail` sigue siendo el certificado predeterminado global. En esta fase no se
-regenera ni se reinstala desde el panel.
+`cf-mail` remains the global default certificate. In this phase it is not
+regenerated or reinstalled from the panel.
 
-## Rutas
+## Paths
 
-| Ruta | Dueño / modo | Uso |
+| Path | Owner / mode | Use |
 |---|---|---|
-| `/var/lib/spanel/cert-manager/state.json` | `root:spanel-cert` `0640` | Inventario, solo metadatos y rutas |
-| `/var/lib/spanel/cert-manager/requests/` | `spanel:spanel-cert` `0770` | La web escribe; el agente lee y borra |
-| `/var/lib/spanel/cert-manager/jobs/` | `root:spanel-cert` `0750` | Resultado de cada solicitud |
-| `/etc/spanel/cert-agent.toml` | `root:root` `0600` | Allowlist, Certbot y comandos permitidos |
-| `/etc/ssl/spanel/mail/<hostname>/fullchain.pem` | `root:root` `0644` | Cadena instalada |
-| `/etc/ssl/spanel/mail/<hostname>/privkey.pem` | `root:root` `0600` | Clave instalada |
+| `/var/lib/spanel/cert-manager/state.json` | `root:spanel-cert` `0640` | Inventory, metadata and paths only |
+| `/var/lib/spanel/cert-manager/requests/` | `spanel:spanel-cert` `0770` | The web writes; the agent reads and deletes |
+| `/var/lib/spanel/cert-manager/jobs/` | `root:spanel-cert` `0750` | Result of each request |
+| `/etc/spanel/cert-agent.toml` | `root:root` `0600` | Allowlist, Certbot and allowed commands |
+| `/etc/ssl/spanel/mail/<hostname>/fullchain.pem` | `root:root` `0644` | Installed chain |
+| `/etc/ssl/spanel/mail/<hostname>/privkey.pem` | `root:root` `0600` | Installed key |
 
-La web solo escribe `requests/`. El agente publica `state.json` y `jobs/` sin
-contenido de claves. Un `state.json` que contenga `PRIVATE KEY` se rechaza
-completo y la API responde `503`.
+The web only writes `requests/`. The agent publishes `state.json` and `jobs/` without
+key content. A `state.json` containing `PRIVATE KEY` is rejected in its
+entirety and the API responds `503`.
 
-## Configuración del agente
+## Agent configuration
 
 ```toml
 # /etc/spanel/cert-agent.toml
@@ -61,7 +63,7 @@ audit_interval_seconds = 600
 [alerts]
 warning_days = 21
 critical_days = 7
-# Canal externo, independiente del correo vigilado. Elegir uno:
+# External channel, independent of the monitored mail service. Choose one:
 webhook_command = ["/usr/local/bin/spanel-alert-webhook"]
 # webhook_url = "https://alertas.example.com/spanel"
 timeout_seconds = 10
@@ -70,7 +72,7 @@ timeout_seconds = 10
 executable = "/usr/bin/certbot"
 challenge = "webroot"          # auto | webroot | dns-01
 webroot_path = "/var/www/html"
-# dns_plugin = "cloudflare"    # solo con challenge = "dns-01"
+# dns_plugin = "cloudflare"    # only with challenge = "dns-01"
 lineage_root = "/etc/letsencrypt/live"
 
 [postfix]
@@ -83,7 +85,7 @@ local_name_path = "/etc/dovecot/conf.d/99-spanel-local_name.conf"
 reload_command = ["dovecot", "reload"]
 ```
 
-Variables de entorno equivalentes (ganan sobre el TOML):
+Equivalent environment variables (they take precedence over the TOML):
 
 `SPANEL_CERT_AGENT_CONFIG`, `SPANEL_CERT_ALLOWLIST`, `SPANEL_CERT_STATE_PATH`,
 `SPANEL_CERT_REQUESTS_DIR`, `SPANEL_CERT_JOBS_DIR`, `SPANEL_CERT_INSTALL_ROOT`,
@@ -102,63 +104,63 @@ Variables de entorno equivalentes (ganan sobre el TOML):
 `SPANEL_CERT_ALERT_CRITICAL_DAYS`, `SPANEL_CERT_ALERT_WEBHOOK_CMD`,
 `SPANEL_CERT_ALERT_WEBHOOK_URL`, `SPANEL_CERT_ALERT_TIMEOUT`.
 
-Sin `sni_map_path`, `postmap_command`, `local_name_path` o los `reload_command`
-el agente **falla cerrado antes de ejecutar Certbot**. No inventa rutas ni
-comandos.
+Without `sni_map_path`, `postmap_command`, `local_name_path` or the `reload_command`
+entries, the agent **fails closed before running Certbot**. It does not invent paths or
+commands.
 
-El plugin web lee las rutas de estado/solicitudes/jobs de
+The web plugin reads the state/requests/jobs paths from
 `SPANEL_CERT_STATE_PATH`, `SPANEL_CERT_REQUESTS_DIR`, `SPANEL_CERT_JOBS_DIR`,
-`SPANEL_CERT_DEFAULT_NAME`, `SPANEL_CERT_RENEW_DAYS` y
-`SPANEL_CERT_STATE_MAX_AGE`. La antigüedad máxima por defecto es 900 s; pasado
-ese umbral el inventario se marca `stale` y la UI muestra “Estado no disponible”.
+`SPANEL_CERT_DEFAULT_NAME`, `SPANEL_CERT_RENEW_DAYS` and
+`SPANEL_CERT_STATE_MAX_AGE`. The default maximum age is 900 s; past
+that threshold the inventory is marked `stale` and the UI shows "Status unavailable".
 
-## Alta de un dominio nuevo (0041)
+## Adding a new domain (0041)
 
-Para pedir el certificado TLS de un dominio que el panel todavía no lista:
+To request the TLS certificate for a domain that the panel does not list yet:
 
-1. Agregar el hostname a la allowlist del agente **sin reescribir el resto del
-   TOML** (idempotente; conserva comentarios, rutas, `[postfix]` y `[dovecot]`;
-   falla si la configuración no existe y en `--dry-run` no escribe):
+1. Add the hostname to the agent allowlist **without rewriting the rest of the
+   TOML** (idempotent; preserves comments, paths, `[postfix]` and `[dovecot]`;
+   fails if the configuration does not exist, and in `--dry-run` does not write):
 
    ```bash
    python3 scripts/install_cert_agent.py --add-allowlist mail.nuevo.com
    ```
 
-2. Refrescar el estado del agente para que publique el hostname agregado:
+2. Refresh the agent state so it publishes the added hostname:
 
    ```bash
    spanel-cert-agent refresh
    ```
 
-3. Abrir **Correos → Certificados TLS → Agregar certificado**, ingresar el
-   hostname con la forma `mail.<dominio>` y solicitar. La acción aparece solo
-   con `mail.certificates.manage`; un tenant solo puede pedir
-   `mail.<su-dominio-primario>` y cualquier otro hostname responde `404`.
-   El administrador de plataforma (`core.platform.admin`) puede pedir
-   cualquier `mail.*` válido.
+3. Open **Mail → TLS Certificates → Add certificate**, enter the
+   hostname in the form `mail.<domain>` and request it. The action appears only
+   with `mail.certificates.manage`; a tenant can only request
+   `mail.<their-primary-domain>` and any other hostname responds `404`.
+   The platform administrator (`core.platform.admin`) can request
+   any valid `mail.*`.
 
-La allowlist del agente es la **autoridad final**: si el hostname no está en
-`/etc/spanel/cert-agent.toml`, el agente falla el job y la UI muestra el error.
-El certificado solo se asocia a un tenant si `<dominio>` es su dominio
-primario; la solicitud ya puede encolarse y consultarse (`/jobs/{job_id}`) con
-`202`/`200` antes de que el hostname aparezca en `state.json`.
+The agent allowlist is the **final authority**: if the hostname is not in
+`/etc/spanel/cert-agent.toml`, the agent fails the job and the UI shows the error.
+The certificate is only associated with a tenant if `<domain>` is its primary
+domain; the request can already be queued and polled (`/jobs/{job_id}`) with
+`202`/`200` before the hostname appears in `state.json`.
 
-## Instalación
+## Installation
 
 ```bash
-# Código (ejemplo)
+# Code (example)
 install -d /opt/spanel/scripts
 cp -a scripts/spanel_cert_agent /opt/spanel/scripts/
 install -d /opt/spanel/docs
 cp docs/certificate-manager.md /opt/spanel/docs/
 
-# Configuración y directorios
+# Configuration and directories
 install -d -m 0750 -o root -g spanel-cert /var/lib/spanel/cert-manager/jobs
 install -d -m 0770 -o spanel -g spanel-cert /var/lib/spanel/cert-manager/requests
 install -d -m 0755 /etc/ssl/spanel/mail
 install -m 0600 -o root -g root cert-agent.toml /etc/spanel/cert-agent.toml
 
-# Unidades
+# Units
 install -m 0644 scripts/systemd/spanel-cert-agent.service /etc/systemd/system/
 install -m 0644 scripts/systemd/spanel-cert-agent.path /etc/systemd/system/
 install -m 0644 scripts/systemd/spanel-cert-agent.timer /etc/systemd/system/
@@ -170,58 +172,58 @@ systemctl enable --now spanel-cert-agent.path
 systemctl enable --now spanel-cert-agent.timer
 systemctl enable --now spanel-cert-audit.timer
 
-# Deploy hook de Certbot (A.SPEC 0036)
+# Certbot deploy hook (A.SPEC 0036)
 install -m 0755 scripts/spanel_cert_agent/certbot-deploy-hook.sh \
   /etc/letsencrypt/renewal-hooks/deploy/spanel-cert-sync
 ```
 
-`certbot.timer` sigue siendo el único programador de renovación. El deploy
-hook **no** ejecuta `certbot renew` ni `certbot certonly`: solo deriva el
-hostname de `RENEWED_LINEAGE` y llama `spanel-cert-agent sync --hostname`.
-`spanel-cert-deploy.service` es el fallback oneshot que sincroniza todos los
-linajes cuya huella cambió.
+`certbot.timer` remains the only renewal scheduler. The deploy
+hook does **not** run `certbot renew` or `certbot certonly`: it only derives the
+hostname from `RENEWED_LINEAGE` and calls `spanel-cert-agent sync --hostname`.
+`spanel-cert-deploy.service` is the oneshot fallback that syncs all
+lineages whose fingerprint changed.
 
-### Despliegue con Docker
+### Docker deployment
 
-El instalador idempotente prepara todo en el host:
+The idempotent installer prepares everything on the host:
 
 ```bash
 python3 scripts/install_cert_agent.py --dry-run
 python3 scripts/install_cert_agent.py
 ```
 
-- Detecta los linajes `mail.*` de Certbot (o usa `--allowlist`).
-- Copia los certificados existentes a `/etc/ssl/spanel/mail/<hostname>/`.
-- Escribe `/etc/spanel/cert-agent.toml` sin `[postfix]` ni `[dovecot]`, así la
-  emisión falla cerrada y no toca el mapa SNI.
-- Instala las unidades systemd, publica `state.json` y habilita los timers.
-- `--force-config` reescribe la configuración y `--refresh-certs` vuelve a
-  copiar los certificados.
+- Detects Certbot's `mail.*` lineages (or uses `--allowlist`).
+- Copies existing certificates to `/etc/ssl/spanel/mail/<hostname>/`.
+- Writes `/etc/spanel/cert-agent.toml` without `[postfix]` or `[dovecot]`, so
+  issuance fails closed and does not touch the SNI map.
+- Installs the systemd units, publishes `state.json` and enables the timers.
+- `--force-config` rewrites the configuration and `--refresh-certs` copies the
+  certificates again.
 
-Para comprobar si el agente está instalado, habilitado y publicando estado
-reciente:
+To check whether the agent is installed, enabled and publishing recent
+state:
 
 ```bash
 python3 scripts/install_cert_agent.py --check
 python3 scripts/install_cert_agent.py --check --json
 ```
 
-Sale con `0` si configuración, unidades, timers y `state.json` están bien, y
-con `1` si falta algo. La comprobación no escribe nada.
+Exits with `0` if configuration, units, timers and `state.json` are fine, and
+with `1` if anything is missing. The check writes nothing.
 
-La app lee el estado y escribe solicitudes en `/var/lib/spanel/cert-manager`.
-El `docker-compose.yml` monta ese directorio en el contenedor `app`; sin el
-mount la API responde `state_missing` y la UI muestra «Estado no disponible».
-El contenedor corre como root, así que no hace falta crear el usuario `spanel`
-en el host: alcanza con los directorios y permisos del agente.
+The app reads the state and writes requests in `/var/lib/spanel/cert-manager`.
+`docker-compose.yml` mounts that directory in the `app` container; without the
+mount the API responds `state_missing` and the UI shows "Status unavailable".
+The container runs as root, so there is no need to create the `spanel` user
+on the host: the agent's directories and permissions are enough.
 
-El agente corre en el host porque necesita Certbot, escribir en
-`/etc/ssl/spanel/mail` y recargar Postfix/Dovecot. Con Docker Mailserver, la
-recarga se hace con `docker exec` y las rutas del mapa SNI deben ser las que el
-contenedor ya monta (`/tmp/docker-mailserver/...`). Si el mapa SNI o el
-`local_name` no están configurados, el agente falla cerrado y no emite.
+The agent runs on the host because it needs Certbot, writes to
+`/etc/ssl/spanel/mail`, and reloads Postfix/Dovecot. With Docker Mailserver, the
+reload is done with `docker exec` and the SNI map paths must be the ones the
+container already mounts (`/tmp/docker-mailserver/...`). If the SNI map or the
+`local_name` is not configured, the agent fails closed and does not issue.
 
-### Comprobación manual
+### Manual check
 
 ```bash
 PYTHONPATH=/opt/spanel/scripts python3 -m spanel_cert_agent refresh \
@@ -234,59 +236,59 @@ PYTHONPATH=/opt/spanel/scripts python3 -m spanel_cert_agent audit \
   --config /etc/spanel/cert-agent.toml --json
 ```
 
-`run-once` es la unidad que ejecuta systemd. Procesa todas las solicitudes
-pendientes, escribe un job por cada una y refresca `state.json`.
+`run-once` is the unit that systemd runs. It processes all pending
+requests, writes a job for each one and refreshes `state.json`.
 
-## Comportamiento de emisión
+## Issuance behavior
 
-| Acción | Certbot |
+| Action | Certbot |
 |---|---|
-| `ensure` (linaje existente) | `certbot renew --cert-name <hostname>` |
-| `ensure` (sin linaje) | `certbot certonly --cert-name <hostname> -d <hostname>` |
+| `ensure` (existing lineage) | `certbot renew --cert-name <hostname>` |
+| `ensure` (no lineage) | `certbot certonly --cert-name <hostname> -d <hostname>` |
 | `force` | `certbot certonly --force-renewal --cert-name <hostname> -d <hostname>` |
 
-El método de desafío sale de la configuración (`auto`, `webroot`, `dns-01`), no
-de la solicitud. El agente rechaza campos extra, cualquier flag
-(`--pre-hook`, `--post-hook`, `--deploy-hook`, `--force-renewal` en `ensure`),
-rutas y variables de entorno. Solo ejecuta Certbot para hostnames de la
+The challenge method comes from the configuration (`auto`, `webroot`, `dns-01`), not
+from the request. The agent rejects extra fields, any flag
+(`--pre-hook`, `--post-hook`, `--deploy-hook`, `--force-renewal` in `ensure`),
+paths and environment variables. It only runs Certbot for hostnames in the
 allowlist.
 
-Antes de instalar valida:
+Before installing, it validates:
 
-- que la clave privada corresponda al certificado;
-- que el SAN contenga el hostname;
-- que las fechas sean válidas y no esté vencido;
-- la cadena si `ca_file` está configurado.
+- that the private key matches the certificate;
+- that the SAN contains the hostname;
+- that the dates are valid and it is not expired;
+- the chain if `ca_file` is configured.
 
-Solo después copia `fullchain.pem` (`0644`) y `privkey.pem` (`0600`) a
-`/etc/ssl/spanel/mail/<hostname>/`, regenera el mapa SNI de Postfix, el bloque
-`local_name` de Dovecot y ejecuta las recargas configuradas. El contenedor de
-Docker Mailserver no se recrea.
+Only then does it copy `fullchain.pem` (`0644`) and `privkey.pem` (`0600`) to
+`/etc/ssl/spanel/mail/<hostname>/`, regenerate the Postfix SNI map, the Dovecot
+`local_name` block and run the configured reloads. The Docker Mailserver
+container is not recreated.
 
-`cf-mail` no tiene ruta de instalación en el agente: se lee desde
-`default_cert_path`/`default_key_path` y se publica como `scope="global"`,
-`deployment="default"`. Ningún certificado SNI lo reemplaza para conexiones sin
+`cf-mail` has no installation path in the agent: it is read from
+`default_cert_path`/`default_key_path` and published as `scope="global"`,
+`deployment="default"`. No SNI certificate replaces it for connections without
 SNI.
 
-## Verificación continua (0036)
+## Continuous verification (0036)
 
-`spanel-cert-audit.timer` ejecuta `spanel-cert-agent audit` cada
-`verification.audit_interval_seconds` (10 min por defecto). La auditoría:
+`spanel-cert-audit.timer` runs `spanel-cert-agent audit` every
+`verification.audit_interval_seconds` (10 min by default). The audit:
 
-- valida clave/certificado, cadena, SAN, fechas y hash de cada linaje instalado;
-- conecta a 993/465/587 con SNI (`server_hostname=<hostname>`,
-  `check_hostname=True`, CA configurada) y comprueba SAN y serial/fingerprint
-  contra el inventario;
-- conecta **sin SNI** a los mismos puertos y exige que el serial sea el de
-  `cf-mail`; si responde un certificado SNI, es fallo crítico;
-- escribe `health` en `state.json` y `alerts.json`, sin tocar certificados ni
-  recargar Postfix/Dovecot.
+- validates key/certificate, chain, SAN, dates and hash of each installed lineage;
+- connects to 993/465/587 with SNI (`server_hostname=<hostname>`,
+  `check_hostname=True`, configured CA) and checks the SAN and serial/fingerprint
+  against the inventory;
+- connects **without SNI** to the same ports and requires the serial to be that of
+  `cf-mail`; if an SNI certificate responds, it is a critical failure;
+- writes `health` to `state.json` and `alerts.json`, without touching certificates or
+  reloading Postfix/Dovecot.
 
-`verify` ejecuta los mismos probes sin escribir estado. La verificación se
-considera fallida si falla cualquier puerto, la cadena, el SAN, la clave o la
-vigencia.
+`verify` runs the same probes without writing state. Verification is
+considered failed if any port, the chain, the SAN, the key or the
+validity fails.
 
-Estado de salud (solo metadatos):
+Health status (metadata only):
 
 ```json
 {
@@ -306,67 +308,67 @@ Estado de salud (solo metadatos):
 }
 ```
 
-`consecutive_failures` se incrementa por hostname y vuelve a 0 al recuperar
-`ok`. Un `generated_at` mayor que `2 × audit_interval_seconds` se considera
-viejo y alerta. El estado nunca contiene claves, tokens ni PEM.
+`consecutive_failures` is incremented per hostname and returns to 0 when it recovers
+`ok`. A `generated_at` greater than `2 × audit_interval_seconds` is considered
+old and alerts. The state never contains keys, tokens or PEM.
 
-## Alertas
+## Alerts
 
-| Condición | Severidad |
+| Condition | Severity |
 |---|---|
-| `days_left <= 21` | aviso |
-| `days_left <= 7` o `<= 0` | crítico |
-| SAN/hostname o clave incompatibles | crítico |
-| Serial servido ≠ almacenado | crítico |
-| Postfix (465/587) o Dovecot (993) falla | crítico |
-| Agente sin ejecutar > 2 intervalos | crítico |
-| `cf-mail` sin SNI no coincide | crítico |
-| Instalación fallida | crítico |
+| `days_left <= 21` | warning |
+| `days_left <= 7` or `<= 0` | critical |
+| Incompatible SAN/hostname or key | critical |
+| Served serial ≠ stored serial | critical |
+| Postfix (465/587) or Dovecot (993) fails | critical |
+| Agent has not run for > 2 intervals | critical |
+| `cf-mail` without SNI does not match | critical |
+| Failed installation | critical |
 
-Las alertas se registran en `alerts.json` y en el journal de systemd, y se
-entregan por `alerts.webhook_command` (JSON por stdin) o `alerts.webhook_url`.
-El canal **no** usa el SMTP vigilado: si el correo está caído, la alerta sale
-igual. Se deduplican por código/hostname y se reenvían como máximo cada 6 horas
-o cuando cambia la severidad.
+Alerts are recorded in `alerts.json` and in the systemd journal, and are
+delivered via `alerts.webhook_command` (JSON over stdin) or `alerts.webhook_url`.
+The channel does **not** use the monitored SMTP: if mail is down, the alert still
+gets out. They are deduplicated by code/hostname and resent at most every 6 hours
+or when the severity changes.
 
-## Instalación transaccional y rollback
+## Transactional installation and rollback
 
-`install` (y el `sync` del deploy hook) sigue este orden:
+`install` (and the deploy hook's `sync`) follows this order:
 
 ```text
-1. lock no bloqueante por hostname
-2. validar clave, cadena, SAN, fechas y EKU del material nuevo
-3. copiar a generación staging
-4. backup de generación activa, mapa SNI, snippet Dovecot y health previo
-5. activar generación (symlink atómico + copia atómica a rutas estables)
-6. regenerar mapa SNI y snippet local_name
-7. postmap si corresponde
-8. postfix reload + verificar 465/587
-9. dovecot reload + verificar 993
-10. verificar todos los SNI y el certificado sin SNI
-11. commit: podar generaciones viejas (se conservan 3)
+1. non-blocking lock per hostname
+2. validate key, chain, SAN, dates and EKU of the new material
+3. copy to a staging generation
+4. back up the active generation, SNI map, Dovecot snippet and previous health
+5. activate the generation (atomic symlink + atomic copy to stable paths)
+6. regenerate the SNI map and local_name snippet
+7. postmap if applicable
+8. postfix reload + verify 465/587
+9. dovecot reload + verify 993
+10. verify all SNI certificates and the no-SNI certificate
+11. commit: prune old generations (3 are kept)
 ```
 
-Si falla cualquier paso 5-10 se restauran generación, mapa y snippet; se
-recargan **ambos** demonios y se verifican 465/587/993 y sin SNI. Un fallo de
-poda o de métricas posteriores al commit **no** revierte el certificado activo.
-Una instalación fallida entra en backoff exponencial (60 s hasta 1 h) y alerta;
-no hay reintentos infinitos. Dos ejecuciones simultáneas se serializan por lock
-y la segunda sale sin cambios.
+If any step 5-10 fails, the generation, map and snippet are restored; **both**
+daemons are reloaded and 465/587/993 and no-SNI are verified. A failure in
+pruning or post-commit metrics does **not** revert the active certificate.
+A failed installation enters exponential backoff (60 s up to 1 h) and alerts;
+there are no infinite retries. Two simultaneous runs are serialized by lock
+and the second exits without changes.
 
-`rollback` revierte explícitamente a la generación anterior, regenera el mapa y
-el snippet, recarga Postfix y Dovecot y verifica. `cf-mail` no se instala ni se
-revierte desde el panel.
+`rollback` explicitly reverts to the previous generation, regenerates the map and
+the snippet, reloads Postfix and Dovecot, and verifies. `cf-mail` is neither installed nor
+reverted from the panel.
 
-El agente no toca cuentas, contraseñas, buzones ni maildir, no recrea el
-contenedor y nunca ejecuta `certbot renew`/`certbot certonly` en las rutas
-`sync`/`install`/`rollback`/`audit`/`verify`.
+The agent does not touch accounts, passwords, mailboxes or maildir, does not recreate the
+container, and never runs `certbot renew`/`certbot certonly` in the
+`sync`/`install`/`rollback`/`audit`/`verify` paths.
 
 ## API
 
 Namespace `/api/v1/plugins/mail/certificates`.
 
-| Método | Ruta | Permiso |
+| Method | Path | Permission |
 |---|---|---|
 | GET | `/certificates` | `mail.certificates.read` |
 | GET | `/certificates/health` | `mail.certificates.read` |
@@ -375,13 +377,13 @@ Namespace `/api/v1/plugins/mail/certificates`.
 | GET | `/certificates/{hostname}/jobs/{job_id}` | `mail.certificates.read` |
 | POST | `/certificates/{hostname}/request` | `mail.certificates.manage` |
 | POST | `/certificates/refresh` | `mail.certificates.manage` |
-| POST | `/certificates/{hostname}/verify` | `mail.certificates.manage` + plataforma |
-| POST | `/certificates/{hostname}/sync` | `mail.certificates.manage` + plataforma |
-| POST | `/certificates/{hostname}/install` | `mail.certificates.manage` + plataforma |
-| POST | `/certificates/{hostname}/rollback` | `mail.certificates.manage` + plataforma |
+| POST | `/certificates/{hostname}/verify` | `mail.certificates.manage` + platform |
+| POST | `/certificates/{hostname}/sync` | `mail.certificates.manage` + platform |
+| POST | `/certificates/{hostname}/install` | `mail.certificates.manage` + platform |
+| POST | `/certificates/{hostname}/rollback` | `mail.certificates.manage` + platform |
 
-`POST .../request` acepta `{"action":"ensure"|"force","reason":"..."}`, escribe
-`requests/<uuid>.json` de forma atómica con modo `0600` y responde `202`:
+`POST .../request` accepts `{"action":"ensure"|"force","reason":"..."}`, writes
+`requests/<uuid>.json` atomically with mode `0600` and responds `202`:
 
 ```json
 {
@@ -392,81 +394,81 @@ Namespace `/api/v1/plugins/mail/certificates`.
 }
 ```
 
-Una segunda solicitud con un job activo para el mismo hostname responde `409`
-con el `job_id` existente. `cf-mail` responde `409`: no se regenera en esta
-fase.
+A second request with an active job for the same hostname responds `409`
+with the existing `job_id`. `cf-mail` responds `409`: it is not regenerated in this
+phase.
 
-`GET /certificates` devuelve `items`, `stale`, `generated_at`, `agent_last_seen`
-y `error`. Un tenant ve solo `mail.<dominio>` de sus dominios de Hosting; los
-hostnames sin dominio asociado y `cf-mail` solo los ve el administrador de
-infraestructura (`core.platform.admin`). Un hostname de otro tenant responde
-`404`, no `403`, para no filtrar su existencia.
+`GET /certificates` returns `items`, `stale`, `generated_at`, `agent_last_seen`
+and `error`. A tenant sees only `mail.<domain>` for its Hosting domains;
+hostnames without an associated domain and `cf-mail` are only visible to the
+infrastructure administrator (`core.platform.admin`). A hostname from another tenant responds
+`404`, not `403`, to avoid leaking its existence.
 
-`GET /certificates/health` devuelve `agent_state`, `agent_last_run_at`,
-`interval_seconds`, `stale`, `default` (solo admin), `certificates` con
+`GET /certificates/health` returns `agent_state`, `agent_last_run_at`,
+`interval_seconds`, `stale`, `default` (admin only), `certificates` with
 `last_verified_at`, `last_ok_at`, `consecutive_failures`, `served_serial`,
-`sni`/`no_sni` y contadores `critical_count`/`warning_count`.
-`GET /certificates/alerts` devuelve solo alertas de hostnames visibles; las
-alertas globales (por ejemplo agente viejo) y `cf-mail` son solo para admin.
+`sni`/`no_sni` and the `critical_count`/`warning_count` counters.
+`GET /certificates/alerts` returns only alerts for visible hostnames;
+global alerts (for example, a stale agent) and `cf-mail` are admin-only.
 
-Las acciones `verify|sync|install|rollback` son solo del administrador de
-plataforma: un tenant con `mail.certificates.manage` recibe `403`; un
-hostname ajeno responde `404`. Todas encolan un job y responden `202`, y el
-resultado se consulta con `/jobs/{job_id}`. Cada acción se registra en auditoría
+The `verify|sync|install|rollback` actions are platform administrator only:
+a tenant with `mail.certificates.manage` receives `403`; another tenant's
+hostname responds `404`. All enqueue a job and respond `202`, and the
+result is polled with `/jobs/{job_id}`. Each action is recorded in the audit log
 (`domains.certificate.verified|synced|installed|rolled_back`).
 
-El endpoint existente `GET /{domain}/certificate` (certificado web del proxy) no
-cambia.
+The existing `GET /{domain}/certificate` endpoint (proxy web certificate) does not
+change.
 
-## Permisos
+## Permissions
 
-| Permiso | Quién | Alcance |
+| Permission | Who | Scope |
 |---|---|---|
-| `mail.certificates.read` | admin de infraestructura y tenants | propios dominios; admin ve todo |
-| `mail.certificates.manage` | solo admin de infraestructura | solicitar, forzar, refrescar, verificar, instalar, sincronizar y revertir |
+| `mail.certificates.read` | infrastructure admin and tenants | own domains; admin sees everything |
+| `mail.certificates.manage` | infrastructure admin only | request, force, refresh, verify, install, sync and revert |
 
-`mail.certificates.manage` **no** está en `tenant_admin_permissions`. Un
-tenant puede consultar pero no ejecutar Certbot ni acciones de infraestructura.
-Las acciones 0036 exigen además `core.platform.admin`.
+`mail.certificates.manage` is **not** in `tenant_admin_permissions`. A
+tenant can query but cannot run Certbot or infrastructure actions.
+The 0036 actions additionally require `core.platform.admin`.
 
 ## UI
 
-En **Correos**, el botón **Certificados TLS** abre el modal del mismo nombre
-(subtítulo **Spanel · Infraestructura de correo**). Muestra solo los
-certificados del dominio del tenant que se está viendo (`tenant_only=true`,
-incluso para el admin de plataforma); Dominios conserva únicamente los
-certificados web de Traefik.
+In **Mail**, the **TLS Certificates** button opens the modal of the same name
+(subtitle **Spanel · Mail infrastructure**). It shows only the
+certificates for the domain of the tenant being viewed (`tenant_only=true`,
+even for the platform admin); Domains keeps only the Traefik web
+certificates.
 
-La lista no lleva acciones por fila: doble clic sobre un certificado abre un
-modal anidado con sus alertas, salud, seriales, probes SNI y las acciones.
-**Regenerar** usa `ensure`; **Forzar** pide confirmación con advertencia de rate
-limit de Let’s Encrypt. Los botones se deshabilitan sin
-`mail.certificates.manage`, con un job activo, para `cf-mail` o cuando el estado
-está viejo. Las alertas críticas bloquean solo lo destructivo. Un fallo del
-agente se muestra una vez y no se reintenta en bucle.
+The list has no per-row actions: double-clicking a certificate opens a
+nested modal with its alerts, health, serials, SNI probes and actions.
+**Regenerate** uses `ensure`; **Force** asks for confirmation with a Let's Encrypt
+rate limit warning. Buttons are disabled without
+`mail.certificates.manage`, with an active job, for `cf-mail` or when the state
+is stale. Critical alerts block only destructive actions. An agent failure
+is shown once and is not retried in a loop.
 
-Desde 0036 el modal muestra además **Estado del agente**, **Última
-verificación**, salud por certificado (`ok`, serial servido, puertos SNI) y las
-alertas críticas. El admin dispone de **Verificar**, **Sincronizar** y
-**Revertir**. Si hay una alerta crítica (san/serial/puerto/`cf-mail`/agente
-viejo), las acciones destructivas quedan deshabilitadas hasta resolverla.
+Since 0036 the modal also shows **Agent status**, **Last
+verification**, per-certificate health (`ok`, served serial, SNI ports) and
+critical alerts. The admin has **Verify**, **Sync** and
+**Revert**. If there is a critical alert (san/serial/port/`cf-mail`/stale
+agent), destructive actions are disabled until it is resolved.
 
-## Operación
+## Operation
 
-- Un certificado por hostname; los SAN múltiples se aceptan en el modelo.
-- La allowlist del agente debe coincidir con los hostnames del inventario.
-- El timer refresca `state.json` cada 10 minutos aunque no haya solicitudes.
-- Los logs del agente no contienen claves. Los jobs solo guardan mensajes y
-  metadatos.
-- Si el agente está caído, la UI muestra “Estado no disponible” y no habilita
-  acciones destructivas.
-- `state.json` y `jobs/` se conservan para auditoría.
+- One certificate per hostname; multiple SANs are accepted in the model.
+- The agent allowlist must match the inventory hostnames.
+- The timer refreshes `state.json` every 10 minutes even if there are no requests.
+- Agent logs do not contain keys. Jobs only store messages and
+  metadata.
+- If the agent is down, the UI shows "Status unavailable" and does not enable
+  destructive actions.
+- `state.json` and `jobs/` are kept for auditing.
 
-## Rollback (alcance 0036)
+## Rollback (0036 scope)
 
-1. Revertir el commit elimina timers, hook, endpoints y acciones nuevas; los
-   certificados existentes y `cf-mail` no se tocan.
-2. Desinstalar unidades y hook y conservar estado/jobs/backups para auditoría:
+1. Reverting the commit removes timers, hook, endpoints and new actions;
+   existing certificates and `cf-mail` are not touched.
+2. Uninstall units and hook and keep state/jobs/backups for auditing:
 
    ```bash
    systemctl disable --now spanel-cert-audit.timer spanel-cert-deploy.service
@@ -476,24 +478,24 @@ viejo), las acciones destructivas quedan deshabilitadas hasta resolverla.
    systemctl daemon-reload
    ```
 
-3. Si una instalación quedó a medias, restaurar la última generación:
+3. If an installation was left half-done, restore the last generation:
 
    ```bash
    PYTHONPATH=/opt/spanel/scripts python3 -m spanel_cert_agent rollback \
      --hostname mail.systutor.com --config /etc/spanel/cert-agent.toml
    ```
 
-   El agente restaura generación, mapa SNI y snippet Dovecot, recarga ambos
-   demonios y verifica 465/587/993 y sin SNI.
-4. `cf-mail` no se modifica: no hay rollback del predeterminado.
-5. Conservar `state.json`, `alerts.json`, `jobs/`, `generations/` y `backups/`
-   para auditoría.
+   The agent restores the generation, SNI map and Dovecot snippet, reloads both
+   daemons and verifies 465/587/993 and no-SNI.
+4. `cf-mail` is not modified: there is no rollback for the default.
+5. Keep `state.json`, `alerts.json`, `jobs/`, `generations/` and `backups/`
+   for auditing.
 
-## Rollback (alcance 0035)
+## Rollback (0035 scope)
 
-1. Revertir el commit elimina el modal, la API, el paquete del agente y las
-   unidades. Los certificados existentes y `cf-mail` no se tocan.
-2. Desinstalar unidades y conservar estado/jobs:
+1. Reverting the commit removes the modal, the API, the agent package and the
+   units. Existing certificates and `cf-mail` are not touched.
+2. Uninstall units and keep state/jobs:
 
    ```bash
    systemctl disable --now spanel-cert-agent.path spanel-cert-agent.timer
@@ -501,14 +503,14 @@ viejo), las acciones destructivas quedan deshabilitadas hasta resolverla.
    systemctl daemon-reload
    ```
 
-3. Si se instaló un certificado SNI nuevo, restaurar el mapa de Postfix y el
-   bloque de Dovecot desde los backups de generación (`backups/<hostname>/`) o
-   desde `<archivo>.spanel-bak`, recargar Postfix y Dovecot. No recrear el
-   contenedor.
-4. `cf-mail` no se modifica en esta fase: no hay rollback del certificado
-   predeterminado.
+3. If a new SNI certificate was installed, restore the Postfix map and the
+   Dovecot block from the generation backups (`backups/<hostname>/`) or
+   from `<file>.spanel-bak`, reload Postfix and Dovecot. Do not recreate the
+   container.
+4. `cf-mail` is not modified in this phase: there is no rollback for the
+   default certificate.
 
-## Pruebas
+## Tests
 
 ```bash
 PYTHONPATH=vendor/systutor-core:vendor/systutor-core/src \
@@ -520,5 +522,5 @@ PYTHONPATH=scripts .venv/bin/python -m pytest \
   scripts/spanel_cert_agent/tests -q
 ```
 
-Los tests del agente usan `tmp_path`, un runner falso de comandos, un connector
-TLS falso y no tocan red, Docker, root, `/etc` ni Certbot real.
+The agent tests use `tmp_path`, a fake command runner, a fake TLS
+connector and do not touch the network, Docker, root, `/etc` or a real Certbot.

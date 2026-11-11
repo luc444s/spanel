@@ -38,15 +38,15 @@ def validar_sql_seguro(valor: str, *, etiqueta: str) -> str:
     """Reject a value outside `[A-Za-z0-9_]` before any SQL is built."""
     if not RE_SQL_SEGURO.match(valor):
         raise Fallo(
-            f"{etiqueta} {valor!r} fue rechazado, no escapado: "
-            "solo se aceptan letras, digitos y guion bajo (maximo 32)"
+            f"{etiqueta} {valor!r} was rejected, not escaped: "
+            "only letters, digits, and underscores are accepted (maximum 32)"
         )
     return valor
 
 
 def validar_prefijo(prefijo: str) -> str:
     """The table prefix is validated with the same rule as the login."""
-    return validar_sql_seguro(prefijo, etiqueta="el prefijo de tablas")
+    return validar_sql_seguro(prefijo, etiqueta="the table prefix")
 
 
 def build_db_command(
@@ -173,7 +173,7 @@ def conexion_de_la_base(info: dict) -> dict[str, str]:
     )
     faltan = [k for k in claves if not variables.get(k)]
     if faltan:
-        raise Fallo(f"el contenedor no declara {', '.join(faltan)} en su entorno")
+        raise Fallo(f"the container does not declare {', '.join(faltan)} in its environment")
     # Se devuelven con las claves y el contenido de un --env-file, porque de eso
     # es como las necesita el contenedor que calcula el hash.
     return {
@@ -192,12 +192,12 @@ def volumen_del_sitio(info: dict) -> str:
         if montaje.get("Destination") == "/var/www/html":
             if montaje.get("Type") != "volume" or not montaje.get("Name"):
                 raise Fallo(
-                    "el sitio no tiene un volumen de Docker en /var/www/html "
-                    f"(es de tipo {montaje.get('Type')}). Este script solo sabe leer un volumen."
+                    "the site does not have a Docker volume at /var/www/html "
+                    f"(it is of type {montaje.get('Type')}). This script can only read a volume."
                 )
             return str(montaje["Name"])
     raise Fallo(
-        "el contenedor no tiene nada montado en /var/www/html, no parece un sitio WordPress"
+        "the container has nothing mounted at /var/www/html; it does not look like a WordPress site"
     )
 
 
@@ -210,7 +210,7 @@ def red_de(info: dict, db: str) -> str:
     redes = list((info.get("NetworkSettings", {}).get("Networks") or {}).keys())
     if not redes:
         raise Fallo(
-            "el contenedor de WordPress no esta en ninguna red, no se puede llegar a la base"
+            "the WordPress container is not on any network; the database cannot be reached"
         )
     return redes[0]
 
@@ -369,11 +369,12 @@ def prefijo_de_tablas(
     )
     if not prefijos:
         raise Fallo(
-            "no se encontro ninguna tabla que termine en 'users': el sitio no esta instalado"
+            "no table ending in 'users' was found: the site is not installed"
         )
     if len(prefijos) > 1:
         raise Fallo(
-            f"hay mas de un prefijo de tablas ({', '.join(prefijos)}); hay que elegir a mano"
+            f"there is more than one table prefix ({', '.join(prefijos)}); "
+            "one must be chosen manually"
         )
     return validar_prefijo(prefijos[0])
 
@@ -407,7 +408,7 @@ def filas_de_usuarios(
             continue
         partes = linea.split("\t")
         if len(partes) < 3:
-            raise Fallo(f"la base devolvio una fila que no se entiende: {linea[:80]!r}")
+            raise Fallo(f"the database returned a row that cannot be understood: {linea[:80]!r}")
         filas.append(
             {
                 "id": partes[0].strip(),
@@ -469,7 +470,7 @@ def usuarios_con_rol(
             continue
         partes = linea.split("\t")
         if len(partes) < 5:
-            raise Fallo(f"la base devolvio una fila que no se entiende: {linea[:80]!r}")
+            raise Fallo(f"the database returned a row that cannot be understood: {linea[:80]!r}")
         filas.append(
             {
                 "id": partes[0].strip(),

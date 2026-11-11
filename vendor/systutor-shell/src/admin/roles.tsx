@@ -107,23 +107,23 @@ export function RolesView() {
         <CardHeader className="flex flex-row items-center justify-between">
           <div className="space-y-1">
             <CardTitle>Roles</CardTitle>
-            <CardDescription>RBAC por tenant</CardDescription>
+            <CardDescription>Per-tenant RBAC</CardDescription>
           </div>
-          <Button onClick={openCreate}>Nuevo rol</Button>
+          <Button onClick={openCreate}>New role</Button>
         </CardHeader>
         <CardContent className="space-y-4">
           {error && <Alert title="Error">{error}</Alert>}
           {loading ? (
-            <p className="text-sm text-muted-foreground">Cargando…</p>
+            <p className="text-sm text-muted-foreground">Loading…</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border text-left text-muted-foreground">
-                    <th className="py-2 pr-4 font-medium">Nombre</th>
+                    <th className="py-2 pr-4 font-medium">Name</th>
                     <th className="py-2 pr-4 font-medium">Permisos</th>
-                    <th className="py-2 pr-4 font-medium">Estado</th>
-                    <th className="py-2 font-medium">Acciones</th>
+                    <th className="py-2 pr-4 font-medium">Status</th>
+                    <th className="py-2 font-medium">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -171,7 +171,7 @@ export function RolesView() {
 
       <Dialog
         open={creating || editing !== null}
-        title={creating ? "Nuevo rol" : "Editar rol"}
+        title={creating ? "New role" : "Edit role"}
         onClose={() => {
           setCreating(false);
           setEditing(null);
@@ -179,10 +179,10 @@ export function RolesView() {
         actions={
           <div className="flex justify-end gap-3">
             <Button variant="secondary" type="button" onClick={() => setCreating(false)}>
-              Cancelar
+              Cancel
             </Button>
             <Button type="submit" form="role-form" disabled={busy === "form"}>
-              Guardar
+              Save
             </Button>
           </div>
         }
@@ -190,7 +190,7 @@ export function RolesView() {
         <form id="role-form" className="space-y-6" onSubmit={save}>
           {error && <Alert title="Error">{error}</Alert>}
           <label className="block space-y-2 text-sm text-foreground">
-            <span>Nombre</span>
+            <span>Name</span>
             <Input
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}

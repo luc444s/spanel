@@ -59,7 +59,7 @@ class LocalRunner:
         command = CommandResult(list(argv), result.returncode, result.stdout, result.stderr)
         if check and not command.ok:
             raise ProxyError(
-                f"falló {' '.join(argv)}: {command.text().strip()}", EXIT_TRANSPORT
+                f"failed {' '.join(argv)}: {command.text().strip()}", EXIT_TRANSPORT
             )
         return command
 
@@ -108,7 +108,7 @@ class SshRunner:
         output = CommandResult(list(argv), result.returncode, result.stdout, result.stderr)
         if check and not output.ok:
             raise ProxyError(
-                f"falló {' '.join(argv)} en {self.host}: {output.text().strip()}",
+                f"failed {' '.join(argv)} on {self.host}: {output.text().strip()}",
                 EXIT_TRANSPORT,
             )
         return output

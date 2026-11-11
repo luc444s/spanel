@@ -68,24 +68,24 @@ def resolver_objetivo(
             env, db, usuario, password, base, prefijo, f"ID={int(id_usuario)}"
         )
         if not filas:
-            raise Fallo(f"no existe ningun usuario con ID {id_usuario} en {prefijo}users")
+            raise Fallo(f"no user with ID {id_usuario} exists in {prefijo}users")
         return filas[0]
 
     if login is None:
-        raise Fallo("no se indico ni --id ni --usuario: no se puede elegir la fila")
+        raise Fallo("neither --id nor --usuario was given: the row cannot be selected")
 
-    validar_sql_seguro(login, etiqueta="el usuario")
+    validar_sql_seguro(login, etiqueta="the user")
     filas = filas_de_usuarios(
         env, db, usuario, password, base, prefijo, f"user_login='{login}'"
     )
     if not filas:
         # El mismo mensaje que daba el script antes de A.SPEC 0011.
-        raise Fallo(f"no existe el usuario {login!r} en {prefijo}users")
+        raise Fallo(f"user {login!r} does not exist in {prefijo}users")
     if len(filas) > 1:
         candidatos = "\n".join(f"ID {fila['id']} {fila['login']} {fila['email']}" for fila in filas)
         raise Fallo(
-            f"el login {login!r} aparece en {len(filas)} filas de {prefijo}users; "
-            "no se elige ninguna. Elegi una con --id:\n"
+            f"login {login!r} appears in {len(filas)} rows of {prefijo}users; "
+            "none is chosen. Choose one with --id:\n"
             f"{candidatos}"
         )
     return filas[0]

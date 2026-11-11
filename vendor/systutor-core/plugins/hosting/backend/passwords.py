@@ -47,10 +47,10 @@ def hash_valido(valor: str) -> bool:
 # resource.
 PHP_HASH_AUTOCOMPROBADO = (
     '$p = trim(stream_get_contents(STDIN));'
-    'if ($p === "") { fwrite(STDERR, "FALLO: la contraseña llego vacia"); exit(1); }'
+    'if ($p === "") { fwrite(STDERR, "FAIL: the password is empty"); exit(1); }'
     "$h = wp_hash_password($p);"
     'if (!wp_check_password($p, $h)) { fwrite(STDERR, '
-    '"FALLO: el hash no valida la contraseña"); exit(1); }'
+    '"FAIL: the hash does not validate the password"); exit(1); }'
     "echo $h;"
 )
 
@@ -69,7 +69,8 @@ def para_sql(valor: str) -> str:
     """
     if not hash_valido(valor):
         raise Fallo(
-            f"esto no parece un hash de WordPress y no se manda a la base: {valor[:40]!r}"
+            "this does not look like a WordPress hash and is not sent to the database: "
+            f"{valor[:40]!r}"
         )
     return valor.replace("$", r"\$")
 
@@ -125,7 +126,7 @@ def hash_de_password(
 
     if not hash_valido(salida):
         raise Fallo(
-            "wp_hash_password no devolvio un hash reconocible "
-            f"({salida[:60]!r}). Si el sitio es de otra version, el formato puede ser otro."
+            "wp_hash_password did not return a recognizable hash "
+            f"({salida[:60]!r}). If the site is another version, the format may differ."
         )
     return salida

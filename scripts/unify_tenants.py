@@ -101,7 +101,7 @@ class ChangeSet:
 def _slug(db: Session, slug: str) -> Tenant:
     tenant = db.scalar(select(Tenant).where(Tenant.slug == slug))
     if tenant is None:
-        raise UnifyError(f"no existe el tenant con slug {slug!r}")
+        raise UnifyError(f"no tenant exists with slug {slug!r}")
     return tenant
 
 
@@ -111,7 +111,7 @@ def _normalize_all(values: list[str]) -> list[str]:
         try:
             domain = normalize_domain_name(value)
         except ValueError as exc:
-            raise UnifyError(f"dominio inválido {value!r}: {exc}") from exc
+            raise UnifyError(f"invalid domain {value!r}: {exc}") from exc
         if domain not in normalized:
             normalized.append(domain)
     return normalized
@@ -161,10 +161,10 @@ def _resolve(args: argparse.Namespace, db: Session) -> tuple[Tenant, list[Tenant
         if target in origins:
             origins = [tenant for tenant in origins if tenant.id != target.id]
     if not origins and not args.domain:
-        raise UnifyError("no hay tenants origen ni dominios que consolidar")
+        raise UnifyError("there are no origin tenants or domains to consolidate")
     for origin in origins:
         if origin.id == target.id:
-            raise UnifyError("el target no puede ser también un origen")
+            raise UnifyError("the target cannot also be an origin")
     return target, origins
 
 
@@ -219,8 +219,8 @@ def _plan_changes(
             continue
         elif row.tenant_id not in origin_ids:
             raise UnifyError(
-                f"el dominio {domain} pertenece a un tenant que no es origen "
-                f"({row.tenant_id}); no se escribe nada"
+                f"domain {domain} belongs to a tenant that is not an origin "
+                f"({row.tenant_id}); nothing is written"
             )
         else:
             changes.domains.append(
@@ -404,10 +404,10 @@ def _purge(db: Session, *, origins: list[Tenant], apply: bool) -> int:
     if blocked:
         for slug, counts in blocked.items():
             detail = ", ".join(f"{name}={count}" for name, count in sorted(counts.items()))
-            print(f"purge bloqueado para {slug}: {detail}")
+            print(f"purge blocked for {slug}: {detail}")
         return 1
     if not apply:
-        print(f"dry-run: se borrarían {len(origins)} tenants sin dependencias")
+        print(f"dry-run: would delete {len(origins)} tenants without dependencies")
         return 0
     for origin in origins:
         db.execute(
@@ -416,7 +416,7 @@ def _purge(db: Session, *, origins: list[Tenant], apply: bool) -> int:
         db.execute(delete(TenantDomain).where(TenantDomain.tenant_id == origin.id))
         db.delete(origin)
     db.commit()
-    print(f"purgados {len(origins)} tenants sin dependencias")
+    print(f"purged {len(origins)} tenants without dependencies")
     return 0
 
 
@@ -432,7 +432,7 @@ def _default_plan_path() -> Path:
 
 def _rollback(db: Session, payload: dict[str, Any]) -> int:
     if not payload.get("applied"):
-        raise UnifyError("el plan no se aplicó; no hay nada que revertir")
+        raise UnifyError("the plan was not applied; nothing to revert")
     reversed_changes = 0
     for item in payload.get("users", []):
         user = db.get(User, item["user_id"])
@@ -469,7 +469,7 @@ def _rollback(db: Session, payload: dict[str, Any]) -> int:
             tenant.is_active = True
             reversed_changes += 1
     db.commit()
-    print(f"rollback aplicado: {reversed_changes} cambios revertidos")
+    print(f"rollback applied: {reversed_changes} changes reverted")
     return 0
 
 
@@ -477,15 +477,15 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("--target-slug", help="tenant que recibe todo")
-    parser.add_argument("--domain", action="append", default=[], help="dominio a reclamar (repetible)")
-    parser.add_argument("--from-slug", action="append", default=[], help="tenant origen (repetible)")
-    parser.add_argument("--all-others", action="store_true", help="todos los demás tenants como origen")
-    parser.add_argument("--move-all-sites", action="store_true", help="mover todos los sitios de los orígenes")
-    parser.add_argument("--apply", action="store_true", help="escribir cambios; sin esto es dry-run")
-    parser.add_argument("--plan", help="ruta del plan JSON")
-    parser.add_argument("--rollback", help="revierte el plan JSON indicado")
-    parser.add_argument("--purge", action="store_true", help="borrar orígenes sin dependencias")
+    parser.add_argument("--target-slug", help="tenant that receives everything")
+    parser.add_argument("--domain", action="append", default=[], help="domain to claim (repeatable)")
+    parser.add_argument("--from-slug", action="append", default=[], help="origin tenant (repeatable)")
+    parser.add_argument("--all-others", action="store_true", help="all other tenants as origins")
+    parser.add_argument("--move-all-sites", action="store_true", help="move all sites from the origins")
+    parser.add_argument("--apply", action="store_true", help="write changes; without this it is a dry-run")
+    parser.add_argument("--plan", help="path to the JSON plan")
+    parser.add_argument("--rollback", help="revert the given JSON plan")
+    parser.add_argument("--purge", action="store_true", help="delete origins without dependencies")
     return parser
 
 
@@ -496,7 +496,7 @@ def run(
 ) -> int:
     args = _build_parser().parse_args(argv)
     if not args.rollback and not args.target_slug:
-        print("FALLO: --target-slug es obligatorio")
+        print("FAILED: --target-slug is required")
         return 1
 
     factory = session_factory
@@ -509,11 +509,11 @@ def run(
             if args.rollback:
                 path = Path(args.rollback)
                 if not path.exists():
-                    raise UnifyError(f"no existe el plan {path}")
+                    raise UnifyError(f"plan does not exist: {path}")
                 return _rollback(db, json.loads(path.read_text(encoding="utf-8")))
             return _run_unify(db, args, apply=args.apply)
         except (UnifyError, ValueError) as exc:
-            print(f"FALLO: {exc}")
+            print(f"FAILED: {exc}")
             db.rollback()
             return 1
 
@@ -542,9 +542,9 @@ def _run_unify(db: Session, args: argparse.Namespace, *, apply: bool) -> int:
 
     if not apply:
         print(
-            f"dry-run: {len(changes)} cambios previstos "
-            f"(dominios={len(changes.domains)}, sitios={len(changes.sites)}, "
-            f"usuarios={len(changes.users)}, bajas={len(changes.deactivated)})"
+            f"dry-run: {len(changes)} planned changes "
+            f"(domains={len(changes.domains)}, sites={len(changes.sites)}, "
+            f"usuarios={len(changes.users)}, deactivations={len(changes.deactivated)})"
         )
         if args.purge:
             return _purge(db, origins=origins, apply=False)
@@ -557,12 +557,12 @@ def _run_unify(db: Session, args: argparse.Namespace, *, apply: bool) -> int:
                 detail = ", ".join(
                     f"{name}={count}" for name, count in sorted(counts.items())
                 )
-                print(f"purge bloqueado para {slug}: {detail}")
+                print(f"purge blocked for {slug}: {detail}")
             return 1
 
     if changes:
         _apply_changes(db, target=target, changes=changes)
-    print(f"aplicado: {len(changes)} cambios")
+    print(f"applied: {len(changes)} changes")
     if args.purge:
         return _purge(db, origins=origins, apply=True)
     return 0

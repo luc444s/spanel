@@ -79,8 +79,8 @@ def up(
 
     if not docker.network_exists(settings.network):
         raise CliError(
-            f"No existe la red Docker {settings.network!r}. "
-            "En el laboratorio: ./scripts/traefik-lab.sh up",
+            f"Docker network does not exist: {settings.network!r}. "
+            "In the lab: ./scripts/traefik-lab.sh up",
             3,
         )
 
@@ -96,7 +96,7 @@ def up(
             if existing and docker.label(spec.container, LABEL_PROFILE) != spec.slug:
                 docker.remove_container(spec.container)
                 existing = False
-                print("    contenedor sin labels del perfil; recreado")
+                print("    container without the profile labels; recreated")
             if existing and force:
                 docker.remove_container(spec.container)
                 # El build del comando arranca al ver el seed listo: con el
@@ -104,7 +104,7 @@ def up(
                 # volumen también garantiza seed+config+build coherentes.
                 docker.remove_volume(spec.volume)
                 existing = False
-                print("    --force: recreado contenedor y volumen para re-compilar")
+                print("    --force: container and volume recreated to rebuild")
 
             if not existing:
                 if not docker.volume_exists(spec.volume):
@@ -121,7 +121,7 @@ def up(
                     time.sleep(0.5)
                 if not docker.container_exists(spec.container):
                     raise DockerError(
-                        f"{spec.container} no existe tras run -d; revisá docker info"
+                        f"{spec.container} does not exist after run -d; check docker info"
                     )
             elif not docker.container_running(spec.container):
                 docker.run("start", spec.container)
@@ -130,16 +130,16 @@ def up(
                 spec.container, 80, spec.marker
             )
             if healthy and not force:
-                print("    ya levantado y healthy; sin re-seed")
+                print("    already up and healthy; no re-seed")
             else:
                 written = _seed_files(docker, spec, force)
-                print(f"    seed: {', '.join(written) if written else 'sin cambios'}")
+                print(f"    seed: {', '.join(written) if written else 'unchanged'}")
                 docker.wait_http(spec, wait)
         except (DockerError, CliError) as exc:
             if created:
                 docker.remove_container(spec.container)
             raise CliError(
-                f"falla en el perfil {spec.slug}: {exc} (opcional: docker logs {spec.container})",
+                f"failure in profile {spec.slug}: {exc} (optional: docker logs {spec.container})",
                 3,
             )
 
@@ -148,8 +148,8 @@ def up(
             route = _proxy(settings, "add", "--site", spec.container, "--domain", spec.domain)
             print(route.text().strip()[-500:])
             if not route.ok or not _route_ok(docker.runner, spec):
-                raise CliError(f"No se pudo publicar la ruta de {spec.slug}", 3)
-        results.append(f"{spec.slug}: {spec.domain} (imagen {spec.image})")
+                raise CliError(f"Could not publish the route for {spec.slug}", 3)
+        results.append(f"{spec.slug}: {spec.domain} (image {spec.image})")
 
     for line in results:
         print(f"UP   ✓ {line}")
@@ -191,7 +191,7 @@ def verify(settings: StaticSettings, only: list[str] | None = None) -> int:
 
         existe = docker.container_exists(spec.container)
         running = existe and docker.container_running(spec.container)
-        checks.append(("contenedor running", bool(running), spec.container))
+        checks.append(("container running", bool(running), spec.container))
 
         imagen = ""
         if existe:
@@ -199,18 +199,18 @@ def verify(settings: StaticSettings, only: list[str] | None = None) -> int:
                 ["docker", "inspect", "-f", "{{.Config.Image}}", spec.container],
                 timeout=15,
             ).stdout.strip()
-        checks.append(("imagen del perfil", imagen == spec.image, f"{imagen!r} != {spec.image!r}"))
+        checks.append(("profile image", imagen == spec.image, f"{imagen!r} != {spec.image!r}"))
 
         profile_label = docker.label(spec.container, LABEL_PROFILE)
         kind_label = docker.label(spec.container, "spanel.kind")
         managed_label = docker.label(spec.container, "spanel.managed")
-        checks.append(("labels de propiedad", kind_label == KIND and managed_label == "true",
+        checks.append(("ownership labels", kind_label == KIND and managed_label == "true",
                        f"kind={kind_label} managed={managed_label}"))
-        checks.append(("label de perfil", profile_label == spec.slug, f"profile={profile_label}"))
+        checks.append(("profile label", profile_label == spec.slug, f"profile={profile_label}"))
 
         checks.append(
-            ("health interno (wget + marker)", bool(existe and docker.http_mark(
-                spec.container, 80, spec.marker)), "marker no servido en 127.0.0.1:80")
+            ("internal health (wget + marker)", bool(existe and docker.http_mark(
+                spec.container, 80, spec.marker)), "marker not served on 127.0.0.1:80")
         )
 
         curl = docker.runner.run(
@@ -224,7 +224,7 @@ def verify(settings: StaticSettings, only: list[str] | None = None) -> int:
             timeout=30,
         )
         curl_ok = curl.ok and spec.marker in curl.stdout
-        checks.append(("HTTPS por Traefik (marker)", curl_ok,
+        checks.append(("HTTPS through Traefik (marker)", curl_ok,
                        (curl.text().strip()[:120] if not curl_ok else "")))
 
         for label, ok, detail in checks:
@@ -236,9 +236,9 @@ def verify(settings: StaticSettings, only: list[str] | None = None) -> int:
 
     print()
     if failures:
-        print(f"VERIFICACIÓN: {len(failures)} fallo(s)")
+        print(f"VERIFICATION: {len(failures)} failure(s)")
         return 1
-    print("VERIFICACIÓN: todos los perfiles en verde.")
+    print("VERIFICATION: all profiles green.")
     return 0
 
 
@@ -249,10 +249,10 @@ def down(settings: StaticSettings, only: list[str] | None = None, *, keep_routes
     for spec in specs.values():
         if not keep_routes:
             route = _proxy(settings, "remove", "--domain", spec.domain)
-            if not route.ok and "no existe" not in route.text().lower():
-                print(f"aviso: no se pudo quitar la ruta {spec.domain}: {route.text().strip()[:200]}")
+            if not route.ok and "does not exist" not in route.text().lower():
+                print(f"warning: could not remove the route {spec.domain}: {route.text().strip()[:200]}")
             else:
-                print(f"RUTA removida: {spec.domain}")
+                print(f"ROUTE removed: {spec.domain}")
         docker.remove_container(spec.container)
         docker.remove_volume(spec.volume)
         print(f"DOWN ✓ {spec.slug} ({spec.container})")
@@ -264,11 +264,11 @@ def status(settings: StaticSettings, only: list[str] | None = None) -> int:
     for spec in get_profiles(only).values():
         existe = docker.container_exists(spec.container)
         if not existe:
-            print(f"{spec.slug:8} ausente")
+            print(f"{spec.slug:8} missing")
             continue
         running = docker.container_running(spec.container)
         healthy = docker.http_mark(spec.container, 80, spec.marker)
         label = docker.label(spec.container, LABEL_PROFILE)
-        estado = "healthy" if running and healthy else ("running sin marker" if running else "detenido")
-        print(f"{spec.slug:8} {estado:18} imagen={spec.image} label={label}")
+        estado = "healthy" if running and healthy else ("running without marker" if running else "stopped")
+        print(f"{spec.slug:8} {estado:18} image={spec.image} label={label}")
     return 0

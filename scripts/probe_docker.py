@@ -52,12 +52,12 @@ def main() -> int:
     args = parser.parse_args()
 
     if not args.env_file.is_file():
-        print(f"FALLO: no existe el archivo de entorno {args.env_file}")
+        print(f"FAILED: environment file does not exist: {args.env_file}")
         return 1
 
     env = load_env_file(args.env_file)
-    print(f"Entorno: {args.env_file}")
-    print(f"Transporte: {env.get('SPANEL_DOCKER_TRANSPORT', 'ssh')}")
+    print(f"Environment: {args.env_file}")
+    print(f"Transport: {env.get('SPANEL_DOCKER_TRANSPORT', 'ssh')}")
 
     faltan = [
         clave
@@ -65,33 +65,33 @@ def main() -> int:
         if not env.get(clave)
     ]
     if faltan:
-        print(f"FALLO: faltan estos datos en el .env: {', '.join(faltan)}")
+        print(f"FAILED: missing data in .env: {', '.join(faltan)}")
         return 1
 
     destino = f"{env['SPANEL_DOCKER_SSH_USER']}@{env['SPANEL_DOCKER_SSH_HOST']}"
-    print(f"Destino:   {destino}\n")
+    print(f"Target:    {destino}\n")
 
     # Test 1: there is a Docker daemon on the other side.
-    print("1) Docker del otro lado")
+    print("1) Docker on the other side")
     resultado = run(
         build_docker_argv("docker version --format '{{.Server.Version}}'", env=env), env=env
     )
     if resultado.returncode != 0:
-        print(f"   FALLO: {resultado.stderr.strip() or 'sin mensaje de error'}")
+        print(f"   FAILED: {resultado.stderr.strip() or 'no error message'}")
         if resultado.returncode == 124:
-            print("   Si la maquina esta en Tailscale, la conexion no llego nunca.")
-            print("   Fijate si Tailscale esta corriendo antes de culpar al script.")
+            print("   If the machine is on Tailscale, the connection never arrived.")
+            print("   Check whether Tailscale is running before blaming the script.")
         return 1
-    print(f"   OK. Version del daemon: {resultado.stdout.strip()}\n")
+    print(f"   OK. Daemon version: {resultado.stdout.strip()}\n")
 
     # Test 2: the container list.
-    print("2) Lista de contenedores")
+    print("2) Container list")
     # '{{json .}}' instead of 'json': the short form is new in Docker 27 and
     # more fragile. The long form has existed for a long time and carries the
     # same information.
     resultado = run(build_docker_argv("docker ps -a --format '{{json .}}'", env=env), env=env)
     if resultado.returncode != 0:
-        print(f"   FALLO: {resultado.stderr.strip() or 'sin mensaje de error'}")
+        print(f"   FAILED: {resultado.stderr.strip() or 'no error message'}")
         return 1
 
     contenedores: list[dict] = []
@@ -101,20 +101,20 @@ def main() -> int:
         try:
             contenedores.append(json.loads(linea))
         except json.JSONDecodeError:
-            print(f"   AVISO: linea que no es JSON, la salto: {linea[:80]}")
+            print(f"   WARN: line is not JSON, skipping it: {linea[:80]}")
 
     if not contenedores:
-        print("   No hay ningun contenedor. Docker anda, pero esta vacio.")
+        print("   There are no containers. Docker works, but it is empty.")
         return 0
 
-    print(f"   OK. {len(contenedores)} contenedores.\n")
+    print(f"   OK. {len(contenedores)} containers.\n")
 
     # Test 3: which of those look like WordPress.
-    print("3) Cuales parecen WordPress")
+    print("3) Which ones look like WordPress")
     print("-" * 72)
     for container in contenedores:
-        nombre = (container.get("Names") or "(sin nombre)").split(",")[0]
-        imagen = container.get("Image") or "(sin imagen)"
+        nombre = (container.get("Names") or "(no name)").split(",")[0]
+        imagen = container.get("Image") or "(no image)"
         estado = container.get("State") or "?"
         barato = detectar_capa1(container)
         marca = "WP  " if barato.es_sitio else "    "
@@ -134,36 +134,36 @@ def main() -> int:
             env=env,
         )
         if detalle.returncode != 0:
-            print(f"   AVISO: {nombre}: no se pudo inspeccionar ({detalle.stderr.strip()[:60]})")
+            print(f"   WARN: {nombre}: could not inspect ({detalle.stderr.strip()[:60]})")
             return {}
         try:
             info = json.loads(detalle.stdout)
         except json.JSONDecodeError:
-            print(f"   AVISO: {nombre}: inspect devolvio algo que no es JSON")
+            print(f"   WARN: {nombre}: inspect returned something that is not JSON")
             return {}
         detalles[nombre] = info
         return info
 
-    print("\n4) Detalle de los candidatos (docker inspect)")
+    print("\n4) Candidate details (docker inspect)")
     candidatos = detectar_todos(contenedores, inspeccionar)
     for nombre, candidato in candidatos:
         if not candidato.es_sitio:
-            print(f"   {nombre}: descartado. {candidato.por_que}")
+            print(f"   {nombre}: discarded. {candidato.por_que}")
             continue
-        gestion = "si" if candidato.gestionable else "no (spanel.managed lo excluye)"
+        gestion = "yes" if candidato.gestionable else "no (spanel.managed excludes it)"
         print(
             f"   {nombre} [{candidato.senal}] {candidato.por_que}. "
-            f"¿Lo podemos tocar? {gestion}"
+            f"Can we touch it? {gestion}"
         )
-        montajes = ", ".join(destinos_de_montaje(detalles.get(nombre, {}))) or "(ninguno)"
+        montajes = ", ".join(destinos_de_montaje(detalles.get(nombre, {}))) or "(none)"
         base = entorno_de_inspect(detalles.get(nombre, {})).get("WORDPRESS_DB_HOST")
-        print(f"      montajes:   {montajes}")
-        print(f"      base datos: {base or '(no esta WORDPRESS_DB_HOST)'}")
+        print(f"      mounts:     {montajes}")
+        print(f"      database:   {base or '(WORDPRESS_DB_HOST is missing)'}")
 
     sitios = [nombre for nombre, candidato in candidatos if candidato.es_sitio]
-    print(f"\n{len(sitios)} de {len(contenedores)} contenedores son sitios WordPress.")
+    print(f"\n{len(sitios)} of {len(contenedores)} containers are WordPress sites.")
     if not sitios:
-        print("Si esperabas ver WordPress aca, la lista de mas arriba dice donde mira.")
+        print("If you expected to see WordPress here, the list above shows where it looks.")
     return 0
 
 

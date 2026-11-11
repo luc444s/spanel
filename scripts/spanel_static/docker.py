@@ -32,7 +32,7 @@ class Docker:
         argv = ["docker", *args]
         result = self.runner.run(argv, stdin=stdin, timeout=timeout or self.timeout)
         if check and not result.ok:
-            raise DockerError(f"docker {args[0]} falló: {result.text().strip()[:400]}")
+            raise DockerError(f"docker {args[0]} failed: {result.text().strip()[:400]}")
         return result
 
     # ---- lectura ---------------------------------------------------------

@@ -47,19 +47,19 @@ def _expiry_alert(entry: dict, config: AgentConfig) -> dict | None:
     if not isinstance(remaining, int):
         return None
     if remaining <= 0:
-        return _alert("certificate_expired", "critical", "El certificado está vencido", hostname)
+        return _alert("certificate_expired", "critical", "The certificate has expired", hostname)
     if remaining <= config.alerts.critical_days:
         return _alert(
             "certificate_expiry_critical",
             "critical",
-            f"Vence en {remaining} días",
+            f"Expires in {remaining} days",
             hostname,
         )
     if remaining <= config.alerts.warning_days:
         return _alert(
             "certificate_expiry_warning",
             "warning",
-            f"Vence en {remaining} días",
+            f"Expires in {remaining} days",
             hostname,
         )
     return None
@@ -77,15 +77,15 @@ def _service_alert(entry: dict) -> dict | None:
         return _alert(
             "mail_tls_failure",
             "critical",
-            "Fallan Postfix y Dovecot; se requiere rollback de ambos",
+            "Postfix and Dovecot are failing; both require a rollback",
             hostname,
         )
     if imap_failed:
         return _alert(
-            "dovecot_failure", "critical", "Falló la verificación de Dovecot (993)", hostname
+            "dovecot_failure", "critical", "Dovecot verification failed (993)", hostname
         )
     return _alert(
-        "postfix_failure", "critical", "Falló la verificación de Postfix (465/587)", hostname
+        "postfix_failure", "critical", "Postfix verification failed (465/587)", hostname
     )
 
 
@@ -104,7 +104,7 @@ def _entry_alerts(entry: dict, config: AgentConfig) -> list[dict]:
         )
     if "clave" in lowered or "key" in lowered:
         alerts.append(
-            _alert("certificate_key_mismatch", "critical", error or "Clave incompatible", hostname)
+            _alert("certificate_key_mismatch", "critical", error or "Incompatible key", hostname)
         )
     served = entry.get("served_serial")
     stored = entry.get("serial")
@@ -113,7 +113,7 @@ def _entry_alerts(entry: dict, config: AgentConfig) -> list[dict]:
             _alert(
                 "certificate_serial_mismatch",
                 "critical",
-                "El serial servido no coincide con el almacenado",
+                "The served serial does not match the stored one",
                 hostname,
             )
         )
@@ -125,13 +125,13 @@ def _entry_alerts(entry: dict, config: AgentConfig) -> list[dict]:
             _alert(
                 "default_certificate_mismatch",
                 "critical",
-                "El certificado sin SNI no coincide con cf-mail",
+                "The certificate without SNI does not match cf-mail",
                 hostname,
             )
         )
     if not entry.get("ok") and not alerts:
         alerts.append(
-            _alert("certificate_unhealthy", "critical", error or "Certificado no saludable", hostname)
+            _alert("certificate_unhealthy", "critical", error or "Certificate unhealthy", hostname)
         )
     return alerts
 
@@ -155,7 +155,7 @@ def evaluate_alerts(
             _alert(
                 "default_certificate_mismatch",
                 "critical",
-                "El certificado predeterminado cf-mail no se sirve sin SNI",
+                "The default cf-mail certificate is not served without SNI",
                 str(default.get("name") or config.default_name),
             )
         )
@@ -164,14 +164,14 @@ def evaluate_alerts(
     interval = config.verification.audit_interval_seconds
     if generated is None:
         alerts.append(
-            _alert("agent_stale", "critical", "El agente no publicó estado previo", None)
+            _alert("agent_stale", "critical", "The agent did not publish a previous state", None)
         )
     elif (reference - generated).total_seconds() > 2 * interval:
         alerts.append(
             _alert(
                 "agent_stale",
                 "critical",
-                "El agente lleva más de dos intervalos sin ejecutarse",
+                "The agent has not run for more than two intervals",
                 None,
             )
         )
@@ -184,7 +184,7 @@ def evaluate_alerts(
             _alert(
                 "install_failed",
                 "critical",
-                safe_error(entry.get("last_error")) or "La instalación falló y se reintentará con backoff",
+                safe_error(entry.get("last_error")) or "The installation failed and will be retried with backoff",
                 str(hostname),
             )
         )
@@ -193,18 +193,18 @@ def evaluate_alerts(
 
 def _default_sender(alert: dict, config: AgentConfig, runner=None) -> None:
     if not config.alerts.configured():
-        raise AlertChannelError("Canal de alertas no configurado")
+        raise AlertChannelError("Alert channel not configured")
     payload = json.dumps({"source": "spanel-cert-agent", "alert": alert}, sort_keys=True).encode()
     if config.alerts.webhook_command:
         call = runner or _run
         process = call(list(config.alerts.webhook_command), payload)
         if process.returncode != 0:
             detail = (process.stderr or process.stdout or b"").decode("utf-8", "replace")
-            raise AlertChannelError(safe_error(detail) or "El webhook falló")
+            raise AlertChannelError(safe_error(detail) or "The webhook failed")
         return
     url = config.alerts.webhook_url
     if not url:
-        raise AlertChannelError("Canal de alertas no configurado")
+        raise AlertChannelError("Alert channel not configured")
     request = urllib.request.Request(
         url,
         data=payload,
@@ -215,7 +215,7 @@ def _default_sender(alert: dict, config: AgentConfig, runner=None) -> None:
         with urllib.request.urlopen(request, timeout=config.alerts.timeout_seconds):
             pass
     except (urllib.error.URLError, OSError) as exc:
-        raise AlertChannelError("No se pudo publicar la alerta externa") from exc
+        raise AlertChannelError("Could not publish the external alert") from exc
 
 
 def _run(argv: Sequence[str], input_data: bytes | None = None):

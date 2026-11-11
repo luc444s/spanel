@@ -148,7 +148,7 @@ class DomainsService:
             return get_domains_settings().proxy_settings()
         except ValueError as exc:
             raise AppError(
-                "Perfil de proxy inválido", status_code=503, code="domains.proxy_unavailable"
+                "Invalid proxy profile", status_code=503, code="domains.proxy_unavailable"
             ) from exc
     def _operations(self) -> ProxyOperations:
         settings = self._settings()
@@ -159,7 +159,7 @@ class DomainsService:
         ok, detail = operations.config_writable()
         if not ok:
             raise AppError(
-                f"El proxy no está disponible: {detail}",
+                f"The proxy is not available: {detail}",
                 status_code=503,
                 code="domains.proxy_unavailable",
             )
@@ -198,7 +198,7 @@ class DomainsService:
         for candidate in candidates:
             if is_primary_domain(self._app, self._db, candidate):
                 raise AppError(
-                    f"{candidate} es el dominio primario de un sitio y lo gestiona Hosting",
+                    f"{candidate} is the primary domain of a site and is managed by Hosting",
                     status_code=409,
                     code="domains.primary_owned",
                 )
@@ -212,7 +212,7 @@ class DomainsService:
             owner_tenant = domain_owner(self._app, self._db, candidate)
             if owner_tenant is not None and owner_tenant != tenant_id:
                 raise AppError(
-                    f"{candidate} lo administra otro tenant",
+                    f"{candidate} is managed by another tenant",
                     status_code=409,
                     code="domains.already_owned",
                 )
@@ -223,7 +223,7 @@ class DomainsService:
                 claim_domain(self._app, self._db, tenant_id, candidate)
             except DomainConflictError as exc:
                 raise AppError(
-                    f"{candidate} lo administra otro tenant",
+                    f"{candidate} is managed by another tenant",
                     status_code=409,
                     code="domains.already_owned",
                 ) from exc
@@ -392,8 +392,8 @@ class DomainsService:
                 return DomainCheckResponse(
                     available=False,
                     reason=(
-                        f"{needle} es el dominio primario del contenedor "
-                        f"{site.container} y lo gestiona Hosting"
+                        f"{needle} is the primary domain of container "
+                        f"{site.container} and is managed by Hosting"
                     ),
                     suffix=suffix,
                 )
@@ -406,7 +406,7 @@ class DomainsService:
             if row.domain.lower() == needle:
                 return DomainCheckResponse(
                     available=False,
-                    reason=f"{needle} ya está gestionado por el contenedor {row.container}",
+                    reason=f"{needle} is already managed by container {row.container}",
                     suffix=suffix,
                 )
 
@@ -414,7 +414,7 @@ class DomainsService:
         if owner is not None and owner != tenant_context.current_tenant_id:
             return DomainCheckResponse(
                 available=False,
-                reason=f"{needle} lo administra otro tenant",
+                reason=f"{needle} is managed by another tenant",
                 suffix=suffix,
             )
 
@@ -425,7 +425,7 @@ class DomainsService:
         items, _, _ = self.list_domains(tenant_id, can_manage=False)
         match = next((item for item in items if item.domain == needle), None)
         if match is None:
-            raise NotFoundError("Dominio desconocido")
+            raise NotFoundError("Unknown domain")
         if not match.published:
             # Reservado sin ruta: no se toca la red.
             return CertificateResponse(domain=needle, state="unpublished", verified=False)
@@ -559,7 +559,7 @@ class DomainsService:
             value not in allowed_entrypoints for value in entrypoints
         ):
             raise AppError(
-                "Entrypoint no permitido para el perfil efectivo",
+                "Entrypoint not allowed for the effective profile",
                 status_code=422,
                 code="domains.entrypoint_not_allowed",
             )
@@ -567,7 +567,7 @@ class DomainsService:
             value not in allowed_middlewares for value in middlewares
         ):
             raise AppError(
-                "Middleware no permitido por la plataforma",
+                "Middleware not allowed by the platform",
                 status_code=422,
                 code="domains.middleware_not_allowed",
             )
@@ -584,7 +584,7 @@ class DomainsService:
     def _route_domain(self, tenant_context: TenantContext, domain: str) -> str:
         primary, _ = self._candidates(domain, False)
         if primary not in self._registered_domains(tenant_context.current_tenant_id):
-            raise NotFoundError("Dominio desconocido")
+            raise NotFoundError("Unknown domain")
         return primary
 
     def _conflicting_route(
@@ -639,7 +639,7 @@ class DomainsService:
             )
         )
         if row is None:
-            raise NotFoundError("Ruta desconocida")
+            raise NotFoundError("Unknown route")
         try:
             self._publish_domain_routes(row.tenant_id, row.domain, ready=False)
         except AppError:
@@ -655,12 +655,12 @@ class DomainsService:
         domain = self._route_domain(tenant_context, body.domain)
         site = self._route_site(tenant_id, body.site_id)
         if site is None:
-            raise NotFoundError("Servicio desconocido")
+            raise NotFoundError("Unknown service")
         path = normalize_path_prefix(body.path)
         self._validate_route_options(body.entrypoints, body.middlewares)
         if self._conflicting_route(tenant_id, domain, path):
             raise AppError(
-                "La ruta ya está asignada",
+                "The route is already assigned",
                 status_code=409,
                 code="domains.route_conflict",
             )
@@ -708,13 +708,13 @@ class DomainsService:
             )
         )
         if row is None:
-            raise NotFoundError("Ruta desconocida")
+            raise NotFoundError("Unknown route")
         previous_domain = row.domain
         values = body.model_dump(exclude_unset=True)
         if "domain" in values:
             values["domain"] = self._route_domain(tenant_context, values["domain"])
         if "site_id" in values and self._route_site(tenant_id, values["site_id"]) is None:
-            raise NotFoundError("Servicio desconocido")
+            raise NotFoundError("Unknown service")
         if "path" in values:
             values["path"] = normalize_path_prefix(values["path"])
         if "internal_path" in values:
@@ -728,7 +728,7 @@ class DomainsService:
             tenant_id, target_domain, target_path, exclude_id=row.id
         ):
             raise AppError(
-                "La ruta ya está asignada",
+                "The route is already assigned",
                 status_code=409,
                 code="domains.route_conflict",
             )
@@ -765,7 +765,7 @@ class DomainsService:
             )
         )
         if row is None:
-            raise NotFoundError("Ruta desconocida")
+            raise NotFoundError("Unknown route")
         domain = row.domain
         self._db.delete(row)
         self._db.flush()
@@ -793,10 +793,10 @@ class DomainsService:
             )
         )
         if row is None:
-            raise NotFoundError("Ruta desconocida")
+            raise NotFoundError("Unknown route")
         if self._route_site(tenant_id, row.site_id) is None:
             raise AppError(
-                "El servicio de la ruta no está disponible",
+                "The route service is not available",
                 status_code=409,
                 code="domains.route_target_unavailable",
             )
@@ -837,7 +837,7 @@ class DomainsService:
 
         site = resolve_site(self._app, self._db, tenant_id, site_id)
         if site is None:
-            raise NotFoundError("Sitio desconocido")
+            raise NotFoundError("Unknown site")
 
         self._reject_primaries(candidates)
 
@@ -846,7 +846,7 @@ class DomainsService:
             owner = claimed.get(candidate)
             if owner is not None and owner.container != site.container:  # type: ignore[union-attr]
                 raise AppError(
-                    f"{candidate} ya está gestionado por {owner.container}",  # type: ignore[union-attr]
+                    f"{candidate} is already managed by {owner.container}",  # type: ignore[union-attr]
                     status_code=409,
                     code="domains.already_claimed",
                 )
@@ -895,7 +895,7 @@ class DomainsService:
                 owner = claimed.get(candidate)
                 if owner is not None:
                     raise AppError(
-                        f"{candidate} ya está gestionado por {owner.container}",  # type: ignore[union-attr]
+                        f"{candidate} is already managed by {owner.container}",  # type: ignore[union-attr]
                         status_code=409,
                         code="domains.already_claimed",
                     )
@@ -929,7 +929,7 @@ class DomainsService:
         owner_tenant = domain_owner(self._app, self._db, primary)
         if owner_tenant != tenant_id:
             raise AppError(
-                f"{primary} no está reservado por este tenant",
+                f"{primary} is not reserved by this tenant",
                 status_code=404,
                 code="domains.domain_not_found",
             )
@@ -937,7 +937,7 @@ class DomainsService:
         site = resolve_site(self._app, self._db, tenant_id, site_id)
         if site is None:
             raise AppError(
-                "Sitio desconocido",
+                "Unknown site",
                 status_code=404,
                 code="domains.site_not_found",
             )
@@ -949,7 +949,7 @@ class DomainsService:
             owner = claimed.get(candidate)
             if owner is not None and owner.container != site.container:  # type: ignore[union-attr]
                 raise AppError(
-                    f"{candidate} ya está gestionado por {owner.container}",  # type: ignore[union-attr]
+                    f"{candidate} is already managed by {owner.container}",  # type: ignore[union-attr]
                     status_code=409,
                     code="domains.already_claimed",
                 )
@@ -992,11 +992,11 @@ class DomainsService:
 
         sites = self._visible_sites(tenant_id)
         if claim.container not in sites:  # type: ignore[union-attr]
-            raise NotFoundError("Dominio desconocido")
+            raise NotFoundError("Unknown domain")
         site = sites[claim.container]  # type: ignore[index]
         if (site.primary_domain or "").strip().lower() == needle:
             raise AppError(
-                f"{needle} es el dominio primario de {claim.container} y lo publica Hosting",
+                f"{needle} is the primary domain of {claim.container} and is published by Hosting",
                 status_code=409,
                 code="domains.primary_owned",
             )
@@ -1021,17 +1021,17 @@ class DomainsService:
         """DELETE de un dominio no publicado: libera la fila o responde 404."""
         if is_primary_domain(self._app, self._db, needle):
             raise AppError(
-                f"{needle} es el dominio primario y lo gestiona Hosting",
+                f"{needle} is the primary domain and is managed by Hosting",
                 status_code=409,
                 code="domains.primary_owned",
             )
         owner_tenant = domain_owner(self._app, self._db, needle)
         if owner_tenant is None or owner_tenant != tenant_context.current_tenant_id:
-            raise NotFoundError("Dominio desconocido")
+            raise NotFoundError("Unknown domain")
         if not release_domain(
             self._app, self._db, tenant_context.current_tenant_id, needle
         ):
-            raise NotFoundError("Dominio desconocido")
+            raise NotFoundError("Unknown domain")
         self._audit(
             tenant_context,
             action="domains.domain.removed",

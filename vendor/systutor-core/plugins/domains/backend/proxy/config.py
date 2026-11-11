@@ -100,14 +100,14 @@ class Settings:
     ) -> Settings:
         env = os.environ if env is None else env
         if profile not in PROFILES:
-            raise ValueError(f"perfil desconocido: {profile} (usá {' o '.join(PROFILES)})")
+            raise ValueError(f"unknown profile: {profile} (use {' or '.join(PROFILES)})")
 
         internal = profile == "internal"
         config_dir_override = _env(env, "SPANEL_PROXY_CONFIG_DIR")
         transport = (_env(env, "SPANEL_PROXY_TRANSPORT", default="auto") or "auto").lower()
         if transport not in TRANSPORTS:
             raise ValueError(
-                f"transporte desconocido: {transport} (usá {' o '.join(TRANSPORTS)})"
+                f"unknown transport: {transport} (use {' or '.join(TRANSPORTS)})"
             )
         config_dir = _path(config_dir_override)
         if config_dir is None:

@@ -70,11 +70,11 @@ export function FileUpload({
         <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" />
       </svg>
       <p className="text-foreground">
-        {dragOver ? "Suelta los archivos aqu\u00ed" : "Arrastra archivos o haz clic para subir"}
+        {dragOver ? "Drop the files here" : "Drag files or click to upload"}
       </p>
       <p className="text-xs text-muted-foreground">
         {accept ? `Formatos: ${accept}` : "Todos los formatos"}
-        {maxSize ? ` | M\u00e1x: ${(maxSize / (1024 * 1024)).toFixed(0)}MB` : ""}
+        {maxSize ? ` | Max: ${(maxSize / (1024 * 1024)).toFixed(0)}MB` : ""}
       </p>
       <input
         ref={inputRef}

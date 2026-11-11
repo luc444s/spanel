@@ -1,5 +1,7 @@
 import type { PluginNavigationItem } from "@systutor/sdk/frontend";
 
+import { t } from "../../i18n";
+
 export type ShellNavLinkItem = {
   kind: "link";
   label: string;
@@ -37,31 +39,31 @@ export function buildShellSidebarSections({
 
   const systemItems: Array<ShellNavLinkItem | ShellNavActionItem> = [];
   if (permissions.includes("core.plugin.manage")) {
-    systemItems.push({ kind: "link", label: "Dashboard", to: "/app/dashboard" });
-    systemItems.push({ kind: "link", label: "Plugins", to: "/app/plugins" });
+    systemItems.push({ kind: "link", label: t("Dashboard"), to: "/app/dashboard" });
+    systemItems.push({ kind: "link", label: t("Plugins"), to: "/app/plugins" });
   }
   if (systemItems.length > 0) {
-    sections.push({ title: "Sistema", items: systemItems });
+    sections.push({ title: t("System"), items: systemItems });
   }
 
   const settingsItems: Array<ShellNavLinkItem | ShellNavActionItem> = [];
   if (permissions.includes("core.users.read")) {
-    settingsItems.push({ kind: "link", label: "Usuarios", to: "/app/settings/users" });
+    settingsItems.push({ kind: "link", label: t("Users"), to: "/app/settings/users" });
   }
   if (
     permissions.includes("core.roles.read") ||
     permissions.includes("core.roles.manage")
   ) {
-    settingsItems.push({ kind: "link", label: "Roles", to: "/app/settings/roles" });
+    settingsItems.push({ kind: "link", label: t("Roles"), to: "/app/settings/roles" });
   }
   if (
     permissions.includes("core.branches.read") ||
     permissions.includes("core.branches.manage")
   ) {
-    settingsItems.push({ kind: "link", label: "Sucursales", to: "/app/settings/branches" });
+    settingsItems.push({ kind: "link", label: t("Branches"), to: "/app/settings/branches" });
   }
   if (settingsItems.length > 0) {
-    sections.push({ title: "Ajustes", items: settingsItems });
+    sections.push({ title: t("Settings"), items: settingsItems });
   }
 
   if (pluginNavigation.length > 0) {
@@ -82,16 +84,16 @@ export function buildShellSidebarSections({
     for (const [, group] of grouped) {
       if (group.parent && group.children.length > 0) {
         sections.push({
-          title: group.parent.label,
+          title: t(group.parent.label),
           items: [
-            { kind: "link", label: group.parent.label, to: group.parent.to },
+            { kind: "link", label: t(group.parent.label), to: group.parent.to },
             {
               kind: "group",
               label: group.parent.label,
               to: group.parent.to,
               items: group.children.map((child) => ({
                 kind: "link" as const,
-                label: child.label,
+                label: t(child.label),
                 to: child.to,
               })),
             },
@@ -99,33 +101,33 @@ export function buildShellSidebarSections({
         });
       } else if (group.children.length > 0) {
         sections.push({
-          title: group.children[0].group!,
+          title: t(group.children[0].group!),
           items: [{
             kind: "group",
-            label: group.children[0].group!,
+            label: t(group.children[0].group!),
             to: "",
             items: group.children.map((child) => ({
               kind: "link" as const,
-              label: child.label,
+              label: t(child.label),
               to: child.to,
             })),
           }],
         });
       } else if (group.parent) {
         sections.push({
-          title: group.parent.label,
-          items: [{ kind: "link", label: group.parent.label, to: group.parent.to }],
+          title: t(group.parent.label),
+          items: [{ kind: "link", label: t(group.parent.label), to: group.parent.to }],
         });
       }
     }
   }
 
   sections.push({
-    title: "Sesión",
-    items: [{ kind: "action", label: "Cerrar sesión", action: "logout" }],
+    title: t("Session"),
+    items: [{ kind: "action", label: t("Sign out"), action: "logout" }],
   });
 
-  const logisticsIndex = sections.findIndex((s) => s.title === "LOGISTICS");
+  const logisticsIndex = sections.findIndex((s) => s.title === t("LOGISTICS"));
   if (logisticsIndex > 0) {
     const [logistics] = sections.splice(logisticsIndex, 1);
     sections.unshift(logistics);

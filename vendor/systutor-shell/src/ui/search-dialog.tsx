@@ -74,10 +74,10 @@ export function SearchDialog<T>({
         <Input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder={placeholder ?? "Escribe para buscar..."}
+          placeholder={placeholder ?? "Type to search..."}
         />
         {searchQuery.error ? (
-          <Alert title="Error al buscar">{searchQuery.error.message}</Alert>
+          <Alert title="Search failed">{searchQuery.error.message}</Alert>
         ) : null}
         <DataTable
           columns={columns}
@@ -88,7 +88,7 @@ export function SearchDialog<T>({
           }}
           emptyMessage={
             query.trim().length === 0
-              ? "Escribe algo para buscar."
+              ? "Type something to search."
               : searchQuery.isLoading
                 ? "Buscando..."
                 : emptyMessage

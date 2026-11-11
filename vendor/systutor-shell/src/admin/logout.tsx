@@ -6,7 +6,7 @@ type LogoutButtonProps = {
   label?: string;
 };
 
-export function LogoutButton({ onLogout, label = "Cerrar sesión" }: LogoutButtonProps) {
+export function LogoutButton({ onLogout, label = "Sign out" }: LogoutButtonProps) {
   return (
     <Button
       variant="secondary"

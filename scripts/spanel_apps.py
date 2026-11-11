@@ -331,7 +331,7 @@ def build_parser() -> argparse.ArgumentParser:
     deploy.add_argument("--env-file", type=Path)
     deploy.add_argument(
         "--env",
-        help="bloque dotenv plano multilínea (visible en argv; preferí --env-file para secretos)",
+        help="flat multiline dotenv block (visible in argv; prefer --env-file for secrets)",
     )
     deploy.add_argument("--wait", action="store_true")
 

@@ -75,7 +75,7 @@ export function TraceabilityTimeline({
   events,
   pagination,
   loading,
-  emptyMessage = "No hay eventos de trazabilidad",
+  emptyMessage = "No traceability events",
   onLoadMore,
   loadingMore,
 }: TraceabilityTimelineProps) {
@@ -147,7 +147,7 @@ export function TraceabilityTimeline({
       {hasMore ? (
         <div className="flex justify-center pt-2">
           <Button variant="secondary" onClick={onLoadMore} disabled={loadingMore}>
-            {loadingMore ? "Cargando..." : "Cargar m\u00e1s"}
+            {loadingMore ? "Loading..." : "Load more"}
           </Button>
         </div>
       ) : null}

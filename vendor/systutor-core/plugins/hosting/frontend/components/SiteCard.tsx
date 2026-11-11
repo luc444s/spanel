@@ -2,27 +2,30 @@ import { Badge } from "@systutor/shell/ui/badge";
 import { Card } from "@systutor/shell/ui/card";
 import { cn } from "@systutor/shell/ui/cn";
 
+import { t } from "@/i18n";
+import { useT } from "@/i18n/use-i18n";
+
 import type { HostingSite } from "../api";
 
 const STATUS_LABELS: Record<string, string> = {
-  running: "En marcha",
-  exited: "Detenido",
-  created: "Creado",
-  paused: "Pausado",
-  missing: "No existe",
+  running: "Running",
+  exited: "Stopped",
+  created: "Created",
+  paused: "Paused",
+  missing: "Missing",
 };
 
 const KIND_LABELS: Record<HostingSite["kind"], string> = {
   wordpress: "WordPress",
-  static: "Estático",
+  static: "Static",
 };
 
 export function stateLabel(status: string) {
-  return STATUS_LABELS[status] ?? status;
+  return STATUS_LABELS[status] ? t(STATUS_LABELS[status]) : status;
 }
 
 export function kindLabel(kind: HostingSite["kind"]) {
-  return KIND_LABELS[kind] ?? kind;
+  return KIND_LABELS[kind] ? t(KIND_LABELS[kind]) : kind;
 }
 
 function statusDot(status: string) {
@@ -42,6 +45,8 @@ type SiteCardProps = {
  * the dialog that owns every action, so the list stays readable on a phone.
  */
 export function SiteCard({ site, onOpen }: SiteCardProps) {
+  const t = useT();
+
   return (
     <Card
       role="button"
@@ -65,7 +70,7 @@ export function SiteCard({ site, onOpen }: SiteCardProps) {
         </Badge>
       </div>
       <p className="mt-1 truncate text-sm text-muted-foreground">
-        {site.domain ?? "Sin dominio"}
+        {site.domain ?? t("No domain")}
       </p>
       <div className="flex items-center gap-2">
         <Badge>{kindLabel(site.kind)}</Badge>
@@ -75,7 +80,7 @@ export function SiteCard({ site, onOpen }: SiteCardProps) {
         ) : null}
       </div>
       <p className="mt-3 text-xs text-muted-foreground">
-        {site.managed ? "Gestionable" : "Solo lectura"}
+        {site.managed ? t("Managed") : t("Read only")}
       </p>
     </Card>
   );

@@ -82,7 +82,7 @@ def _path_value(value: str) -> str:
         or len(path) > 255
         or any(character in path for character in "`\r\n\t?#\"")
     ):
-        raise ValueError("path inválido")
+        raise ValueError("invalid path")
     return path.rstrip("/") or "/"
 
 
@@ -91,12 +91,12 @@ def _proxy_names(values: list[str], label: str) -> list[str]:
     for raw in values:
         value = raw.strip()
         if not _SAFE_PROXY_NAME.fullmatch(value):
-            raise ValueError(f"{label} inválido")
+            raise ValueError(f"invalid {label}")
         if value in result:
-            raise ValueError(f"{label} duplicado")
+            raise ValueError(f"duplicate {label}")
         result.append(value)
     if len(result) > 20:
-        raise ValueError(f"demasiados {label}")
+        raise ValueError(f"too many {label}")
     return result
 
 
@@ -135,14 +135,14 @@ class RouteCreate(BaseModel):
     @field_validator("entrypoints", "middlewares")
     @classmethod
     def valid_names(cls, value: list[str]) -> list[str]:
-        return _proxy_names(value, "valor")
+        return _proxy_names(value, "value")
 
     @field_validator("site_id")
     @classmethod
     def valid_site(cls, value: str) -> str:
         site = value.strip()
         if any(character in site for character in "`\r\n\t "):
-            raise ValueError("site_id inválido")
+            raise ValueError("invalid site_id")
         return site
 
 
@@ -176,13 +176,13 @@ class RouteUpdate(BaseModel):
             return None
         site = value.strip()
         if any(character in site for character in "`\r\n\t "):
-            raise ValueError("site_id inválido")
+            raise ValueError("invalid site_id")
         return site
 
     @model_validator(mode="after")
     def not_empty(self):
         if not self.model_fields_set:
-            raise ValueError("la actualización no contiene campos")
+            raise ValueError("the update contains no fields")
         for name in (
             "domain",
             "path",
@@ -195,7 +195,7 @@ class RouteUpdate(BaseModel):
             "site_id",
         ):
             if name in self.model_fields_set and getattr(self, name) is None:
-                raise ValueError(f"{name} no puede ser null")
+                raise ValueError(f"{name} cannot be null")
         return self
 
 

@@ -36,51 +36,51 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser = argparse.ArgumentParser(
         prog="spanel-static.py",
-        description="Crea y administra sitios estáticos (HTML/CSS/JS) en Docker + Traefik.",
+        description="Create and manage static sites (HTML/CSS/JS) on Docker + Traefik.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
     parser.add_argument("--profile", choices=("internal", "public"), default=None)
     parser.add_argument("--transport", choices=("auto", "local", "ssh"), default=None)
-    parser.add_argument("--network", default=None, help="red Docker del proxy")
-    parser.add_argument("--image", default=None, help="imagen nginx (default nginx:alpine)")
+    parser.add_argument("--network", default=None, help="proxy Docker network")
+    parser.add_argument("--image", default=None, help="nginx image (default nginx:alpine)")
     parser.add_argument(
-        "--wait", type=int, default=None, help="segundos de espera al certificado"
+        "--wait", type=int, default=None, help="seconds to wait for the certificate"
     )
     parser.add_argument(
         "--remote-repo",
         default=None,
-        help="ruta del repo en el host Docker (transporte SSH)",
+        help="repo path on the Docker host (SSH transport)",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
     create = sub.add_parser(
         "create",
         parents=[common],
-        help="crea el contenedor, el volumen, el contenido y la ruta HTTPS",
+        help="create the container, volume, content and HTTPS route",
     )
-    create.add_argument("--name", required=True, help="nombre corto (ej. paginadelucas)")
+    create.add_argument("--name", required=True, help="short name (e.g. paginadelucas)")
     create.add_argument("--domain", default=None, help="FQDN (default <slug>.spanel)")
-    create.add_argument("--www", action="store_true", help="publicar también www.<dominio>")
-    create.add_argument("--force", action="store_true", help="sobrescribir el contenido inicial")
+    create.add_argument("--www", action="store_true", help="also publish www.<domain>")
+    create.add_argument("--force", action="store_true", help="overwrite the initial content")
     create.add_argument(
-        "--reuse", action="store_true", help="reutilizar un contenedor/volumen ya existente"
+        "--reuse", action="store_true", help="reuse an existing container/volume"
     )
-    create.add_argument("--dry-run", action="store_true", help="imprime los comandos sin ejecutar")
+    create.add_argument("--dry-run", action="store_true", help="print the commands without executing them")
 
-    sub.add_parser("list", parents=[common], help="lista los sitios estáticos")
+    sub.add_parser("list", parents=[common], help="list static sites")
 
-    status = sub.add_parser("status", parents=[common], help="estado del contenedor y del certificado")
+    status = sub.add_parser("status", parents=[common], help="container and certificate status")
     status.add_argument("--name", default=None)
     status.add_argument("--domain", default=None)
 
-    delete = sub.add_parser("delete", parents=[common], help="borra contenedor, volumen y ruta")
+    delete = sub.add_parser("delete", parents=[common], help="delete the container, volume and route")
     delete.add_argument("--name", default=None)
     delete.add_argument("--domain", default=None)
-    delete.add_argument("--keep-volume", action="store_true", help="conservar los datos")
+    delete.add_argument("--keep-volume", action="store_true", help="keep the data")
     delete.add_argument("--dry-run", action="store_true")
 
-    sub.add_parser("doctor", parents=[common], help="verifica Docker, red, imagen y proxy")
+    sub.add_parser("doctor", parents=[common], help="check Docker, network, image and proxy")
     return parser
 
 
@@ -111,7 +111,7 @@ def main(argv: list[str] | None = None) -> int:
                 f"{slug}.spanel" if settings.profile == "internal" else ""
             )
             if not domain:
-                raise CliError("En perfil public --domain es obligatorio", 2)
+                raise CliError("In the public profile --domain is required", 2)
             domain = validate_domain(domain, settings.profile)
             return create_site(
                 settings,
@@ -128,13 +128,13 @@ def main(argv: list[str] | None = None) -> int:
             name = slugify(args.name) if args.name else None
             domain = validate_domain(args.domain, settings.profile) if args.domain else None
             if not name and not domain:
-                raise CliError("Indicá --name o --domain", 2)
+                raise CliError("Specify --name or --domain", 2)
             return status_site(settings, name=name, domain=domain)
         if args.command == "delete":
             name = slugify(args.name) if args.name else None
             domain = validate_domain(args.domain, settings.profile) if args.domain else None
             if not name and not domain:
-                raise CliError("Indicá --name o --domain", 2)
+                raise CliError("Specify --name or --domain", 2)
             return delete_site(
                 settings,
                 name=name,
@@ -148,7 +148,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return getattr(exc, "exit_code", 2)
     except KeyboardInterrupt:
-        print("interrumpido", file=sys.stderr)
+        print("interrupted", file=sys.stderr)
         return 130
 
     parser.error(f"comando desconocido: {args.command}")

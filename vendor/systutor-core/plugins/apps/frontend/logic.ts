@@ -1,3 +1,5 @@
+import { t } from "@/i18n";
+
 import type {
   Application, EnvironmentEntry, Finding, GithubStatus, Operation,
 } from "./types";
@@ -29,43 +31,43 @@ export function parseDotenv(text: string): EnvironmentEntry[] {
     const separator = line.indexOf("=");
     const name = separator < 0 ? "" : line.slice(0, separator).trim();
     if (!ENVIRONMENT_NAME.test(name)) {
-      throw new Error(`Variable .env inválida en la línea ${index + 1}`);
+      throw new Error(t("Invalid .env variable on line {line}", { line: index + 1 }));
     }
     if (names.has(name)) {
-      throw new Error(`Variable .env duplicada: ${name}`);
+      throw new Error(t("Duplicate .env variable: {name}", { name }));
     }
     if (MANAGED_ENVIRONMENT_NAMES.has(name)) {
-      throw new Error(`Apps administra automáticamente ${name}`);
+      throw new Error(t("Apps manages {name} automatically", { name }));
     }
     const value = line.slice(separator + 1);
     if (value.includes("\0") || value.length > 8192) {
-      throw new Error(`Valor .env inválido para ${name}`);
+      throw new Error(t("Invalid .env value for {name}", { name }));
     }
     names.add(name);
     entries.push({ name, value });
   }
-  if (entries.length > 100) throw new Error("El deployment admite hasta 100 variables");
+  if (entries.length > 100) throw new Error(t("The deployment allows up to 100 variables"));
   return entries;
 }
 
 const GITHUB_CARD_LABELS: Record<GithubCardState, string> = {
-  loading: "Comprobando estado de GitHub…",
-  unconfigured: "Sin conexión",
-  registering: "Registrando GitHub App…",
-  pending_installation: "App registrada; falta instalar y elegir repositorios",
-  syncing: "Sincronizando repositorios autorizados…",
-  connected: "GitHub conectado",
-  suspended: "Instalación suspendida",
-  error: "No se pudo leer el estado de GitHub",
+  loading: "Checking GitHub status…",
+  unconfigured: "Not connected",
+  registering: "Registering GitHub App…",
+  pending_installation: "App registered; install it and choose repositories",
+  syncing: "Syncing authorized repositories…",
+  connected: "GitHub connected",
+  suspended: "Installation suspended",
+  error: "Could not read GitHub status",
 };
 
-const GITHUB_ERROR_MESSAGE = "No se pudo leer el estado de GitHub";
+const GITHUB_ERROR_MESSAGE = "Could not read GitHub status";
 
 export function githubCardContent(state: GithubCardState) {
   if (state === "error") {
-    return { label: null, alert: GITHUB_ERROR_MESSAGE };
+    return { label: null, alert: t(GITHUB_ERROR_MESSAGE) };
   }
-  return { label: GITHUB_CARD_LABELS[state], alert: null };
+  return { label: t(GITHUB_CARD_LABELS[state]), alert: null };
 }
 
 export function githubCardState(input: {
@@ -102,7 +104,7 @@ export function validateGithubManifestUrl(value: string, organization: string | 
     }
     return url.href;
   } catch {
-    throw new Error("GitHub devolvió una URL de manifest no válida");
+    throw new Error(t("GitHub returned an invalid manifest URL"));
   }
 }
 
@@ -118,14 +120,14 @@ export function validateGithubInstallUrl(value: string) {
     }
     return url.href;
   } catch {
-    throw new Error("GitHub devolvió una URL de instalación no válida");
+    throw new Error(t("GitHub returned an invalid installation URL"));
   }
 }
 
 export function validateGithubOrganization(value: string) {
   const slug = value.trim();
   if (!GITHUB_ORGANIZATION.test(slug)) {
-    throw new Error("El slug de organización de GitHub no es válido");
+    throw new Error(t("The GitHub organization slug is not valid"));
   }
   return slug;
 }

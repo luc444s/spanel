@@ -6,7 +6,7 @@ export function registerPlugin(): PluginFrontendRegistration {
     pluginId: "filemanager",
     routes: [{
       path: "filemanager/:provider/:resourceId",
-      title: "Gestor de archivos",
+      title: "File manager",
       component: FileManagerPage,
       requiredPermissions: ["filemanager.files.read"],
     }],

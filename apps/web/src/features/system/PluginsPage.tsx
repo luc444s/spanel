@@ -11,6 +11,9 @@ import {
   uninstallManagedPlugin,
 } from "../core-management/api";
 import { useAuthStore } from "../auth/store";
+import { t } from "@/i18n";
+import { pluginDescription, pluginName } from "@/i18n/plugin-metadata";
+import { useT } from "@/i18n/use-i18n";
 import { Alert } from "@systutor/shell/ui/alert";
 import { Badge } from "@systutor/shell/ui/badge";
 import { Button } from "@systutor/shell/ui/button";
@@ -70,52 +73,58 @@ type PluginsPageContentProps = {
 };
 
 export function PluginsPageContent({ plugins, canManage, hasError, isMutating, onAction }: PluginsPageContentProps) {
+  const t = useT();
+
   return (
     <section className="space-y-6">
       <div className="space-y-2">
-        <h1 className="text-2xl font-semibold text-foreground">Plugins</h1>
+        <h1 className="text-2xl font-semibold text-foreground">{t("Plugins")}</h1>
         <p className="text-sm text-muted-foreground">
-          Management mínimo del runtime persistente, incluyendo lifecycle, errores y visibilidad frontend.
+          {t("Minimal management of the persistent runtime, including lifecycle, errors, and frontend visibility.")}
         </p>
       </div>
 
       {hasError ? (
-        <Alert title="No se pudo cargar el runtime de plugins">Revisa permisos o disponibilidad del backend.</Alert>
+        <Alert title={t("Could not load the plugin runtime")}>
+          {t("Check permissions or backend availability.")}
+        </Alert>
       ) : null}
 
       <Card>
         <CardHeader>
-          <CardTitle>Plugin runtime</CardTitle>
-          <CardDescription>Estado técnico y acciones administrativas del runtime persistente.</CardDescription>
+          <CardTitle>{t("Plugin runtime")}</CardTitle>
+          <CardDescription>
+            {t("Technical status and administrative actions for the persistent runtime.")}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <DataTable
             columns={[
-              { key: "plugin_id", header: "ID", render: (plugin) => plugin.plugin_id },
-              { key: "version", header: "Versión", render: (plugin) => plugin.version },
-              { key: "api_version", header: "API Versión", render: (plugin) => plugin.api_version },
-              { key: "state", header: "Estado", render: (plugin) => <Badge>{plugin.state}</Badge> },
-              { key: "installed_at", header: "Instalado", render: (plugin) => plugin.installed_at ?? "-" },
-              { key: "enabled_at", header: "Activado", render: (plugin) => plugin.enabled_at ?? "-" },
+              { key: "plugin_id", header: t("ID"), render: (plugin) => plugin.plugin_id },
+              { key: "version", header: t("Version"), render: (plugin) => plugin.version },
+              { key: "api_version", header: t("API Version"), render: (plugin) => plugin.api_version },
+              { key: "state", header: t("Status"), render: (plugin) => <Badge>{plugin.state}</Badge> },
+              { key: "installed_at", header: t("Installed"), render: (plugin) => plugin.installed_at ?? "-" },
+              { key: "enabled_at", header: t("Enabled"), render: (plugin) => plugin.enabled_at ?? "-" },
               {
                 key: "last_error",
-                header: "Último error",
+                header: t("Last error"),
                 render: (plugin) => plugin.last_error ?? "-",
               },
               {
                 key: "actions",
-                header: "Acciones",
+                header: t("Actions"),
                 className: "w-72",
                 render: (plugin) => (
                   <div className="flex flex-wrap gap-2">
-                    {canManage ? renderPluginActions(plugin, isMutating, onAction) : <span className="text-muted-foreground">Solo lectura</span>}
+                    {canManage ? renderPluginActions(plugin, isMutating, onAction) : <span className="text-muted-foreground">{t("Read only")}</span>}
                   </div>
                 ),
               },
             ]}
             rows={plugins}
             rowKey={(plugin) => plugin.id}
-            emptyMessage="No hay plugins registrados en el runtime."
+            emptyMessage={t("No plugins registered in the runtime.")}
           />
         </CardContent>
       </Card>
@@ -125,18 +134,18 @@ export function PluginsPageContent({ plugins, canManage, hasError, isMutating, o
           <Card key={plugin.id}>
             <CardHeader>
               <div className="flex items-center justify-between gap-3">
-                <CardTitle>{plugin.name}</CardTitle>
+                <CardTitle>{t(pluginName(plugin.plugin_id, plugin.name))}</CardTitle>
                 <div className="flex items-center gap-2">
                   <Badge>{plugin.version}</Badge>
                   <Badge>{plugin.state}</Badge>
                 </div>
               </div>
-              <CardDescription>{plugin.description}</CardDescription>
+              <CardDescription>{t(pluginDescription(plugin.plugin_id, plugin.description))}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 text-sm text-muted-foreground">
-              <InfoLine label="Plugin ID" value={plugin.plugin_id} />
-              <InfoLine label="Enabled" value={plugin.is_enabled ? "si" : "no"} />
-              {plugin.last_error ? <Alert title="Ultimo error">{plugin.last_error}</Alert> : null}
+              <InfoLine label={t("Plugin ID")} value={plugin.plugin_id} />
+              <InfoLine label={t("Enabled")} value={plugin.is_enabled ? t("Yes") : t("No")} />
+              {plugin.last_error ? <Alert title={t("Last error")}>{plugin.last_error}</Alert> : null}
             </CardContent>
           </Card>
         ))}
@@ -176,15 +185,15 @@ function renderPluginActions(
 function actionLabel(action: PluginAction) {
   switch (action) {
     case "install":
-      return "Instalar";
+      return t("Install");
     case "enable":
-      return "Activar";
+      return t("Enable");
     case "disable":
-      return "Desactivar";
+      return t("Disable");
     case "uninstall":
-      return "Desinstalar";
+      return t("Uninstall");
     case "migrate":
-      return "Migrar";
+      return t("Migrate");
   }
 }
 

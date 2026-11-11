@@ -86,12 +86,12 @@ def names_from_container(container: str) -> SiteNames:
     prefix, suffix = "spanel-", "-wp"
     if not container.startswith(prefix) or not container.endswith(suffix):
         raise DeleteError(
-            f"{container!r} no tiene el formato gestionado spanel-<slug>-wp"
+            f"{container!r} does not have the managed spanel-<slug>-wp format"
         )
     slug = container[len(prefix) : -len(suffix)]
     names = SiteNames(slug)
     if not slug or names.wp != container:
-        raise DeleteError(f"no se pudieron derivar recursos seguros desde {container!r}")
+        raise DeleteError(f"could not derive safe resources from {container!r}")
     return names
 
 
@@ -101,11 +101,11 @@ def _registered_site(db: Session, container: str) -> HostingSite:
     )
     if site is None:
         raise DeleteError(
-            f"{container!r} no está registrado en Hosting; no se borrará por nombre solamente"
+            f"{container!r} is not registered in Hosting; it will not be deleted by name alone"
         )
     if site.kind != "wordpress":
         raise DeleteError(
-            f"{container!r} es de tipo {site.kind!r}, no un sitio WordPress"
+            f"{container!r} has kind {site.kind!r}, not a WordPress site"
         )
     return site
 
@@ -122,7 +122,7 @@ def build_plan(
     names = names_from_container(container)
     tenant = db.get(Tenant, site.tenant_id)
     if tenant is None:
-        raise DeleteError(f"el tenant {site.tenant_id!r} del sitio ya no existe")
+        raise DeleteError(f"the site's tenant {site.tenant_id!r} no longer exists")
 
     wp_info = inspect_container(
         provisioner.env, names.wp, timeout=provisioner.settings.command_timeout
@@ -135,16 +135,16 @@ def build_plan(
     database_mode = "dedicated" if db_host == names.db else "shared"
     if wp_info is None:
         raise DeleteError(
-            "el WordPress no existe y no se puede verificar qué base le pertenece"
+            "the WordPress does not exist and its database ownership cannot be verified"
         )
     if not re.fullmatch(r"[A-Za-z0-9_.-]+", db_host):
-        raise DeleteError(f"host MariaDB inválido: {db_host!r}")
+        raise DeleteError(f"invalid MariaDB host: {db_host!r}")
     if not database_name or not re.fullmatch(r"[A-Za-z0-9_$-]+", database_name):
-        raise DeleteError("WORDPRESS_DB_NAME ausente o inseguro")
+        raise DeleteError("WORDPRESS_DB_NAME missing or unsafe")
     if not database_user or not re.fullmatch(r"[A-Za-z0-9_$@.-]+", database_user):
-        raise DeleteError("WORDPRESS_DB_USER ausente o inseguro")
+        raise DeleteError("WORDPRESS_DB_USER missing or unsafe")
     if not provisioner.exists("container", db_host):
-        raise DeleteError(f"el contenedor MariaDB {db_host!r} no existe")
+        raise DeleteError(f"MariaDB container {db_host!r} does not exist")
     # Regla absoluta: MariaDB y su volumen jamás forman parte del cleanup.
     resources = (
         ("container", names.wp),
@@ -155,28 +155,28 @@ def build_plan(
         try:
             exists = provisioner.exists(kind, name)
         except Fallo as exc:
-            raise DeleteError(f"no se pudo inspeccionar {kind} {name}: {exc}") from exc
+            raise DeleteError(f"could not inspect {kind} {name}: {exc}") from exc
         if not exists:
             missing.append(f"{kind}:{name}")
             continue
         if not provisioner._owned(kind, name, names, site.tenant_id):
             raise DeleteError(
-                f"{kind} {name!r} existe pero sus labels no pertenecen a este sitio/tenant"
+                f"{kind} {name!r} exists but its labels do not belong to this site/tenant"
             )
 
     domain = (site.domain or "").strip().lower().removesuffix(".") or None
     reservation = db.get(TenantDomain, domain) if domain else None
     if reservation is not None and reservation.tenant_id != site.tenant_id:
         raise DeleteError(
-            f"el dominio {domain} está reservado por otro tenant; estado inconsistente"
+            f"domain {domain} is reserved by another tenant; inconsistent state"
         )
 
     release = bool(domain and not keep_domain and reservation is not None)
     tenant_primary = (tenant.domain or "").strip().lower().removesuffix(".")
     if release and tenant_primary == domain:
         raise DeleteError(
-            f"{domain} es el dominio de correo primario del tenant; cambialo primero "
-            "o repetí con --keep-domain"
+            f"{domain} is the tenant's primary mail domain; change it first "
+            "or repeat with --keep-domain"
         )
 
     return DeletePlan(
@@ -198,24 +198,24 @@ def build_plan(
 
 
 def print_plan(plan: DeletePlan) -> None:
-    print("PLAN DE BAJA (irreversible)")
-    print(f"  sitio:       {plan.container} ({plan.site_id})")
+    print("TEARDOWN PLAN (irreversible)")
+    print(f"  site:        {plan.container} ({plan.site_id})")
     print(f"  tenant:      {plan.tenant_slug} ({plan.tenant_id})")
     print(
-        f"  base datos:  {plan.database_name} dentro de MariaDB "
-        f"{plan.database_container} ({plan.database_mode}; contenedor y volumen se conservan)"
+        f"  database:    {plan.database_name} inside MariaDB "
+        f"{plan.database_container} ({plan.database_mode}; container and volume are kept)"
     )
-    print(f"  volúmenes:   {', '.join(plan.volumes)}")
-    print(f"  secretos:    {plan.stable_dir}")
-    print(f"  dominio:     {plan.domain or '-'}")
+    print(f"  volumes:     {', '.join(plan.volumes)}")
+    print(f"  secrets:     {plan.stable_dir}")
+    print(f"  domain:      {plan.domain or '-'}")
     if plan.release_domain:
-        print("  dominio DB:  se liberará")
+        print("  DB domain:   will be released")
     elif plan.domain_reserved:
-        print("  dominio DB:  se conservará reservado")
+        print("  DB domain:   will remain reserved")
     else:
-        print("  dominio DB:  no existe reserva")
+        print("  DB domain:   no reservation exists")
     if plan.missing:
-        print(f"  ya ausentes: {', '.join(plan.missing)}")
+        print(f"  already absent: {', '.join(plan.missing)}")
 
 
 def execute_plan(db: Session, plan: DeletePlan, provisioner: Provisioner) -> None:
@@ -226,7 +226,7 @@ def execute_plan(db: Session, plan: DeletePlan, provisioner: Provisioner) -> Non
     resources = [("volume", names.wp), ("container", names.wp)]
     failures = provisioner.cleanup(names, plan.tenant_id, resources)
     if failures:
-        raise DeleteError("limpieza Docker incompleta: " + "; ".join(failures))
+        raise DeleteError("incomplete Docker cleanup: " + "; ".join(failures))
 
     result = run(
         build_docker_argv(
@@ -237,17 +237,17 @@ def execute_plan(db: Session, plan: DeletePlan, provisioner: Provisioner) -> Non
     )
     if result.returncode:
         detail = (result.stderr or result.stdout).strip()[:400]
-        raise DeleteError(f"no se pudo borrar {plan.stable_dir}: {detail}")
+        raise DeleteError(f"could not delete {plan.stable_dir}: {detail}")
 
     site = db.get(HostingSite, plan.site_id)
     if site is None:
-        raise DeleteError("el registro del sitio desapareció durante la operación")
+        raise DeleteError("the site record disappeared during the operation")
     db.delete(site)
 
     if plan.release_domain and plan.domain:
         reservation = db.get(TenantDomain, plan.domain)
         if reservation is None or reservation.tenant_id != plan.tenant_id:
-            raise DeleteError("la reserva del dominio cambió durante la operación")
+            raise DeleteError("the domain reservation changed during the operation")
         db.delete(reservation)
 
     record_audit(
@@ -288,11 +288,11 @@ def _drop_database(plan: DeletePlan, provisioner: Provisioner) -> None:
     values = env_of(info or {})
     password = values.get("WORDPRESS_DB_PASSWORD", "")
     if not password:
-        raise DeleteError("WORDPRESS_DB_PASSWORD ausente; no se tocará MariaDB")
+        raise DeleteError("WORDPRESS_DB_PASSWORD missing; MariaDB will not be touched")
     if values.get("WORDPRESS_DB_NAME", "").strip() != plan.database_name:
-        raise DeleteError("WORDPRESS_DB_NAME cambió desde el plan; operación cancelada")
+        raise DeleteError("WORDPRESS_DB_NAME changed since the plan; operation cancelled")
     if values.get("WORDPRESS_DB_USER", "").strip() != plan.database_user:
-        raise DeleteError("WORDPRESS_DB_USER cambió desde el plan; operación cancelada")
+        raise DeleteError("WORDPRESS_DB_USER changed since the plan; operation cancelled")
 
     sql = f"DROP DATABASE `{plan.database_name}`"
     shell = (
@@ -317,7 +317,7 @@ def _drop_database(plan: DeletePlan, provisioner: Provisioner) -> None:
         )
     except Fallo as exc:
         raise DeleteError(
-            f"no se pudo eliminar únicamente la base {plan.database_name}: {exc}"
+            f"could not delete only the database {plan.database_name}: {exc}"
         ) from exc
 
 
@@ -325,15 +325,15 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("--container", required=True, help="contenedor spanel-<slug>-wp")
+    parser.add_argument("--container", required=True, help="spanel-<slug>-wp container")
     parser.add_argument(
-        "--keep-domain", action="store_true", help="conserva la reserva del dominio"
+        "--keep-domain", action="store_true", help="keep the domain reservation"
     )
     parser.add_argument(
-        "--execute", action="store_true", help="ejecuta el plan irreversible"
+        "--execute", action="store_true", help="execute the irreversible plan"
     )
     parser.add_argument(
-        "--confirm", default="", help="debe coincidir exactamente con --container"
+        "--confirm", default="", help="must exactly match --container"
     )
     args = parser.parse_args(argv)
 
@@ -350,26 +350,26 @@ def main(argv: list[str] | None = None) -> int:
             )
             print_plan(plan)
             if not args.execute:
-                print("\nSolo plan. Para ejecutar agregá --execute --confirm " + plan.container)
+                print("\nPlan only. To execute add --execute --confirm " + plan.container)
                 return 0
             if args.confirm != plan.container:
-                print("FALLO: --confirm debe coincidir exactamente con el contenedor")
+                print("FAILED: --confirm must exactly match the container")
                 return 2
             execute_plan(db, plan, provisioner)
             db.commit()
         except DeleteError as exc:
             db.rollback()
-            print(f"FALLO: {exc}")
+            print(f"FAILED: {exc}")
             return 1
         except Exception as exc:  # noqa: BLE001 - mensaje operativo sin secretos
             db.rollback()
-            print(f"FALLO: no se pudo completar la baja: {exc}")
+            print(f"FAILED: could not complete the teardown: {exc}")
             return 1
 
-    print(f"BAJA COMPLETA: {plan.container}")
+    print(f"TEARDOWN COMPLETE: {plan.container}")
     if plan.domain:
-        state = "liberado" if plan.release_domain else "conservado"
-        print(f"DOMINIO: {plan.domain} ({state})")
+        state = "released" if plan.release_domain else "kept"
+        print(f"DOMAIN: {plan.domain} ({state})")
     return 0
 
 

@@ -107,25 +107,25 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("contenedor", help="nombre del contenedor de WordPress")
-    parser.add_argument("--password", help="la nueva contraseña. Si no se pasa, se genera una")
+    parser.add_argument("contenedor", help="WordPress container name")
+    parser.add_argument("--password", help="the new password. If omitted, one is generated")
     parser.add_argument(
         "--usuario",
         default=None,
-        help="login de WordPress (default: admin, si tampoco se pasa --id)",
+        help="WordPress login (default: admin, if --id is also omitted)",
     )
     parser.add_argument(
         "--id",
         type=int,
         default=None,
-        help="ID de la fila de wp_users. Excluyente con --usuario",
+        help="wp_users row ID. Mutually exclusive with --usuario",
     )
     parser.add_argument("--env-file", type=Path, default=DEFAULT_ENV_FILE)
-    parser.add_argument("--dry-run", action="store_true", help="muestra que haria y no cambia nada")
+    parser.add_argument("--dry-run", action="store_true", help="show what it would do and change nothing")
     parser.add_argument(
         "--listar",
         action="store_true",
-        help="muestra los usuarios con su rol y no escribe nada",
+        help="show users with their role and write nothing",
     )
     args = parser.parse_args()
 
@@ -133,7 +133,7 @@ def main() -> int:
     # operador. Se rechaza antes de leer la base, para no tener nada que deshacer.
     if args.id is not None and args.usuario is not None:
         print(
-            "FALLO: --id y --usuario son excluyentes: elegi uno de los dos.",
+            "FAILED: --id and --usuario are mutually exclusive: choose one.",
             file=sys.stderr,
         )
         return 1
@@ -144,7 +144,7 @@ def main() -> int:
         args.password is not None or args.usuario is not None or args.id is not None
     ):
         print(
-            "FALLO: --listar es de solo lectura y no se combina con --password, --usuario ni --id.",
+            "FAILED: --listar is read-only and cannot be combined with --password, --usuario or --id.",
             file=sys.stderr,
         )
         return 1
@@ -153,7 +153,7 @@ def main() -> int:
     try:
         info = leer_inspect(env, args.contenedor)
         if not info.get("State", {}).get("Running"):
-            raise Fallo(f"el contenedor {args.contenedor} no esta corriendo")
+            raise Fallo(f"container {args.contenedor} is not running")
 
         conn = conexion_de_la_base(info)
         db, usuario, password, base = conn["host"], conn["usuario"], conn["password"], conn["base"]
@@ -166,8 +166,8 @@ def main() -> int:
         estado = pedir_palabras(env, f"docker inspect --format '{{{{.State.Running}}}}' {db}")
         if not estado or estado[0] != "true":
             raise Fallo(
-                f"la base {db} no esta corriendo. Si el sitio esta caido, levanta la base, "
-                "cambiamos la fila y la volves a bajar: no hay trafico que Preserve."
+                f"database {db} is not running. If the site is down, start the database, "
+                "change the row, and take it down again: there is no traffic to preserve."
             )
 
         prefijo = prefijo_de_tablas(env, db, usuario, password, base)
@@ -181,7 +181,7 @@ def main() -> int:
         # se paso ninguno de los dos flags (I6 de A.SPEC 0011).
         login = args.usuario if args.usuario is not None else (None if args.id is not None else "admin")
         if login is not None and not RE_SQL_SEGURO.match(login):
-            raise Fallo(f"el usuario {login!r} no es seguro para meter en SQL")
+            raise Fallo(f"user {login!r} is not safe to put in SQL")
 
         # Se resuelve ANTES del hash: un login ambiguo o inexistente no cuesta
         # ningun contenedor y no bootea WordPress (I3 de A.SPEC 0011).
@@ -196,12 +196,12 @@ def main() -> int:
             login=login,
         )
 
-        print(f"Sitio:     {args.contenedor}  (volumen {volumen})")
-        print(f"Base:      {db}/{base}  usuario={usuario}  prefijo={prefijo}users")
+        print(f"Site:      {args.contenedor}  (volume {volumen})")
+        print(f"Database:  {db}/{base}  user={usuario}  prefix={prefijo}users")
         print(f"WordPress: {objetivo['login']} (ID {objetivo['id']})")
 
         if args.dry_run:
-            print(f"\n--dry-run: no se cambia nada. Se apuntaria a ID {objetivo['id']}.")
+            print(f"\n--dry-run: nothing is changed. It would target ID {objetivo['id']}.")
             return 0
 
         nueva = args.password or ("p-" + secrets.token_urlsafe(15))
@@ -209,24 +209,24 @@ def main() -> int:
         # Ida y vuelta SIEMPRE por ID: el login ya se uso solo para resolver.
         antes = leer_hash(env, db, usuario, password, base, prefijo, objetivo["id"])
         if not antes:
-            raise Fallo(f"no existe el usuario {objetivo['login']!r} en {prefijo}users")
+            raise Fallo(f"user {objetivo['login']!r} does not exist in {prefijo}users")
 
         actualizar_hash(env, db, usuario, password, base, prefijo, objetivo["id"], hash_nuevo)
         despues = leer_hash(env, db, usuario, password, base, prefijo, objetivo["id"])
 
         if despues != hash_nuevo or despues == antes:
-            raise Fallo("el UPDATE no quedo aplicado como se esperaba")
+            raise Fallo("the UPDATE was not applied as expected")
 
         print(
-            f"\nContraseña de {objetivo['login']} (ID {objetivo['id']}) cambiada. "
-            "El sitio nunca se detuvo."
+            f"\nPassword of {objetivo['login']} (ID {objetivo['id']}) changed. "
+            "The site was never stopped."
         )
-        print(f"NUEVA CONTRASEÑA: {nueva}")
-        print("Se muestra una sola vez y no se guarda en ningun lado.")
+        print(f"NEW PASSWORD: {nueva}")
+        print("It is shown only once and is not stored anywhere.")
         return 0
 
     except Fallo as exc:
-        print(f"\nFALLO: {exc}", file=sys.stderr)
+        print(f"\nFAILED: {exc}", file=sys.stderr)
         return 1
 
 

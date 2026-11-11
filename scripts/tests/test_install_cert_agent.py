@@ -91,10 +91,10 @@ def test_config_respeta_archivo_existente(tmp_path: Path) -> None:
     path = tmp_path / "cert-agent.toml"
     path.write_text("original", encoding="utf-8")
 
-    assert install_cert_agent._write_config(path, "nuevo", force=False, dry_run=False) == "conservada"
+    assert install_cert_agent._write_config(path, "nuevo", force=False, dry_run=False) == "preserved"
     assert path.read_text(encoding="utf-8") == "original"
 
-    assert install_cert_agent._write_config(path, "nuevo", force=True, dry_run=False) == "escrita"
+    assert install_cert_agent._write_config(path, "nuevo", force=True, dry_run=False) == "written"
     assert path.read_text(encoding="utf-8") == "nuevo"
 
 
@@ -203,7 +203,7 @@ def test_add_allowlist_sin_cambios_no_reescribe(tmp_path: Path) -> None:
         config, ["mail.systutor.com"]
     )
 
-    assert status == "sin cambios"
+    assert status == "unchanged"
     assert merged == ["mail.systutor.com"]
     assert config.read_text(encoding="utf-8") == original
 

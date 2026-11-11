@@ -65,7 +65,7 @@ def build_docker_argv(
         return ["sh", "-c", remote_command]
 
     if not env.get("MAIL_SERVER_PASSWORD"):
-        raise ValueError("falta MAIL_SERVER_PASSWORD en el .env")
+        raise ValueError("MAIL_SERVER_PASSWORD is missing from .env")
 
     host = env["SPANEL_DOCKER_SSH_HOST"]
     user = env["SPANEL_DOCKER_SSH_USER"]
@@ -121,14 +121,14 @@ def run(
             argv,
             returncode=124,
             stdout="",
-            stderr=f"no respondio en {timeout} segundos",
+            stderr=f"did not respond within {timeout} seconds",
         )
 
 
 def redactar(texto: str, secretos: tuple[str, ...] = ()) -> str:
     for secreto in secretos:
         if secreto:
-            texto = texto.replace(secreto, "<oculto>")
+            texto = texto.replace(secreto, "<hidden>")
     return texto
 
 
@@ -149,7 +149,7 @@ def pedir(
     if r.returncode != 0:
         raise Fallo(
             redactar(
-                f"el comando fallo:\n  {comando}\n  {(r.stderr or r.stdout).strip()[:400]}",
+                f"the command failed:\n  {comando}\n  {(r.stderr or r.stdout).strip()[:400]}",
                 secretos,
             )
         )
@@ -178,7 +178,7 @@ def escribir_archivo_remoto(env: dict[str, str], contenido: str, etiqueta: str) 
     )
     if r.returncode != 0:
         raise Fallo(
-            f"no se pudo escribir {etiqueta} en el host remoto: {(r.stderr or '').strip()[:200]}"
+            f"could not write {etiqueta} on the remote host: {(r.stderr or '').strip()[:200]}"
         )
     return ruta
 
@@ -199,7 +199,7 @@ def escribir_archivo_remoto_en(env: dict[str, str], ruta: str, contenido: str) -
     r = run(build_docker_argv(comando, env=env), env=env, input=contenido)
     if r.returncode != 0:
         raise Fallo(
-            f"no se pudo escribir en {ruta}: {(r.stderr or '').strip()[:200]}"
+            f"could not write to {ruta}: {(r.stderr or '').strip()[:200]}"
         )
 
 

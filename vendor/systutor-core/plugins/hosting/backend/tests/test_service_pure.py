@@ -55,7 +55,7 @@ def test_database_container_desde_wordpress_db_host() -> None:
 
 def test_database_container_rechaza_localhost() -> None:
     info = {"Config": {"Env": ["WORDPRESS_DB_HOST=localhost:3306"]}}
-    with pytest.raises(Fallo, match="no apunta a un contenedor"):
+    with pytest.raises(Fallo, match="does not point to a Docker container"):
         database_container(info)
 
 

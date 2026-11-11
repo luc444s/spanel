@@ -212,7 +212,7 @@ def sync_hostname(
             hostname=hostname,
             ok=False,
             changed=False,
-            error="El linaje de Certbot está incompleto",
+            error="The Certbot lineage is incomplete",
         )
         _finish(config, hostname, outcome, runner=runner, connector=connector, sender=sender)
         return outcome
@@ -226,7 +226,7 @@ def sync_hostname(
             hostname=hostname,
             ok=False,
             changed=False,
-            error="Instalación en backoff tras un fallo previo",
+            error="Installation in backoff after a previous failure",
         )
 
     try:
@@ -282,7 +282,7 @@ def _finish(
         _persist_failure(
             config,
             hostname,
-            error=outcome.error or "Instalación fallida",
+            error=outcome.error or "Installation failed",
             runner=runner,
             sender=sender,
         )
