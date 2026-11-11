@@ -51,6 +51,7 @@ python3 scripts/<script>.py --help
 | Operar Apps por HTTP | [`spanel_apps.py`](#spanel_appspy) |
 | Auditar o desplegar Compose directamente | [`app_deploy.py`](#app_deploypy) |
 | Publicar o retirar un dominio en Traefik | [`proxy_domain.py`](#proxy_domainpy) |
+| Refrescar/adoptar el inventario observado | [`domains_sync.py`](#domains_syncpy) / [`domains_adopt.py`](#domains_adoptpy) |
 | Diagnosticar/reparar rutas y TLS | [`spanel-repair.py`](#spanel-repairpy) |
 | Administrar certificados de correo | [`install_cert_agent.py`](#install_cert_agentpy) y [`spanel_cert_agent/`](#spanel_cert_agent) |
 
@@ -287,6 +288,33 @@ preparado y revisa sus variables/requisitos con `--help` y sus pruebas en
 `scripts/tests/`.
 
 ## Dominios, proxy y sitios estáticos
+
+### `domains_sync.py`
+
+**Plan por defecto; escribe solo con `--apply`.** Lee una instantánea completa
+de los YAML gestionados de Traefik, valida sitio y propiedad del tenant, y
+refresca atómicamente la observación PostgreSQL que usa la vista global de
+Dominios. Nunca edita Traefik. `--json` produce un informe automatizable.
+
+```bash
+python3 scripts/domains_sync.py
+python3 scripts/domains_sync.py --apply --json
+```
+
+### `domains_adopt.py`
+
+**Plan por defecto; escribe solo con `--apply`.** Reclama la propiedad
+administrativa de un dominio ya publicado cuando está libre y el tenant/sitio
+coincide con su YAML gestionado. También actualiza la observación, pero nunca
+reescribe YAML.
+
+```bash
+python3 scripts/domains_adopt.py --domain example.com --tenant demo
+python3 scripts/domains_adopt.py --domain example.com --tenant demo --site SITE_ID --apply
+```
+
+`benchmark_domains_global.py` mide por separado sincronización y lectura global
+proyectada con transporte local o Docker.
 
 ### `proxy_domain.py`
 
