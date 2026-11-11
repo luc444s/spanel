@@ -123,6 +123,32 @@ Además:
 - la respuesta conserva dominios, tenant, dueño, publicación, conflicto y
   editabilidad observables antes del cambio.
 
+## RESULTADO EJECUTADO
+
+Medición realizada el 11 de noviembre de 2026 dentro de `mailadmin-app-1`,
+contra `spanel-traefik-lab`, con cinco ejecuciones después de un calentamiento:
+
+| Escenario | Mediana | p95 observado | Mínimo | Máximo |
+|---|---:|---:|---:|---:|
+| Base anterior, GET 100 dominios / 2 tenants | 18.182 s | 19.096 s | 16.794 s | 19.096 s |
+| Sync nuevo, 100 dominios / 2 tenants | 0.537 s | 0.566 s | 0.506 s | 0.566 s |
+| GET proyectado, 100 dominios / 2 tenants | **0.005 s** | **0.007 s** | 0.004 s | 0.007 s |
+| Sync nuevo, 1,000 dominios / 2 tenants | 4.601 s | 4.948 s | 4.161 s | 4.948 s |
+| GET proyectado, 1,000 dominios / 2 tenants | **0.037 s** | **0.075 s** | 0.033 s | 0.075 s |
+
+Comparación equivalente para 100 dominios:
+
+- el GET habitual pasó de 18.182 s a 0.005 s: **3,636x más rápido** y una
+  reducción de latencia de **99.97 %**;
+- aun sumando un sync completo y el GET (`0.537 + 0.005 = 0.542 s`), el ciclo
+  resulta **33.5x más rápido** que la lectura anterior;
+- el p95 del GET pasó de 19.096 s a 0.007 s: **2,728x más rápido**;
+- después del sync, el GET hizo **0 lecturas YAML y 0 llamadas externas**.
+
+La comparación distingue deliberadamente ambos costos: el sync explícito paga
+la lectura autoritativa de Traefik, mientras que las consultas normales pagan
+solo la proyección PostgreSQL.
+
 ## INVARIANTS
 
 1. `core.platform.admin` mediante `TenantContext.is_platform` sigue siendo la
