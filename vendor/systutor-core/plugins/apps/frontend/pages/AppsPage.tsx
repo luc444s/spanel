@@ -8,7 +8,7 @@ import { useAuthStore } from "../../../../../../apps/web/src/features/auth/store
 import { useT } from "@/i18n/use-i18n";
 
 import { appsKeys, listApplications } from "../api";
-import { canPlatformMutate } from "../logic";
+import { canPlatformMutate, isOwnedByTenant } from "../logic";
 import type { Application, OperationSummary } from "../types";
 import { ApplicationDetail } from "../components/ApplicationDetail";
 import { CreateApplicationDialog } from "../components/CreateApplicationDialog";
@@ -19,6 +19,7 @@ export default function AppsPage() {
   const t = useT();
   const queryClient = useQueryClient();
   const permissions = useAuthStore((state) => state.permissions);
+  const currentTenant = useAuthStore((state) => state.currentTenant);
   const canConnect = permissions.includes("apps.github.connect");
   const canCreate = permissions.includes("apps.applications.create");
   const canManage = permissions.includes("apps.applications.manage");
@@ -30,7 +31,10 @@ export default function AppsPage() {
   const canDelete = canPlatformMutate(permissions, "apps.applications.delete");
   const [createOpen, setCreateOpen] = useState(false);
   const [selected, setSelected] = useState<Application | null>(null);
-  const applications = useQuery({ queryKey: appsKeys.applications, queryFn: listApplications });
+  const applications = useQuery({
+    queryKey: [...appsKeys.applications, platform ? "all" : "tenant"],
+    queryFn: () => listApplications(platform),
+  });
   const githubStatus = useGithubStatus(canConnect);
 
   useEffect(() => {
@@ -71,11 +75,19 @@ export default function AppsPage() {
     <GithubConnectionCard canConnect={canConnect} statusQuery={githubStatus} />
 
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-      {applications.data?.map((application) => <button key={application.id} type="button" className="rounded-md border border-border bg-card p-4 text-left hover:bg-muted" onClick={() => setSelected(application)}>
-        <div className="flex items-center justify-between gap-2"><strong>{application.name}</strong><span className="rounded bg-muted px-2 py-0.5 text-xs">{application.status}</span></div>
-        <p className="mt-2 text-sm text-muted-foreground">{application.repository} · {application.branch}</p>
-        <p className="mt-1 text-xs text-muted-foreground">{application.domain ?? t("No domain")}</p>
-      </button>)}
+      {applications.data?.map((application) => {
+        const owned = isOwnedByTenant(application.tenant_id, currentTenant?.id);
+        return <button key={application.id} type="button"
+          aria-disabled={!owned}
+          className={`rounded-md border border-border bg-card p-4 text-left ${owned ? "hover:bg-muted" : "cursor-default"}`}
+          onClick={() => { if (owned) setSelected(application); }}>
+          <div className="flex items-center justify-between gap-2"><strong>{application.name}</strong><span className="rounded bg-muted px-2 py-0.5 text-xs">{application.status}</span></div>
+          <p className="mt-2 text-sm text-muted-foreground">{application.repository} · {application.branch}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{application.domain ?? t("No domain")}</p>
+          {application.tenant_name ? <p className="mt-1 text-xs text-muted-foreground">{t("Tenant")}: {application.tenant_name}</p> : null}
+          {!owned ? <p className="mt-2 text-xs font-medium text-muted-foreground">{t("Read only")}</p> : null}
+        </button>;
+      })}
     </div>
     {applications.data?.length === 0 ? <p className="rounded border border-border p-4 text-sm text-muted-foreground">{t("No applications.")}</p> : null}
 

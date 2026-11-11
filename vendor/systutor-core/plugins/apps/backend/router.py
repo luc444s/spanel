@@ -16,6 +16,7 @@ from systutor.core.errors import AppError
 from systutor.kernel.auth.dependencies import get_current_tenant_context, require_permission
 from systutor.kernel.auth.models import User
 from systutor.kernel.tenants.context import TenantContext
+from systutor.kernel.tenants.models import Tenant
 
 from . import catalog
 from .managed_environment import (
@@ -239,13 +240,33 @@ def create_application(
 
 @router.get("/applications", response_model=list[ApplicationView])
 def list_applications(
+    scope: str = "tenant",
     db: Session = Depends(get_db_session),
     context: TenantContext = Depends(get_current_tenant_context),
     _user: User = Depends(require_permission("apps.applications.read")),
-) -> list[Application]:
-    return list(db.scalars(select(Application).where(
-        Application.tenant_id == context.current_tenant_id, Application.deleted_at.is_(None),
-    )).all())
+) -> list[ApplicationView]:
+    if scope not in ("tenant", "all"):
+        raise AppError(
+            "scope must be 'tenant' or 'all'", status_code=422, code="apps.invalid_scope"
+        )
+    if scope == "all" and not context.is_platform:
+        raise AppError(
+            "Only the platform administrator can view all tenants",
+            status_code=403,
+            code="apps.platform_scope_forbidden",
+        )
+    stmt = select(Application).where(Application.deleted_at.is_(None))
+    if scope == "tenant":
+        stmt = stmt.where(Application.tenant_id == context.current_tenant_id)
+    applications = list(db.scalars(stmt.order_by(Application.name.asc())).all())
+    tenant_names = dict(db.execute(select(Tenant.id, Tenant.name)).all())
+    return [
+        ApplicationView.model_validate(application).model_copy(update={
+            "tenant_id": application.tenant_id,
+            "tenant_name": tenant_names.get(application.tenant_id),
+        })
+        for application in applications
+    ]
 
 
 @router.get("/applications/{application_id}")

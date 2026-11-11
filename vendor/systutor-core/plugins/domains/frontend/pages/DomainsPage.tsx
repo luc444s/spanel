@@ -35,7 +35,15 @@ function certificateTone(info: CertificateInfo | undefined) {
   return "text-amber-600";
 }
 
-function CertificateCell({ domain, published }: { domain: string; published: boolean }) {
+function CertificateCell({
+  domain,
+  published,
+  readable = true,
+}: {
+  domain: string;
+  published: boolean;
+  readable?: boolean;
+}) {
   const query = useQuery({
     queryKey: domainsKeys.certificate(domain),
     queryFn: () => getCertificate(domain),
@@ -45,10 +53,10 @@ function CertificateCell({ domain, published }: { domain: string; published: boo
   });
 
   // Un dominio reservado no tiene ruta ni certificado: no se consulta la red.
-  if (!published) {
+  if (!published || !readable) {
     return (
       <span className="text-sm text-muted-foreground" title={t("Reserved domain, not published")}>
-        {t("Not published")}
+        {readable ? t("Not published") : t("Read only")}
       </span>
     );
   }
@@ -89,10 +97,15 @@ function countMailboxes(domain: string, accounts: string[] | undefined, tenantDo
 export default function DomainsPage() {
   const queryClient = useQueryClient();
   const permissions = useAuthStore((state) => state.permissions);
+  const currentTenant = useAuthStore((state) => state.currentTenant);
+  const platform = permissions.includes("core.platform.admin");
   const canManage = permissions.includes("domains.domains.manage");
   const canReadMail = permissions.includes("mail.accounts.read");
 
-  const domainsQuery = useQuery({ queryKey: domainsKeys.list, queryFn: listDomains });
+  const domainsQuery = useQuery({
+    queryKey: [...domainsKeys.list, platform ? "all" : "tenant"],
+    queryFn: () => listDomains(platform),
+  });
   const mailQuery = useQuery({
     queryKey: ["mail", "accounts"],
     queryFn: () =>
@@ -115,9 +128,12 @@ export default function DomainsPage() {
 
   const items = domainsQuery.data?.items ?? [];
   const sites = domainsQuery.data?.sites ?? [];
-  const selectedSite = sites.find((site) => site.site_id === siteId);
+  const ownSites = sites.filter(
+    (site) => !site.tenant_id || site.tenant_id === currentTenant?.id
+  );
+  const selectedSite = ownSites.find((site) => site.site_id === siteId);
   const linkTarget
-    = sites.find((site) => site.site_id === linkSiteId) ?? sites[0];
+    = ownSites.find((site) => site.site_id === linkSiteId) ?? ownSites[0];
 
   const createMutation = useMutation({
     mutationFn: createDomain,
@@ -174,7 +190,7 @@ export default function DomainsPage() {
   }
 
   function openLink(item: DomainItem) {
-    setLinkSiteId(sites[0]?.site_id ?? "");
+    setLinkSiteId(ownSites[0]?.site_id ?? "");
     setWww(false);
     setLinking(item);
   }
@@ -208,7 +224,7 @@ export default function DomainsPage() {
           className="rounded-md border border-border bg-card px-3 py-4 text-sm
             text-muted-foreground"
         >
-          {sites.length === 0
+          {ownSites.length === 0
             ? t("No domains yet. You can reserve one without a site and link it later.")
             : t("No domains yet. Add one to publish it in this tenant.")}
         </p>
@@ -218,6 +234,7 @@ export default function DomainsPage() {
             <thead className="bg-muted text-left text-xs uppercase text-muted-foreground">
               <tr>
                 <th className="px-3 py-2">{t("Domain")}</th>
+                {platform && <th className="px-3 py-2">{t("Tenant")}</th>}
                 <th className="px-3 py-2">{t("Site")}</th>
                 <th className="px-3 py-2">{t("Status")}</th>
                 <th className="px-3 py-2">{t("Owner")}</th>
@@ -230,6 +247,7 @@ export default function DomainsPage() {
               {items.map((item) => {
                 const extraConflict = item.conflict;
                 const published = item.published ?? true;
+                const isOwned = !item.tenant_id || item.tenant_id === currentTenant?.id;
                 return (
                   <tr key={item.domain} className="border-t border-border">
                     <td className="px-3 py-2 font-medium text-foreground">
@@ -243,6 +261,11 @@ export default function DomainsPage() {
                         </span>
                       )}
                     </td>
+                    {platform && (
+                      <td className="px-3 py-2 text-muted-foreground">
+                        {item.tenant_name ?? item.tenant_id ?? "—"}
+                      </td>
+                    )}
                     <td className="px-3 py-2 text-muted-foreground">
                       {item.container ?? "—"}
                     </td>
@@ -265,7 +288,11 @@ export default function DomainsPage() {
                       )}
                     </td>
                     <td className="px-3 py-2">
-                      <CertificateCell domain={item.domain} published={published} />
+                      <CertificateCell
+                        domain={item.domain}
+                        published={published}
+                        readable={isOwned}
+                      />
                     </td>
                     {canReadMail && (
                       <td
@@ -285,9 +312,9 @@ export default function DomainsPage() {
                       </td>
                     )}
                     <td className="px-3 py-2 text-right">
-                      {item.owner === "domains" && canManage && (
+                      {item.owner === "domains" && canManage && isOwned && item.editable && (
                         <span className="inline-flex gap-2">
-                          {!published && sites.length > 0 && (
+                          {!published && ownSites.length > 0 && (
                             <Button
                               variant="secondary"
                               size="sm"
@@ -305,7 +332,7 @@ export default function DomainsPage() {
                           </Button>
                         </span>
                       )}
-                      {extraConflict && canManage && item.owner !== "domains" && (
+                      {extraConflict && canManage && isOwned && item.owner !== "domains" && (
                         <Button
                           variant="secondary"
                           size="sm"
@@ -342,7 +369,7 @@ export default function DomainsPage() {
               onChange={(event) => setSiteId(event.target.value)}
             >
               <option value={RESERVAR}>{t("Reserve only (do not publish)")}</option>
-              {sites.map((site) => (
+              {ownSites.map((site) => (
                 <option key={site.site_id} value={site.site_id}>
                   {site.container}
                   {site.primary_domain ? ` (${site.primary_domain})` : ""}

@@ -618,8 +618,11 @@ class HostingService:
     def list_sites(self, tenant_id: str | None) -> HostingSiteListResponse:
         """Rows of one tenant, or all tenants for a platform-wide read view."""
         stmt: Select[tuple[HostingSite]] = select(HostingSite)
+        tenant_names: dict[str, str] = {}
         if tenant_id is not None:
             stmt = stmt.where(HostingSite.tenant_id == tenant_id)
+        else:
+            tenant_names = dict(self._db.execute(select(Tenant.id, Tenant.name)).all())
         stmt = stmt.order_by(HostingSite.container_name.asc())
         summaries: list[HostingSiteSummary] = []
         for site in self._db.scalars(stmt):
@@ -636,6 +639,8 @@ class HostingService:
                         managed=False,
                         kind=site.kind,
                         profile=site.profile_id,
+                        tenant_id=site.tenant_id,
+                        tenant_name=tenant_names.get(site.tenant_id),
                     )
                 )
                 continue
@@ -648,6 +653,8 @@ class HostingService:
                     managed=candidato_de(info).gestionable,
                     kind=site.kind,
                     profile=site.profile_id,
+                    tenant_id=site.tenant_id,
+                    tenant_name=tenant_names.get(site.tenant_id),
                 )
             )
         return HostingSiteListResponse(sites=summaries)

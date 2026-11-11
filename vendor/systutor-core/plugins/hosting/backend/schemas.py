@@ -124,6 +124,8 @@ class HostingSiteSummary(BaseModel):
     managed: bool
     kind: str = "wordpress"
     profile: str | None = None
+    tenant_id: str | None = None
+    tenant_name: str | None = None
 
 
 class HostingSiteListResponse(BaseModel):

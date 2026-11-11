@@ -159,6 +159,31 @@ def test_list_merges_primary_and_extra(setup):
     assert err is None
 
 
+def test_global_list_marks_only_active_tenant_editable(setup, monkeypatch):
+    service, _, _ = setup
+    monkeypatch.setattr(
+        service_module,
+        "list_tenants",
+        lambda _db: [
+            SimpleNamespace(id="t1", name="Tenant One"),
+            SimpleNamespace(id="t2", name="Tenant Two"),
+        ],
+    )
+
+    items, sites, err = service.list_all_domains(
+        active_tenant_id="t1", can_manage_active=True
+    )
+    by_domain = {item.domain: item for item in items}
+    by_container = {site.container: site for site in sites}
+
+    assert by_domain["b.spanel"].editable is True
+    assert by_domain["c.spanel"].editable is False
+    assert by_domain["c.spanel"].tenant_name == "Tenant Two"
+    assert by_container["spanel-c-wp"].tenant_id == "t2"
+    assert by_container["spanel-c-wp"].tenant_name == "Tenant Two"
+    assert err is None
+
+
 def test_list_marks_conflict_when_primary_is_also_extra(setup):
     service, ops, _ = setup
     ops.extras.append(ManagedDomain("a.spanel", "spanel-b-wp", "internal", "spanel-b.yml"))

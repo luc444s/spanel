@@ -11,6 +11,8 @@ export type HostingSite = {
   kind: HostingSiteKind;
   /** Id of the static profile; null for wordpress. */
   profile: string | null;
+  tenant_id: string | null;
+  tenant_name: string | null;
 };
 
 export type DomainCheck = {
@@ -225,8 +227,9 @@ export function importHostingBackup(siteId: string, file: File, confirmation: st
   );
 }
 
-export function listHostingSites() {
-  return apiRequest<HostingSiteListResponse>("/api/v1/plugins/hosting/sites");
+export function listHostingSites(platform = false) {
+  const scope = platform ? "?scope=all" : "";
+  return apiRequest<HostingSiteListResponse>(`/api/v1/plugins/hosting/sites${scope}`);
 }
 
 export function listSiteUsers(siteId: string) {

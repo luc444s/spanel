@@ -165,12 +165,16 @@ class DomainsService:
             )
         return operations
 
-    def _visible_sites(self, tenant_id: str) -> dict[str, SiteOption]:
+    def _visible_sites(
+        self, tenant_id: str, tenant_name: str | None = None
+    ) -> dict[str, SiteOption]:
         return {
             site.container: SiteOption(
                 site_id=site.site_id,
                 container=site.container,
                 primary_domain=site.primary_domain,
+                tenant_id=tenant_id,
+                tenant_name=tenant_name,
             )
             for site in list_sites(self._app, self._db, tenant_id)
         }
@@ -276,7 +280,7 @@ class DomainsService:
         tenant_name: str | None = None,
     ) -> tuple[list[DomainItem], list[SiteOption], str | None]:
         """Primarios, extras y reservados del tenant (con aviso de proxy)."""
-        sites = self._visible_sites(tenant_id)
+        sites = self._visible_sites(tenant_id, tenant_name)
         proxy_error: str | None = None
         try:
             extras = self._extra_claims()
@@ -355,7 +359,7 @@ class DomainsService:
         return items, sorted(sites.values(), key=lambda option: option.container), proxy_error
 
     def list_all_domains(
-        self,
+        self, *, active_tenant_id: str, can_manage_active: bool
     ) -> tuple[list[DomainItem], list[SiteOption], str | None]:
         """Vista de plataforma: agrega los dominios de todos los tenants."""
         items: list[DomainItem] = []
@@ -365,7 +369,7 @@ class DomainsService:
             try:
                 tenant_items, tenant_sites, tenant_error = self.list_domains(
                     tenant.id,
-                    can_manage=False,
+                    can_manage=can_manage_active and tenant.id == active_tenant_id,
                     tenant_name=tenant.name,
                 )
             except AppError:

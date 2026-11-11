@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  canPlatformMutate, groupedFindings, hasBlockingFindings, isTerminalOperation, parseDotenv,
+  canPlatformMutate, groupedFindings, hasBlockingFindings, isOwnedByTenant,
+  isTerminalOperation, parseDotenv,
 } from "./logic";
 import type { Finding } from "./types";
 
@@ -24,6 +25,12 @@ describe("Apps frontend safety logic", () => {
     expect(canPlatformMutate(["core.platform.admin", "apps.deployments.create"], "apps.deployments.create")).toBe(true);
   });
 
+  it("keeps applications from another tenant read-only", () => {
+    expect(isOwnedByTenant("t1", "t1")).toBe(true);
+    expect(isOwnedByTenant("t2", "t1")).toBe(false);
+    expect(isOwnedByTenant(null, "t1")).toBe(true);
+  });
+
   it("groups findings and treats every error as blocking", () => {
     const findings = [finding("warning"), finding("error"), finding("info")];
     expect(groupedFindings(findings).error).toHaveLength(1);
@@ -34,11 +41,11 @@ describe("Apps frontend safety logic", () => {
   it("parses pasted dotenv text without splitting values on equals", () => {
     expect(parseDotenv(`
 # deployment values
-APP_DB_NAME=editors
+APP_NAME=editors
 export DATABASE_URL=postgresql://user:p=a=s=s@database/editors
 EMPTY=
 `)).toEqual([
-      { name: "APP_DB_NAME", value: "editors" },
+      { name: "APP_NAME", value: "editors" },
       { name: "DATABASE_URL", value: "postgresql://user:p=a=s=s@database/editors" },
       { name: "EMPTY", value: "" },
     ]);

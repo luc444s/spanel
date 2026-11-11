@@ -30,6 +30,8 @@ class SiteOption(BaseModel):
     site_id: str
     container: str
     primary_domain: str | None = None
+    tenant_id: str | None = None
+    tenant_name: str | None = None
 
 
 class DomainsResponse(BaseModel):

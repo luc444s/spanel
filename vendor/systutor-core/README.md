@@ -202,6 +202,14 @@ temporary directories (`tests/conftest.py`).
 The `systutor.*` namespace is the public API. Signature changes are
 breaking for host applications and must be versioned as dependencies.
 
+### Platform-wide plugin inventories
+
+The Hosting, Domains, and Apps list endpoints accept `scope=all` for a
+platform-wide inventory. The caller must have the plugin read permission and
+`core.platform.admin`; ordinary tenant callers receive `403`. Global rows carry
+their tenant identity and remain read-only outside the active tenant. Detail
+and mutation endpoints stay tenant-scoped.
+
 ## License
 
 MIT. See `LICENSE`.

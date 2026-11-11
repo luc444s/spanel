@@ -49,6 +49,8 @@ export default function HostingPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const permissions = useAuthStore((state) => state.permissions);
+  const currentTenant = useAuthStore((state) => state.currentTenant);
+  const platform = permissions.includes("core.platform.admin");
   const filemanagerEnabled = useAuthStore((state) => state.enabledPlugins.some(
     (plugin) => plugin.plugin_id === "filemanager"
   ));
@@ -108,8 +110,8 @@ export default function HostingPage() {
   const profiles = profilesQuery.data?.profiles ?? [];
 
   const sitesQuery = useQuery({
-    queryKey: hostingKeys.sites,
-    queryFn: listHostingSites,
+    queryKey: [...hostingKeys.sites, platform ? "all" : "tenant"],
+    queryFn: () => listHostingSites(platform),
   });
 
   const operateMutation = useMutation({
@@ -208,6 +210,9 @@ export default function HostingPage() {
   // A static site has no WordPress surface: users, config, database and
   // phpMyAdmin are not offered. Logs, lifecycle, filemanager and delete stay.
   const isStatic = detail?.kind === "static";
+  const isOwned = Boolean(
+    detail && (!detail.tenant_id || detail.tenant_id === currentTenant?.id)
+  );
 
   return (
     <section className="space-y-4">
@@ -230,7 +235,12 @@ export default function HostingPage() {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {sites.map((site) => (
-            <SiteCard key={site.id} site={site} onOpen={setDetailSite} />
+            <SiteCard
+              key={site.id}
+              site={site}
+              readOnly={Boolean(site.tenant_id && site.tenant_id !== currentTenant?.id)}
+              onOpen={setDetailSite}
+            />
           ))}
         </div>
       )}
@@ -257,8 +267,16 @@ export default function HostingPage() {
               </div>
               <div>
                 <dt className="text-xs text-muted-foreground">{t("Managed")}</dt>
-                <dd className="text-foreground">{detail.managed ? t("Yes") : t("No")}</dd>
+                <dd className="text-foreground">
+                  {isOwned ? (detail.managed ? t("Yes") : t("No")) : t("Read only")}
+                </dd>
               </div>
+              {detail.tenant_name ? (
+                <div>
+                  <dt className="text-xs text-muted-foreground">{t("Tenant")}</dt>
+                  <dd className="text-foreground">{detail.tenant_name}</dd>
+                </div>
+              ) : null}
               {isStatic && detail.profile ? (
                 <div>
                   <dt className="text-xs text-muted-foreground">{t("Profile")}</dt>
@@ -272,20 +290,22 @@ export default function HostingPage() {
             </dl>
 
             <div className="grid grid-cols-2 gap-2">
-              {canReadUsers && !isStatic ? (
+              {isOwned && canReadUsers && !isStatic ? (
                 <Button variant="secondary" onClick={() => setSelectedSite(detail)}>
                   {t("View users")}
                 </Button>
               ) : null}
-              <Button variant="secondary" onClick={() => setLogsTarget(detail)}>
-                {t("Logs")}
-              </Button>
-              {canBrowseFiles && detail.status === "running" ? (
+              {isOwned ? (
+                <Button variant="secondary" onClick={() => setLogsTarget(detail)}>
+                  {t("Logs")}
+                </Button>
+              ) : null}
+              {isOwned && canBrowseFiles && detail.status === "running" ? (
                 <Button variant="secondary" onClick={() => navigate(`/app/filemanager/hosting/${encodeURIComponent(detail.id)}`)}>
                   {t("File manager")}
                 </Button>
               ) : null}
-              {!isStatic ? (
+              {isOwned && !isStatic ? (
                 <Button
                   variant="secondary"
                   disabled={detail.status === "missing"}
@@ -294,7 +314,7 @@ export default function HostingPage() {
                   {t("Configuration")}
                 </Button>
               ) : null}
-              {canManage && !isStatic ? (
+              {isOwned && canManage && !isStatic ? (
                 <Button
                   variant="secondary"
                   disabled={detail.status === "missing" || databaseMutation.isPending}
@@ -303,8 +323,8 @@ export default function HostingPage() {
                   {databaseMutation.isPending ? t("Reading...") : t("Database")}
                 </Button>
               ) : null}
-              {canManage ? <BackupDialogs site={detail} /> : null}
-              {canManage
+              {isOwned && canManage ? <BackupDialogs site={detail} /> : null}
+              {isOwned && canManage
                 ? (["start", "stop", "restart"] as const).map((action) => (
                     <Button
                       key={action}
@@ -320,7 +340,7 @@ export default function HostingPage() {
                     </Button>
                   ))
                 : null}
-              {canDelete ? (
+              {isOwned && canDelete ? (
                 <Button
                   variant="secondary"
                   disabled={!detail.managed}
@@ -442,7 +462,7 @@ export default function HostingPage() {
 
       <SiteConfigDialog
         site={configTarget}
-        canManage={canManage}
+        canManage={canManage && Boolean(configTarget?.tenant_id === currentTenant?.id || !configTarget?.tenant_id)}
         onClose={() => setConfigTarget(null)}
       />
 

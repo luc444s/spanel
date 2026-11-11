@@ -48,7 +48,9 @@ export const listInstallationRepositories = (installationId: string) => apiReque
   `${ROOT}/github/installations/${encodeURIComponent(installationId)}/repositories`,
 );
 
-export const listApplications = () => apiRequest<Application[]>(`${ROOT}/applications`);
+export const listApplications = (platform = false) => apiRequest<Application[]>(
+  `${ROOT}/applications${platform ? "?scope=all" : ""}`,
+);
 export const getApplication = (id: string) =>
   apiRequest<ApplicationDetail>(`${ROOT}/applications/${encodeURIComponent(id)}`);
 export const createApplication = (body: ApplicationCreate) => apiRequest<Application>(`${ROOT}/applications`, {

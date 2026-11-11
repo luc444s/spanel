@@ -143,6 +143,32 @@ def test_create_application_derives_canonical_source(tmp_path: Path) -> None:
     assert app.source_status == "connected"
 
 
+def test_application_inventory_scope_is_platform_only(tmp_path: Path) -> None:
+    db = database(tmp_path)
+    catalog.create_application(
+        db, context("t1"), db.get(User, "u1"),
+        ApplicationCreate(name="One", installation_id="i1", repository_id="r1"),
+    )
+    catalog.create_application(
+        db, context("t2"), db.get(User, "u2"),
+        ApplicationCreate(name="Two", installation_id="i2", repository_id="r2"),
+    )
+
+    tenant_rows = router_module.list_applications(scope="tenant", db=db, context=context("t1"))
+    assert [(row.name, row.tenant_name) for row in tenant_rows] == [("One", "Tenant")]
+
+    all_rows = router_module.list_applications(scope="all", db=db, context=context("t1"))
+    assert [(row.name, row.tenant_name) for row in all_rows] == [
+        ("One", "Tenant"), ("Two", "Other"),
+    ]
+
+    regular = TenantContext("t1", None, "u1", (), None)
+    with pytest.raises(AppError) as error:
+        router_module.list_applications(scope="all", db=db, context=regular)
+    assert error.value.status_code == 403
+    assert error.value.code == "apps.platform_scope_forbidden"
+
+
 def test_new_application_does_not_claim_or_publish_legacy_ingress(tmp_path: Path) -> None:
     db = database(tmp_path)
     user = db.get(User, "u1")

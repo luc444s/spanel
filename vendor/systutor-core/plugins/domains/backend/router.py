@@ -84,7 +84,10 @@ def list_domains(
                 status_code=403,
                 code="domains.platform_scope_forbidden",
             )
-        items, sites, proxy_error = service.list_all_domains()
+        items, sites, proxy_error = service.list_all_domains(
+            active_tenant_id=tenant_context.current_tenant_id,
+            can_manage_active=tenant_context.has_permission("domains.domains.manage"),
+        )
         return _response(items, sites, proxy_error)
     items, sites, proxy_error = service.list_domains(
         tenant_context.current_tenant_id,

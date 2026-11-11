@@ -126,6 +126,8 @@ class ApplicationView(BaseModel):
     source_repository_id: str | None
     source_status: str
     has_saved_environment: bool = False
+    tenant_id: str | None = None
+    tenant_name: str | None = None
 
     model_config = {"from_attributes": True}
 

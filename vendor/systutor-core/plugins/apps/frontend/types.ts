@@ -70,6 +70,8 @@ export type Application = {
   source_repository_id: string | null;
   source_status: string;
   has_saved_environment?: boolean;
+  tenant_id: string | null;
+  tenant_name: string | null;
 };
 
 export type ApplicationCreate = {

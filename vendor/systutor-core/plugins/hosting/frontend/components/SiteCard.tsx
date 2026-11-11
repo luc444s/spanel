@@ -37,6 +37,7 @@ function statusDot(status: string) {
 
 type SiteCardProps = {
   site: HostingSite;
+  readOnly?: boolean;
   onOpen: (site: HostingSite) => void;
 };
 
@@ -44,7 +45,7 @@ type SiteCardProps = {
  * One site is one card. The card carries no action buttons: clicking it opens
  * the dialog that owns every action, so the list stays readable on a phone.
  */
-export function SiteCard({ site, onOpen }: SiteCardProps) {
+export function SiteCard({ site, readOnly = false, onOpen }: SiteCardProps) {
   const t = useT();
 
   return (
@@ -72,6 +73,11 @@ export function SiteCard({ site, onOpen }: SiteCardProps) {
       <p className="mt-1 truncate text-sm text-muted-foreground">
         {site.domain ?? t("No domain")}
       </p>
+      {site.tenant_name ? (
+        <p className="mt-1 truncate text-xs text-muted-foreground">
+          {t("Tenant")}: {site.tenant_name}
+        </p>
+      ) : null}
       <div className="flex items-center gap-2">
         <Badge>{kindLabel(site.kind)}</Badge>
         {/* A.SPEC 0042: a static site carries its profile as a badge */}
@@ -80,7 +86,7 @@ export function SiteCard({ site, onOpen }: SiteCardProps) {
         ) : null}
       </div>
       <p className="mt-3 text-xs text-muted-foreground">
-        {site.managed ? t("Managed") : t("Read only")}
+        {!readOnly && site.managed ? t("Managed") : t("Read only")}
       </p>
     </Card>
   );

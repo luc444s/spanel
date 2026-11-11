@@ -10,6 +10,8 @@ export type DomainItem = {
   editable: boolean;
   conflict: boolean;
   published?: boolean;
+  tenant_id: string | null;
+  tenant_name: string | null;
 };
 
 export type DomainCheckResponse = {
@@ -22,6 +24,8 @@ export type SiteOption = {
   site_id: string;
   container: string;
   primary_domain: string | null;
+  tenant_id: string | null;
+  tenant_name: string | null;
 };
 
 export type DomainsResponse = {
@@ -104,8 +108,8 @@ export const domainsKeys = {
 
 const BASE = "/api/v1/plugins/domains";
 
-export function listDomains() {
-  return apiRequest<DomainsResponse>(BASE);
+export function listDomains(platform = false) {
+  return apiRequest<DomainsResponse>(platform ? `${BASE}?scope=all` : BASE);
 }
 
 export function createDomain(payload: CreateDomainPayload) {

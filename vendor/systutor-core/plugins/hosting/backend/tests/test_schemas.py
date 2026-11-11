@@ -54,11 +54,10 @@ def test_config_update_no_tiene_tenant_id() -> None:
         )
 
 
-def test_los_contratos_no_exponen_tenant_id() -> None:
+def test_los_contratos_de_mutacion_no_exponen_tenant_id() -> None:
     models = (
         ResetPasswordRequest,
         ResetPasswordResponse,
-        HostingSiteSummary,
         WordPressUserSummary,
     )
     for model in models:
@@ -76,3 +75,17 @@ def test_site_summary_muestra_el_contenedor_resuelto() -> None:
         managed=True,
     )
     assert site.container_name == "spanel-demowp-wp"
+
+
+def test_site_summary_admite_propietario_para_inventario_global() -> None:
+    site = HostingSiteSummary(
+        id="site-1",
+        container_name="spanel-demowp-wp",
+        domain="demo.example",
+        status="running",
+        managed=True,
+        tenant_id="tenant-1",
+        tenant_name="Demo",
+    )
+    assert site.tenant_id == "tenant-1"
+    assert site.tenant_name == "Demo"

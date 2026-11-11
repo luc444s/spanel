@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 from fastapi import FastAPI
+from pydantic import ValidationError
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
@@ -118,7 +119,7 @@ def suffix_app(suffix: str | None = "spanel") -> FastAPI:
 
 
 def test_create_request_forbids_admin_email() -> None:
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         CreateSiteRequest.model_validate(
             {"name": "sitio", "domain": "sitio.spanel", "admin_email": "a@b.com"}
         )
@@ -136,15 +137,17 @@ def test_static_is_valid_and_kind_defaults_to_wordpress() -> None:
 
 def test_wordpress_rejects_a_profile() -> None:
     # 422 (schema): the profile is only accepted for static sites.
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         CreateSiteRequest.model_validate(
             {"kind": "wordpress", "profile": "king", "name": "sitio", "domain": "sitio.spanel"}
         )
 
 
 def test_invalid_kind_is_rejected() -> None:
-    with pytest.raises(Exception):
-        CreateSiteRequest.model_validate({"kind": "otro", "name": "sitio", "domain": "sitio.spanel"})
+    with pytest.raises(ValidationError):
+        CreateSiteRequest.model_validate(
+            {"kind": "otro", "name": "sitio", "domain": "sitio.spanel"}
+        )
 
 
 def test_free_domain_without_suffix_is_allowed(db: Session) -> None:
@@ -321,9 +324,11 @@ def test_wordpress_only_methods_reject_static(db: Session, method: str, args: tu
     )
     kwargs = {"wp_user_id": 1, "password": None, "tenant_context": context()}
     with pytest.raises(AppError) as exc:
-        getattr(service(db), method)(site, *args, **kwargs) if method == "reset_password" else getattr(
-            service(db), method
-        )(site, *args)
+        target = getattr(service(db), method)
+        if method == "reset_password":
+            target(site, *args, **kwargs)
+        else:
+            target(site, *args)
     assert exc.value.code == "hosting_site_wrong_kind"
 
 
@@ -474,3 +479,23 @@ def test_static_is_listed_with_kind_and_start_stop_work(db: Session, monkeypatch
     assert started.kind == "static"
     stopped = svc.stop_site(db.get(HostingSite, "s1"), context())
     assert stopped.status == "exited"
+
+
+def test_global_list_includes_tenant_identity(db: Session, monkeypatch) -> None:
+    db.add(
+        HostingSite(
+            id="s1",
+            tenant_id="t1",
+            container_name="spanel-pagina-web",
+            domain="pagina.spanel",
+            kind="static",
+        )
+    )
+    db.commit()
+    svc = service(db)
+    monkeypatch.setattr(svc, "_inspect", lambda _container: None)
+
+    listed = svc.list_sites(None)
+
+    assert listed.sites[0].tenant_id == "t1"
+    assert listed.sites[0].tenant_name == "Tenant"

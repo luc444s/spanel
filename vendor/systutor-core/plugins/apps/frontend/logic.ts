@@ -154,3 +154,10 @@ export function actionAllowed(application: Application, action: string, busy: bo
 export function canPlatformMutate(permissions: string[], permission: string) {
   return permissions.includes(permission) && permissions.includes("core.platform.admin");
 }
+
+export function isOwnedByTenant(
+  resourceTenantId: string | null | undefined,
+  currentTenantId: string | null | undefined,
+) {
+  return !resourceTenantId || resourceTenantId === currentTenantId;
+}
