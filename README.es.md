@@ -78,12 +78,14 @@ cp .env.docker.example .env.docker
 # Editar .env.docker con valores reales del servidor
 # Nunca commitear .env.docker
 
-# 3. Iniciar servicios
+# 3. Verificar que exista la red externa de Traefik y que Traefik esté conectado
+docker network inspect proxy >/dev/null 2>&1 || docker network create proxy
+
+# 4. Iniciar servicios
 docker compose up -d --build
 
-# 4. Acceder a la aplicación
-# Frontend: http://localhost:3000
-# Backend API: http://localhost:3000/api/v1
+# 5. Acceder por Traefik al Host configurado en los labels
+#    (spanel.systutor.com por defecto). El puerto 3000 no se publica.
 ```
 
 ### Desarrollo Local
@@ -510,11 +512,22 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
 
 ### Con Dokploy
 
-El proyecto está optimizado para desplegarse con [Dokploy](https://dokploy.com/):
+**Todavía no es compatible.** No uses el despliegue en un clic de Dokploy con
+el Compose actual.
 
-1. Configurar variables de entorno en Dokploy
-2. El `docker-compose.yml` ya está configurado para producción
-3. PostgreSQL y Redis se despliegan como servicios separados
+PanelTutor asume un host Docker que controla directamente, no una plataforma de
+aplicaciones genérica. Un despliegue con Dokploy necesitaría, como mínimo:
+
+- una red externa `proxy` compartida con Traefik;
+- acceso de escritura a `/var/run/docker.sock` (equivalente a root);
+- rutas y volúmenes del host bajo `/var/lib/spanel` y `/opt/spanel`;
+- las variables `SPANEL_*` de `.env.docker`;
+- construir el `Dockerfile` de este repositorio, porque el frontend queda
+  horneado en la imagen.
+
+El `docker-compose.yml` levanta PostgreSQL y Redis como servicios del mismo
+stack Compose; no asume bases de datos gestionadas. Todavía no existe un
+perfil de Dokploy soportado.
 
 ### Manual
 
