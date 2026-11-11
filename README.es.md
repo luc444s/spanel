@@ -21,32 +21,33 @@ Sistema de administración multi-tenant de correo electrónico, dominios web y s
 ## Arquitectura
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      Frontend (React)                       │
-│                    apps/web/ (Vite + TypeScript)            │
-└─────────────────────┬───────────────────────────────────────┘
-                      │ HTTP/REST
-┌─────────────────────▼───────────────────────────────────────┐
-│                    Backend (FastAPI)                         │
-│              vendor/systutor-core/ (Python)                 │
-├─────────────────────────────────────────────────────────────┤
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐   │
-│  │   Auth   │  │   RBAC   │  │  Tenant  │  │  Audit   │   │
-│  │  (JWT)   │  │ (Perms)  │  │(Multi-T) │  │ (Events) │   │
-│  └──────────┘  └──────────┘  └──────────┘  └──────────┘   │
-├─────────────────────────────────────────────────────────────┤
-│                     Plugin System                           │
-│  ┌────────────────────┐  ┌────────────────────┐            │
-│  │   Mail Plugin      │  │   Tenant Plugin    │            │
-│  │ (CRUD de correos)  │  │ (Gestión tenants)  │            │
-│  └─────────┬──────────┘  └────────────────────┘            │
-│            │ SSH (paramiko)                                 │
-└────────────┼────────────────────────────────────────────────┘
-             │
-┌────────────▼────────────────────────────────────────────────┐
-│              Docker Mailserver (DMS)                         │
-│              mailserver (container)                          │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│ Navegador — SPA React (apps/web, Vite + TypeScript)          │
+└───────────────────────────┬──────────────────────────────────┘
+                            │ HTTPS
+┌───────────────────────────▼──────────────────────────────────┐
+│ Traefik — red proxy                                          │
+│ TLS · HTTP→HTTPS · enruta el panel y los sitios de clientes  │
+└───────────────────────────┬──────────────────────────────────┘
+                            │ HTTP :3000 (solo interno)
+┌───────────────────────────▼──────────────────────────────────┐
+│ App PanelTutor — FastAPI                                     │
+│ Auth (JWT) · RBAC · Tenants · Auditoría · bundle React       │
+│ Plugins: Mail, Hosting, Dominios, Apps, Archivos, Tenants    │
+└───────┬───────────────────┬───────────────────┬──────────────┘
+        │                   │                   │
+┌───────▼────────┐  ┌───────▼────────┐  ┌───────▼──────────────┐
+│ PostgreSQL     │  │ Redis          │  │ apps-worker          │
+│ datos/metadata │  │ caché + colas  │  │ Dramatiq (asíncrono) │
+└────────────────┘  └────────────────┘  └───────┬──────────────┘
+                                                │
+┌───────────────────────────────────────────────▼──────────────┐
+│ Demonio Docker — usado por la app y apps-worker              │
+│ socket local o SSH (sshpass)                                 │
+├──────────────────────────────────────────────────────────────┤
+│ Sitios WordPress/estáticos · apps Compose · phpMyAdmin       │
+│ Docker Mailserver (DMS) + agente de certificados de correo   │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ## Requisitos Previos
