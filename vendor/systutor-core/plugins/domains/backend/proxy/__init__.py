@@ -32,7 +32,7 @@ from .core import (
     timestamp,
     validate_managed_path,
 )
-from .operations import ManagedDomain, ProxyOperations
+from .operations import ManagedDocument, ManagedDomain, ProxyOperations
 from .probe import CertificateInfo, probe_certificate
 from .transport import CommandResult, Runner, build_runner
 
@@ -52,6 +52,7 @@ __all__ = [
     "CertificateInfo",
     "CommandResult",
     "ManagedDomain",
+    "ManagedDocument",
     "PathRoute",
     "ProxyError",
     "ProxyOperations",

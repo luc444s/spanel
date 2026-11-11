@@ -40,3 +40,37 @@ class DomainRoute(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, onupdate=utc_now
     )
+
+
+class ObservedDomain(Base):
+    """Rebuildable observation of one domain published by Traefik."""
+
+    __tablename__ = "domains_observed"
+    __table_args__ = (UniqueConstraint("generation", "domain"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    domain: Mapped[str] = mapped_column(String(253), index=True)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    site_id: Mapped[str] = mapped_column(String(504), index=True)
+    container: Mapped[str] = mapped_column(String(255))
+    resolver: Mapped[str] = mapped_column(String(255))
+    source_file: Mapped[str] = mapped_column(String(255))
+    document_hash: Mapped[str] = mapped_column(String(64))
+    generation: Mapped[str] = mapped_column(String(36), index=True)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class DomainSyncState(Base):
+    """Singleton pointer to the last complete observed generation."""
+
+    __tablename__ = "domains_sync_state"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    active_generation: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    document_count: Mapped[int] = mapped_column(Integer, default=0)
+    domain_count: Mapped[int] = mapped_column(Integer, default=0)
+    conflict_count: Mapped[int] = mapped_column(Integer, default=0)
+    orphan_count: Mapped[int] = mapped_column(Integer, default=0)
+    invalid_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_error: Mapped[str | None] = mapped_column(String(1000), nullable=True)

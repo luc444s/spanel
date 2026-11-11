@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import base64
+import io
 import re
+import tarfile
 from pathlib import Path
 
 import pytest
@@ -62,6 +65,17 @@ class FakeExec:
         return result(0)
 
     def _shell(self, script: str, stdin: str | None, result) -> CommandResult:
+        if script.startswith("cd /config"):
+            payload = io.BytesIO()
+            with tarfile.open(fileobj=payload, mode="w") as archive:
+                for path, text in sorted(self.files.items()):
+                    if not path.startswith("/config/spanel-") or not path.endswith(".yml"):
+                        continue
+                    data = text.encode()
+                    info = tarfile.TarInfo(Path(path).name)
+                    info.size = len(data)
+                    archive.addfile(info, io.BytesIO(data))
+            return result(0, base64.b64encode(payload.getvalue()).decode())
         if script.startswith("ls -1 "):
             directory = script.split("ls -1 ", 1)[1].split("/spanel-*.yml", 1)[0]
             prefix = directory.rstrip("/") + "/spanel-"
@@ -132,6 +146,21 @@ def test_read_and_exists_managed_and_foreign() -> None:
     assert exc.value.exit_code == EXIT_VALIDATION
     with pytest.raises(ProxyError):
         files.delete(Path("/config/other.yml"))
+
+
+def test_bulk_read_uses_one_exec_and_preserves_file_boundaries() -> None:
+    files, runner = make_files()
+    runner.files["/config/spanel-a.yml"] = managed("a", "a.test")
+    runner.files["/config/spanel-b.yml"] = managed("b", "b.test")
+    runner.files["/config/foreign.yml"] = "ignored"
+
+    snapshot = files.read_site_files()
+
+    assert snapshot == {
+        Path("/config/spanel-a.yml"): runner.files["/config/spanel-a.yml"],
+        Path("/config/spanel-b.yml"): runner.files["/config/spanel-b.yml"],
+    }
+    assert len(runner.calls) == 1
 
 
 # ---- escribir --------------------------------------------------------------

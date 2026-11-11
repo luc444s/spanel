@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from plugins.domains.backend.models import DomainRoute
+from plugins.domains.backend.models import DomainRoute, DomainSyncState, ObservedDomain
 from plugins.domains.backend.proxy import (
     EXIT_VALIDATION,
     PathRoute,
@@ -362,6 +362,16 @@ class DomainsService:
         self, *, active_tenant_id: str, can_manage_active: bool
     ) -> tuple[list[DomainItem], list[SiteOption], str | None]:
         """Vista de plataforma: agrega los dominios de todos los tenants."""
+        try:
+            state = self._db.get(DomainSyncState, 1)
+        except Exception:  # noqa: BLE001 - compatible antes de ejecutar migraciones
+            state = None
+        if state is not None and state.active_generation:
+            return self._list_all_projected(
+                state.active_generation,
+                active_tenant_id=active_tenant_id,
+                can_manage_active=can_manage_active,
+            )
         items: list[DomainItem] = []
         sites: list[SiteOption] = []
         proxy_error: str | None = None
@@ -379,6 +389,119 @@ class DomainsService:
             if tenant_error is not None and proxy_error is None:
                 proxy_error = tenant_error
         return items, sites, proxy_error
+
+    def _list_all_projected(
+        self,
+        generation: str,
+        *,
+        active_tenant_id: str,
+        can_manage_active: bool,
+    ) -> tuple[list[DomainItem], list[SiteOption], None]:
+        """Global read after first sync: PostgreSQL only, with one site resolution."""
+        tenants = list(list_tenants(self._db))
+        tenant_names = {tenant.id: tenant.name for tenant in tenants}
+        site_options: dict[tuple[str, str], SiteOption] = {}
+        sites_by_container: dict[tuple[str, str], SiteOption] = {}
+        for site in list_sites(self._app, self._db, None):  # type: ignore[arg-type]
+            option = SiteOption(
+                site_id=site.site_id,
+                container=site.container,
+                primary_domain=site.primary_domain,
+                tenant_id=site.tenant_id,
+                tenant_name=tenant_names.get(site.tenant_id),
+            )
+            site_options[(site.tenant_id, site.site_id)] = option
+            sites_by_container[(site.tenant_id, site.container)] = option
+
+        observed = list(
+            self._db.scalars(
+                select(ObservedDomain)
+                .where(ObservedDomain.generation == generation)
+                .order_by(ObservedDomain.domain)
+            ).all()
+        )
+        extras: dict[str, dict[str, ObservedDomain]] = {}
+        for row in observed:
+            extras.setdefault(row.tenant_id, {})[row.domain.lower()] = row
+        routes: dict[str, list[DomainRoute]] = {}
+        for row in self._db.scalars(
+            select(DomainRoute).order_by(DomainRoute.domain, DomainRoute.path)
+        ).all():
+            routes.setdefault(row.tenant_id, []).append(row)
+
+        items: list[DomainItem] = []
+        for tenant in tenants:
+            editable = can_manage_active and tenant.id == active_tenant_id
+            tenant_sites = {
+                option.container: option
+                for (tenant_id, _), option in sites_by_container.items()
+                if tenant_id == tenant.id
+            }
+            tenant_extras = extras.get(tenant.id, {})
+            seen: set[str] = set()
+            for site in tenant_sites.values():
+                domain = (site.primary_domain or "").strip().lower()
+                if not domain or domain in seen:
+                    continue
+                seen.add(domain)
+                extra = tenant_extras.get(domain)
+                items.append(
+                    DomainItem(
+                        domain=domain,
+                        site_id=site.site_id,
+                        container=site.container,
+                        owner="hosting",
+                        editable=False,
+                        conflict=extra is not None and extra.container != site.container,
+                        tenant_id=tenant.id,
+                        tenant_name=tenant.name,
+                    )
+                )
+            for domain, extra in sorted(tenant_extras.items()):
+                site = tenant_sites.get(extra.container)
+                if site is None or domain in seen:
+                    continue
+                seen.add(domain)
+                items.append(
+                    DomainItem(
+                        domain=domain,
+                        site_id=site.site_id,
+                        container=site.container,
+                        owner="domains",
+                        editable=editable,
+                        tenant_id=tenant.id,
+                        tenant_name=tenant.name,
+                    )
+                )
+            for route in routes.get(tenant.id, []):
+                domain = route.domain.strip().lower()
+                site = site_options.get((tenant.id, route.site_id))
+                if not domain or domain in seen or site is None:
+                    continue
+                seen.add(domain)
+                items.append(
+                    DomainItem(
+                        domain=domain,
+                        site_id=site.site_id,
+                        container=site.container,
+                        owner="domains",
+                        editable=editable,
+                        tenant_id=tenant.id,
+                        tenant_name=tenant.name,
+                    )
+                )
+            for domain in self._reserved_domains(tenant.id, seen=seen):
+                items.append(
+                    DomainItem(
+                        domain=domain,
+                        owner="domains",
+                        editable=editable,
+                        published=False,
+                        tenant_id=tenant.id,
+                        tenant_name=tenant.name,
+                    )
+                )
+        return items, sorted(site_options.values(), key=lambda site: site.container), None
 
     def check_domain(self, tenant_context: TenantContext, domain: str) -> DomainCheckResponse:
         """Disponibilidad de un dominio sin reservar: formato, uso y propiedad."""

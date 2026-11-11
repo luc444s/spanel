@@ -57,6 +57,12 @@ class ManagedDomain:
     file: str
 
 
+@dataclass(frozen=True)
+class ManagedDocument:
+    path: Path
+    text: str
+
+
 class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
     def __init__(
         self,
@@ -566,6 +572,17 @@ class ProxyOperations(DoctorMixin, LabDnsMixin, WordPressMixin):
             for domain in document_domains(data):
                 rows.append(ManagedDomain(domain, container, resolver, path.name))
         return rows
+
+    def managed_documents(self) -> list[ManagedDocument]:
+        """One complete, transport-bounded snapshot of managed site YAML."""
+        selection = self._lenient_selection()
+        if selection is None:
+            return []
+        return [
+            ManagedDocument(path, text)
+            for path, text in sorted(self.files.read_site_files().items())
+            if not self._is_route_document(path)
+        ]
 
     def certificate(self, domain: str) -> CertificateInfo:
         """Sondea el certificado de un dominio ya conocido; no lo normaliza."""

@@ -7,8 +7,11 @@ provider. Ninguna ruta puede salir de ese directorio y todo nombre pasa por
 
 from __future__ import annotations
 
+import base64
 import os
 import shlex
+import tarfile
+from io import BytesIO
 from pathlib import Path
 from typing import Protocol
 
@@ -30,6 +33,7 @@ class ProxyFiles(Protocol):
     def exists(self, path: Path) -> bool: ...
     def read_text(self, path: Path) -> str | None: ...
     def list_site_files(self) -> list[Path]: ...
+    def read_site_files(self) -> dict[Path, str]: ...
     def write_text(self, path: Path, text: str, mode: int = 0o644) -> None: ...
     def delete(self, path: Path) -> None: ...
     def writable(self) -> tuple[bool, str]: ...
@@ -44,6 +48,50 @@ def _require_managed(path: Path, text: str | None = None) -> None:
                 f"{path.name} does not have the spanel ownership marker",
                 EXIT_VALIDATION,
             )
+
+
+def _unpack_snapshot(encoded: str, config_dir: Path) -> dict[Path, str]:
+    """Decode a bounded tar snapshot and reject every unsafe member."""
+    if not encoded.strip():
+        return {}
+    try:
+        payload = base64.b64decode(encoded, validate=True)
+        archive = tarfile.open(fileobj=BytesIO(payload), mode="r:")
+    except (ValueError, tarfile.TarError) as exc:
+        raise ProxyError("invalid bulk file snapshot", EXIT_TRANSPORT) from exc
+    result: dict[Path, str] = {}
+    with archive:
+        for member in archive.getmembers():
+            member_path = Path(member.name)
+            if (
+                member_path.is_absolute()
+                or len(member_path.parts) != 1
+                or member_path.name in ("", ".", "..")
+                or not member.isfile()
+                or not member_path.name.startswith(FILE_PREFIX)
+                or member_path.suffix != ".yml"
+            ):
+                raise ProxyError("unsafe member in bulk file snapshot", EXIT_TRANSPORT)
+            target = config_dir / member_path.name
+            validate_managed_path(target)
+            if target in result:
+                raise ProxyError("duplicate member in bulk file snapshot", EXIT_TRANSPORT)
+            stream = archive.extractfile(member)
+            if stream is None:
+                raise ProxyError("unreadable member in bulk file snapshot", EXIT_TRANSPORT)
+            try:
+                result[target] = stream.read().decode("utf-8")
+            except UnicodeDecodeError as exc:
+                raise ProxyError("non-UTF-8 managed document", EXIT_TRANSPORT) from exc
+    return result
+
+
+def _snapshot_script(config_dir: Path) -> str:
+    directory = shlex.quote(str(config_dir))
+    return (
+        f"cd {directory} || exit 1; set -- spanel-*.yml; "
+        '[ -e "$1" ] || exit 0; tar -cf - -- "$@" | base64'
+    )
 
 
 class LocalFiles:
@@ -71,6 +119,13 @@ class LocalFiles:
             for path in self.config_dir.iterdir()
             if path.is_file() and path.name.startswith(FILE_PREFIX) and path.suffix == ".yml"
         )
+
+    def read_site_files(self) -> dict[Path, str]:
+        return {
+            path: text
+            for path in self.list_site_files()
+            if (text := self.read_text(path)) is not None
+        }
 
     def write_text(self, path: Path, text: str, mode: int = 0o644) -> None:
         _require_managed(path, text)
@@ -117,6 +172,12 @@ class SshFiles:
             ]
         )
         return [Path(line.strip()) for line in result.stdout.splitlines() if line.strip()]
+
+    def read_site_files(self) -> dict[Path, str]:
+        result = self.runner.run(["sh", "-c", _snapshot_script(self.config_dir)])
+        if not result.ok:
+            raise ProxyError("SSH bulk file snapshot failed", EXIT_TRANSPORT)
+        return _unpack_snapshot("".join(result.stdout.split()), self.config_dir)
 
     def write_text(self, path: Path, text: str, mode: int = 0o644) -> None:
         _require_managed(path, text)
@@ -229,6 +290,12 @@ class DockerFiles:
             if path.name.startswith(FILE_PREFIX) and path.suffix == ".yml":
                 found.append(path)
         return sorted(found)
+
+    def read_site_files(self) -> dict[Path, str]:
+        result = self._exec("sh", "-c", _snapshot_script(self.config_dir))
+        if not result.ok:
+            raise self._fail("bulk snapshot", result)
+        return _unpack_snapshot("".join(result.stdout.split()), self.config_dir)
 
     def write_text(self, path: Path, text: str, mode: int = 0o644) -> None:
         target = self._checked(path)
