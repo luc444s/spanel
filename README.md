@@ -1,4 +1,4 @@
-# Spanel
+# PanelTutor
 
 Multi-tenant administration system for email, web domains and WordPress/static sites on Docker. It lets you manage mail accounts, websites and domains for multiple tenants through a modern web interface.
 
@@ -588,7 +588,7 @@ npm run build
 
 ## License
 
-Spanel is distributed under the **GNU Affero General Public License v3.0** (AGPL-3.0).
+PanelTutor is distributed under the **GNU Affero General Public License v3.0** (AGPL-3.0).
 
 Copyright (C) 2026 luc444s
 

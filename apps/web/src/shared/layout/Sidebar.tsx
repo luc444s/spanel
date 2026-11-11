@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
 
+import { APP_NAME } from "../../brand";
 import { useAuthStore } from "../../features/auth/store";
 import { useLogoutAction } from "../../features/auth/useLogoutAction";
 import { usePluginFrontendRuntime } from "../../features/plugins/runtime";
@@ -51,7 +52,7 @@ export function Sidebar() {
     <aside className="flex h-screen flex-col border-r border-border bg-sidebar p-4">
       <div className="mb-8 flex items-center justify-between">
         <div className="space-y-1">
-          <h1 className="text-lg font-semibold text-sidebar-foreground">SPANEL</h1>
+          <h1 className="text-lg font-semibold text-sidebar-foreground">{APP_NAME}</h1>
         </div>
       </div>
 

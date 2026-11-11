@@ -1,4 +1,4 @@
-# Spanel
+# PanelTutor
 
 [English](README.md) | Español
 
@@ -589,7 +589,7 @@ npm run build
 
 ## License
 
-Spanel se distribuye bajo la **GNU Affero General Public License v3.0** (AGPL-3.0).
+PanelTutor se distribuye bajo la **GNU Affero General Public License v3.0** (AGPL-3.0).
 
 Copyright (C) 2026 luc444s
 

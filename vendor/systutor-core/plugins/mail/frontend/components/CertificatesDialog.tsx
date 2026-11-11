@@ -84,7 +84,7 @@ export function CertificatesDialog({
       <Dialog
         open={open}
         title={t("TLS certificates")}
-        description={t("Spanel · Mail infrastructure")}
+        description={t("PanelTutor · Mail infrastructure")}
         onClose={closeAll}
         zIndexClassName="z-[1150]"
         maxWidthClassName="max-w-3xl"

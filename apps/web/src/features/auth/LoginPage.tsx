@@ -2,12 +2,14 @@ import { useMutation } from "@tanstack/react-query";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 
+import { APP_NAME } from "../../brand";
+
 import { login } from "./api";
 import { useAuthStore } from "./store";
 import { ApiError } from "@systutor/shell/api/client";
 import { Alert } from "@systutor/shell/ui/alert";
 import { Button } from "@systutor/shell/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@systutor/shell/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@systutor/shell/ui/card";
 import { Input } from "@systutor/shell/ui/input";
 import { GithubLink } from "../../shared/layout/GithubLink";
 import { useT } from "../../i18n/use-i18n";
@@ -70,7 +72,8 @@ export function LoginPage() {
     <main className="flex min-h-screen items-center justify-center px-4 py-8">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle>SPANEL</CardTitle>
+          <CardTitle>{APP_NAME}</CardTitle>
+          <CardDescription>{t("The Docker-native cPanel alternative for agencies and self-hosters.")}</CardDescription>
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={handleSubmit}>

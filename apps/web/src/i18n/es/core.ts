@@ -43,6 +43,7 @@ const messages: Record<string, string> = {
   "Sign out": "Cerrar sesión",
   "LOGISTICS": "LOGISTICS",
   "Administration": "Administración",
+  "The Docker-native cPanel alternative for agencies and self-hosters.": "La alternativa a cPanel nativa de Docker para agencias y self-hosters.",
 };
 
 export default messages;

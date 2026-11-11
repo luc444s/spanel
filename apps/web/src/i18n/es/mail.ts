@@ -125,7 +125,7 @@ const messages: Record<string, string> = {
   "Global default": "Predeterminado global",
 
   // Diálogos de certificados
-  "Spanel · Mail infrastructure": "Spanel · Infraestructura de correo",
+  "PanelTutor · Mail infrastructure": "PanelTutor · Infraestructura de correo",
   "Last read: {time}": "Última lectura: {time}",
   "No agent reading": "Sin lectura del agente",
   "Add certificate": "Agregar certificado",
