@@ -37,15 +37,15 @@ platform administrators keep working unchanged.
 
 ### Panel surface
 
-In `vendor/systutor-core/plugins/domains/frontend/pages/DomainsPage.tsx`, above
-the DNS surface and only when the user has `domains.dns.cloudflare`, render one
-Cloudflare connection card:
+In `vendor/systutor-core/plugins/domains/frontend/pages/DomainsPage.tsx`, in the
+header action row next to **Nameservers** and only when the user has
+`domains.dns.cloudflare`, render one compact button:
 
-- disconnected: **Connect Cloudflare** button;
-- connecting: disabled button plus a "waiting for Cloudflare authorization"
-  message and, when the popup was blocked, a manual authorization link;
-- connected: account name, granted scope names, discovered zone count and
-  **Disconnect** action.
+- disconnected: **Connect Cloudflare**;
+- connecting: disabled button labelled **Authorizing Cloudflare...**;
+- connected: **Disconnect Cloudflare**, which asks for confirmation.
+
+There is no extra card, section, page or navigation entry.
 
 Clicking **Connect Cloudflare**:
 
@@ -56,15 +56,16 @@ Clicking **Connect Cloudflare**:
    navigating away from the panel;
 3. polls `GET /dns/cloudflare/status` every two seconds until the connection is
    active or the flow expiry is reached (never longer than five minutes);
-4. on success shows a toast, refreshes the connection card and invalidates the
-   DNS zone list so Cloudflare-backed zones appear. A timeout or a denied flow
-   shows a localized error and leaves any previous connection untouched.
+4. on success shows a toast, refreshes the button label and invalidates the DNS
+   zone list so Cloudflare-backed zones appear. A timeout, denied flow or
+   normalized HTTP error shows a localized toast and leaves any previous
+   connection untouched.
 
-Clicking **Disconnect** asks for confirmation, calls
-`POST /dns/cloudflare/disconnect` with `{"apply": true}`, and refreshes the
-card. It is idempotent: disconnecting twice reports success.
+Clicking **Disconnect Cloudflare** asks for confirmation, calls
+`POST /dns/cloudflare/disconnect` with `{"apply": true}` and refreshes the
+button. It is idempotent: disconnecting twice reports success.
 
-The card never renders record content and never receives tokens. The OAuth
+The button never renders record content and never receives tokens. The OAuth
 callback continues to be a minimal backend-rendered HTML page; the panel only
 polls the authenticated status endpoint.
 
@@ -73,13 +74,10 @@ polls the authenticated status endpoint.
 New pure helpers under
 `vendor/systutor-core/plugins/domains/frontend/cloudflare/logic.ts` decide:
 
-- when the card is visible (`domains.dns.cloudflare`);
+- when the button is visible (`domains.dns.cloudflare`);
 - whether a status payload means connected (`status === "active"` and
   `connected === true`);
-- a stable summary line (`account_name`, scope count, zone count) from the
-  status payload;
-- whether polling must stop (connected, terminal flow state, deadline, or a
-  terminal HTTP error);
+- whether polling must stop (connected, deadline or a terminal HTTP error);
 - the user-facing message for `401/403`, `404`, `409`, `422`, `429`, `502`,
   `503` and `504`, without echoing upstream bodies.
 
@@ -104,8 +102,8 @@ No zone/record mutation call is added.
 ## SCOPE
 
 - Tenant-scoped start/disconnect authorization for the existing Cloudflare flow.
-- One connection card in the existing Domains page.
-- Polling, connected/disconnected/error presentation and zone-list invalidation.
+- One compact connection button next to Nameservers in the existing Domains page.
+- Polling, connected/disconnected/error toasts and zone-list invalidation.
 - Tenant-admin permission registration and operator documentation.
 - Focused backend router tests and pure frontend logic tests.
 
@@ -178,7 +176,7 @@ tests.
 
 ## ROLLBACK
 
-Revert this A.SPEC's commit. The panel card disappears and start/disconnect
+Revert this A.SPEC's commit. The panel button disappears and start/disconnect
 return to the platform-only rule of A.SPEC 0071. No migration or stored data is
 created by this A.SPEC, so tenant connections, encrypted tokens and the OAuth
 client remain valid; operators can still disconnect through the CLI. If a tenant
@@ -194,7 +192,7 @@ change_surface:
     - vendor/systutor-core/plugins/domains/frontend/cloudflare/api.ts
     - vendor/systutor-core/plugins/domains/frontend/cloudflare/logic.ts
     - vendor/systutor-core/plugins/domains/frontend/cloudflare/types.ts
-    - vendor/systutor-core/plugins/domains/frontend/cloudflare/CloudflareConnectionCard.tsx
+    - vendor/systutor-core/plugins/domains/frontend/cloudflare/CloudflareConnectButton.tsx
     - vendor/systutor-core/plugins/domains/frontend/pages/DomainsPage.tsx
     - apps/web/src/i18n/es/domains.ts
     - apps/web/src/plugins/domains-cloudflare.logic.test.ts
@@ -227,7 +225,7 @@ change_surface:
 ```yaml
 blast_radius:
   direct:
-    - Domains page Cloudflare connection card
+    - Domains page Cloudflare connection button
     - Cloudflare OAuth start/disconnect authorization
     - Domains tenant-admin permission set
   indirect:

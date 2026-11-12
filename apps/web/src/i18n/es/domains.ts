@@ -209,6 +209,8 @@ const messages: Record<string, string> = {
   "Cloudflare is unavailable right now.": "Cloudflare no está disponible ahora mismo.",
   "Cloudflare did not respond in time.": "Cloudflare no respondió a tiempo.",
   "Could not reach Cloudflare. Try again.": "No se pudo contactar con Cloudflare. Inténtalo de nuevo.",
+  "Authorizing Cloudflare...": "Autorizando Cloudflare...",
+  "Allow popups or open the authorization page from the browser prompt.": "Permite las ventanas emergentes o abre la página de autorización desde el aviso del navegador.",
 };
 
 export default messages;

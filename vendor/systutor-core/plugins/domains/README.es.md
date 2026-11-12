@@ -223,10 +223,11 @@ best-effort y elimina credenciales locales de forma idempotente. Todos aceptan
 
 ### Panel
 
-Los usuarios con `domains.dns.cloudflare` ven una tarjeta de Cloudflare en la
-página de Dominios. **Conectar Cloudflare** pide al backend la URL de
-autorización, la abre en una ventana y consulta el estado autenticado cada dos
-segundos hasta que el flujo termina o expira. Un administrador de tenant puede
+Los usuarios con `domains.dns.cloudflare` ven un botón **Conectar Cloudflare**
+junto a **Servidores de nombres** en la página de Dominios. Pide al backend la
+URL de autorización, la abre en una ventana y consulta el estado autenticado
+cada dos segundos hasta que el flujo termina o expira; una vez conectado el
+mismo botón pasa a **Desconectar Cloudflare**. Un administrador de tenant puede
 conectar y desconectar el suyo; el cliente OAuth se sigue registrando una vez
 desde la CLI del operador de plataforma. El navegador nunca recibe tokens,
 client secrets ni contenido de registros.

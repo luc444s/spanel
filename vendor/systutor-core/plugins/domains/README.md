@@ -220,13 +220,14 @@ All commands accept `--json`; record content is always redacted.
 
 ### Panel
 
-Users with `domains.dns.cloudflare` see a Cloudflare card on the Domains page.
-**Connect Cloudflare** asks the backend for an authorization URL, opens it in a
-popup and polls the authenticated status endpoint every two seconds until the
-flow completes or expires. A tenant administrator can connect and disconnect
-their own tenant; the OAuth client itself is still registered once by the
-platform operator with the CLI. The browser never receives tokens, client
-secrets or record content.
+Users with `domains.dns.cloudflare` see a **Connect Cloudflare** button next to
+**Nameservers** on the Domains page. It asks the backend for an authorization
+URL, opens it in a popup and polls the authenticated status endpoint every two
+seconds until the flow completes or expires; once connected the same button
+becomes **Disconnect Cloudflare**. A tenant administrator can connect and
+disconnect their own tenant; the OAuth client itself is still registered once
+by the platform operator with the CLI. The browser never receives tokens,
+client secrets or record content.
 
 ### API
 

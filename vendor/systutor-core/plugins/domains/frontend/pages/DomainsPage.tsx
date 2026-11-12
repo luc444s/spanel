@@ -17,7 +17,7 @@ import { Input } from "@systutor/shell/ui/input";
 import { toast } from "@systutor/shell/ui/toast";
 import { t } from "@/i18n";
 import { DomainsTable } from "../components/DomainsTable";
-import { CloudflareConnectionCard } from "../cloudflare/CloudflareConnectionCard";
+import { CloudflareConnectButton } from "../cloudflare/CloudflareConnectButton";
 import { DnsZoneDialog } from "../dns/DnsZoneDialog";
 import { NameserversDialog } from "../dns/NameserversDialog";
 import { dnsKeys, listZones } from "../dns/api";
@@ -147,14 +147,13 @@ export default function DomainsPage() {
         </div>
         <div className="flex gap-2">
           {canReadDns && <Button size="sm" variant="secondary" onClick={() => setNameserversOpen(true)}>{t("Nameservers")}</Button>}
+          <CloudflareConnectButton
+            permissions={permissions}
+            onConnected={() => void zonesQuery.refetch()}
+          />
           {canManage && <Button size="sm" onClick={openAdd}>{t("Add domain")}</Button>}
         </div>
       </div>
-
-      <CloudflareConnectionCard
-        permissions={permissions}
-        onConnected={() => void zonesQuery.refetch()}
-      />
 
       {domainsQuery.isError && (
         <Alert title={t("Could not load domains")}>
