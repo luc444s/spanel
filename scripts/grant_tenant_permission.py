@@ -13,6 +13,15 @@ Usage:
         --permission apps.applications.manage \
         --permission apps.deployments.create
 
+Remove platform admin from one user while keeping the rest of the admin role:
+
+    python3 scripts/grant_tenant_permission.py --tenant milton \
+        --email ops@example.com \
+        --role tenant_operator \
+        --clone-role admin \
+        --exclude-permission core.platform.admin \
+        --remove-role admin
+
 Exit codes: 0 ok, 1 failure.
 """
 
@@ -23,7 +32,7 @@ import json
 import sys
 from pathlib import Path
 
-from sqlalchemy import or_, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -130,6 +139,52 @@ def _assign_role(db: Session, user: User, role: Role) -> bool:
     return True
 
 
+def _role_permissions(db: Session, role_id: str) -> list[Permission]:
+    stmt = (
+        select(Permission)
+        .join(RolePermission, RolePermission.permission_id == Permission.id)
+        .where(RolePermission.role_id == role_id)
+        .order_by(Permission.name.asc())
+    )
+    return list(db.scalars(stmt).all())
+
+
+def _clone_permissions(
+    db: Session,
+    tenant_id: str,
+    target: Role,
+    source_name: str,
+    exclude: set[str],
+) -> list[str]:
+    source = db.scalar(
+        select(Role).where(Role.tenant_id == tenant_id, Role.name == source_name)
+    )
+    if source is None:
+        raise GrantError(f"unknown source role {source_name!r}")
+    added: list[str] = []
+    for permission in _role_permissions(db, source.id):
+        if permission.name in exclude:
+            continue
+        if _grant_permission(db, target, permission):
+            added.append(permission.name)
+    return added
+
+
+def _remove_role_from_users(db: Session, users: list[User], role: Role) -> list[str]:
+    removed: list[str] = []
+    for user in users:
+        result = db.execute(
+            delete(UserRole).where(
+                UserRole.user_id == user.id,
+                UserRole.role_id == role.id,
+            )
+        )
+        if result.rowcount:
+            removed.append(user.email)
+    db.flush()
+    return removed
+
+
 def grant(
     db: Session,
     *,
@@ -138,6 +193,9 @@ def grant(
     role_name: str,
     emails: list[str],
     dry_run: bool,
+    clone_role: str | None = None,
+    exclude_permissions: list[str] | None = None,
+    remove_roles: list[str] | None = None,
 ) -> dict[str, object]:
     tenant = _resolve_tenant(db, tenant_value)
     if role_name == MANAGED_ROLE:
@@ -151,6 +209,11 @@ def grant(
     role, role_created = _get_or_create_role(db, tenant.id, role_name)
     resolved: list[Permission] = []
     permissions_added: list[str] = []
+    cloned: list[str] = []
+    if clone_role:
+        excluded = {"core.platform.admin", *(exclude_permissions or [])}
+        cloned = _clone_permissions(db, tenant.id, role, clone_role, excluded)
+
     for permission_name in permissions:
         permission = ensure_permission(
             db,
@@ -166,6 +229,22 @@ def grant(
         if _assign_role(db, user, role):
             users_assigned.append(user.email)
 
+    roles_removed: dict[str, list[str]] = {}
+    for remove_name in remove_roles or []:
+        if remove_name == role_name:
+            raise GrantError("cannot remove the role being granted")
+        role_to_remove = db.scalar(
+            select(Role).where(
+                Role.tenant_id == tenant.id,
+                Role.name == remove_name,
+            )
+        )
+        if role_to_remove is None:
+            raise GrantError(f"unknown role to remove {remove_name!r}")
+        roles_removed[remove_name] = _remove_role_from_users(
+            db, users, role_to_remove
+        )
+
     result: dict[str, object] = {
         "tenant": {"id": tenant.id, "slug": tenant.slug, "name": tenant.name},
         "role": {
@@ -173,10 +252,13 @@ def grant(
             "name": role.name,
             "created": role_created,
         },
+        "cloned_from": clone_role,
+        "permissions_cloned": cloned,
         "permissions": [permission.name for permission in resolved],
         "permissions_added": permissions_added,
         "users": [user.email for user in users],
         "users_assigned": users_assigned,
+        "roles_removed": roles_removed,
         "dry_run": dry_run,
     }
 
@@ -197,6 +279,8 @@ def grant(
             "role": role.name,
             "permissions": result["permissions"],
             "users": result["users"],
+            "cloned_from": clone_role,
+            "roles_removed": sorted(roles_removed),
             "dry_run": dry_run,
         },
     )
@@ -233,6 +317,25 @@ def main(argv: list[str] | None = None) -> int:
         help="assign the role only to this email (repeatable; default: all active users)",
     )
     parser.add_argument(
+        "--clone-role",
+        default=None,
+        help="copy permissions from an existing role in the same tenant",
+    )
+    parser.add_argument(
+        "--exclude-permission",
+        action="append",
+        dest="exclude_permissions",
+        default=None,
+        help="permission skipped when cloning (repeatable; default: core.platform.admin)",
+    )
+    parser.add_argument(
+        "--remove-role",
+        action="append",
+        dest="remove_roles",
+        default=[],
+        help="remove this role from the selected users (repeatable)",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="show the result but roll back every write",
@@ -250,6 +353,9 @@ def main(argv: list[str] | None = None) -> int:
                 role_name=args.role,
                 emails=args.email,
                 dry_run=args.dry_run,
+                clone_role=args.clone_role,
+                exclude_permissions=args.exclude_permissions,
+                remove_roles=args.remove_roles,
             )
         except GrantError as exc:
             print(f"FAILED: {exc}")
