@@ -151,6 +151,10 @@ export function actionAllowed(application: Application, action: string, busy: bo
   return true;
 }
 
+export function canDeploy(permissions: string[]) {
+  return permissions.includes("apps.deployments.create");
+}
+
 export function canPlatformMutate(permissions: string[], permission: string) {
   return permissions.includes(permission) && permissions.includes("core.platform.admin");
 }

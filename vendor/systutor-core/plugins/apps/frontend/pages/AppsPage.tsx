@@ -8,7 +8,7 @@ import { useAuthStore } from "../../../../../../apps/web/src/features/auth/store
 import { useT } from "@/i18n/use-i18n";
 
 import { appsKeys, listApplications } from "../api";
-import { canPlatformMutate, isOwnedByTenant } from "../logic";
+import { canDeploy, canPlatformMutate, isOwnedByTenant } from "../logic";
 import type { Application, OperationSummary } from "../types";
 import { ApplicationDetail } from "../components/ApplicationDetail";
 import { CreateApplicationDialog } from "../components/CreateApplicationDialog";
@@ -27,7 +27,7 @@ export default function AppsPage() {
   const canReadDomains = permissions.includes("domains.domains.read");
   const canReveal = permissions.includes("apps.secrets.read");
   const platform = permissions.includes("core.platform.admin");
-  const canDeploy = canPlatformMutate(permissions, "apps.deployments.create");
+  const canDeployApp = canDeploy(permissions);
   const canDelete = canPlatformMutate(permissions, "apps.applications.delete");
   const [createOpen, setCreateOpen] = useState(false);
   const [selected, setSelected] = useState<Application | null>(null);
@@ -94,7 +94,7 @@ export default function AppsPage() {
     <CreateApplicationDialog open={createOpen} platform={platform} onClose={() => setCreateOpen(false)} onAccepted={accepted} />
     <ApplicationDetail key={selected?.id ?? "no-application"} application={selected} canCreate={canCreate} canManage={canManage}
       canManageDomains={canManageDomains} canReadDomains={canReadDomains}
-      canReveal={canReveal} canDeploy={canDeploy} canDelete={canDelete}
+      canReveal={canReveal} canDeploy={canDeployApp} canDelete={canDelete}
       onClose={() => setSelected(null)} onAccepted={operationAccepted} />
   </section>;
 }

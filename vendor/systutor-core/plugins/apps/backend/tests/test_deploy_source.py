@@ -85,15 +85,10 @@ def test_local_runtime_uses_shared_apps_state_root() -> None:
     }) == Path("/legacy/path")
 
 
-def test_deploy_and_delete_keep_the_platform_double_gate(tmp_path: Path) -> None:
+def test_delete_keeps_the_platform_gate(tmp_path: Path) -> None:
     db = database(tmp_path)
     user = db.get(User, "u1")
     request = SimpleNamespace(headers={})
-    with pytest.raises(AppError) as deploy:
-        router_module.deploy_application(
-            "a1", DeployRequest(), request, "key", db, context(), user,
-        )
-    assert deploy.value.status_code == 403
     with pytest.raises(AppError) as delete:
         router_module.delete_application(
             "a1", request, DeleteRequest(confirm="demo"), "key", db, context(), user,
@@ -123,7 +118,7 @@ def test_deploy_prepends_stable_managed_database_environment(tmp_path: Path) -> 
         request,
         "managed-key",
         db,
-        context(platform=True),
+        context(),
         user,
     )
     pending = resources.settings.state_root / "pending" / f"{operation.operation_id}.env"
@@ -149,7 +144,7 @@ def test_deploy_rejects_managed_database_override(tmp_path: Path) -> None:
     with pytest.raises(AppError) as error:
         router_module.deploy_application(
             "a1", DeployRequest(environment=[("APP_DB_NAME", "manual")]),
-            request, "managed-override", db, context(platform=True), user,
+            request, "managed-override", db, context(), user,
         )
     assert error.value.code == "apps.environment_managed"
 

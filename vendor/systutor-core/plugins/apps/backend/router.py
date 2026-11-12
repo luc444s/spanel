@@ -319,8 +319,6 @@ def deploy_application(
     context: TenantContext = Depends(get_current_tenant_context),
     user: User = Depends(require_permission("apps.deployments.create")),
 ) -> OperationView:
-    if not context.is_platform:
-        raise AppError("Platform permission required", status_code=403, code="apps.platform_required")
     app = catalog.get_application(db, context.current_tenant_id, application_id)
     cipher = _resources(request).cipher()
     tenant_environment = (

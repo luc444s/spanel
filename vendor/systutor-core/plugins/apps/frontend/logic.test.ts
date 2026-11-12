@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  canPlatformMutate, groupedFindings, hasBlockingFindings, isOwnedByTenant,
-  isTerminalOperation, parseDotenv,
+  canDeploy, canPlatformMutate, groupedFindings, hasBlockingFindings,
+  isOwnedByTenant, isTerminalOperation, parseDotenv,
 } from "./logic";
 import type { Finding } from "./types";
 
@@ -19,10 +19,16 @@ describe("Apps frontend safety logic", () => {
     expect(isTerminalOperation({ status: "queued" })).toBe(false);
   });
 
-  it("requires both the Apps permission and platform permission", () => {
-    expect(canPlatformMutate(["apps.deployments.create"], "apps.deployments.create")).toBe(false);
-    expect(canPlatformMutate(["core.platform.admin"], "apps.deployments.create")).toBe(false);
-    expect(canPlatformMutate(["core.platform.admin", "apps.deployments.create"], "apps.deployments.create")).toBe(true);
+  it("allows deploy with the RBAC permission only", () => {
+    expect(canDeploy(["apps.deployments.create"])).toBe(true);
+    expect(canDeploy(["core.platform.admin"])).toBe(false);
+    expect(canDeploy([])).toBe(false);
+  });
+
+  it("keeps destructive platform mutations double-gated", () => {
+    expect(canPlatformMutate(["apps.applications.delete"], "apps.applications.delete")).toBe(false);
+    expect(canPlatformMutate(["core.platform.admin"], "apps.applications.delete")).toBe(false);
+    expect(canPlatformMutate(["core.platform.admin", "apps.applications.delete"], "apps.applications.delete")).toBe(true);
   });
 
   it("keeps applications from another tenant read-only", () => {
