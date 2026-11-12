@@ -210,6 +210,7 @@ const messages: Record<string, string> = {
   "Needs Account → OAuth Clients → Edit. It is used once and never stored.": "Necesita Cuenta → Clientes OAuth → Editar. Se usa una vez y no se guarda.",
   "Account ID": "ID de cuenta",
   "Only needed when the token cannot list a single account.": "Solo hace falta si el token no puede listar una única cuenta.",
+  "Enter the Cloudflare Account ID shown in the account dashboard.": "Ingresa el Account ID de Cloudflare que aparece en el panel de la cuenta.",
   "The token cannot detect my account": "El token no detecta mi cuenta",
   "Redirect URI": "URI de redirección",
   "Open Cloudflare OAuth clients": "Abrir clientes OAuth de Cloudflare",

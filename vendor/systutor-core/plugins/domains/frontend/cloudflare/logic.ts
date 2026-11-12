@@ -72,6 +72,9 @@ export function cloudflareErrorMessage(
   httpStatus: number | null,
   code: string | null = null,
 ): string {
+  if (code === "domains.dns.cloudflare.account_id_required") {
+    return "Enter the Cloudflare Account ID shown in the account dashboard.";
+  }
   switch (httpStatus) {
     case 401:
       return "Your session expired. Sign in again.";

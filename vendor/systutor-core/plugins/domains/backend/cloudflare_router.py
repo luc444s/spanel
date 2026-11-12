@@ -109,6 +109,16 @@ def register_oauth_client(
             apply=True,
         )
     except CloudflareError as exc:
+        if str(exc) in {
+            "the token cannot list accounts; provide the Cloudflare account id",
+            "the token has no accessible Cloudflare account",
+            "the token can access multiple accounts; provide the Cloudflare account id",
+        }:
+            raise AppError(
+                "enter the Cloudflare Account ID shown in the account dashboard",
+                status_code=422,
+                code="domains.dns.cloudflare.account_id_required",
+            ) from exc
         raise _translate(exc) from exc
     raw_scopes = result.get("scopes")
     scopes = [str(name) for name in raw_scopes] if isinstance(raw_scopes, list) else []

@@ -56,6 +56,14 @@ export function CloudflareRegisterDialog({ open, redirectUri, onClose, onRegiste
       onRegistered();
       onClose();
     } catch (failure) {
+      if (
+        typeof failure === "object"
+        && failure !== null
+        && (failure as { code?: unknown }).code
+          === "domains.dns.cloudflare.account_id_required"
+      ) {
+        setShowAccount(true);
+      }
       setError(t(errorMessageFrom(failure)));
     } finally {
       setSaving(false);

@@ -365,3 +365,28 @@ def test_platform_registers_client_from_pasted_token(tmp_path: Path, monkeypatch
     finally:
         db.close()
         engine.dispose()
+
+
+def test_registration_requests_account_id_when_token_cannot_list_accounts(
+    tmp_path: Path, monkeypatch
+) -> None:
+    app, fake, db, holder, _cipher, engine = build_app(tmp_path, monkeypatch)
+    token = "bootstrap-token-canary"
+    try:
+        db.query(CloudflareOAuthClient).delete()
+        db.commit()
+        fake.list_token_accounts = lambda _token: []
+        holder["context"] = context("t1", "domains.dns.cloudflare", platform=True)
+        with TestClient(app) as client:
+            response = client.post(
+                "/api/v1/plugins/domains/dns/cloudflare/oauth/register",
+                json={"bootstrap_token": token},
+            )
+            assert response.status_code == 422
+            assert response.json()["error"]["code"] == (
+                "domains.dns.cloudflare.account_id_required"
+            )
+            assert token not in response.text
+    finally:
+        db.close()
+        engine.dispose()
