@@ -21,7 +21,7 @@ button.
 ### Backend surface
 
 Two routes, both authorized by the dedicated
-`domains.dns.cloudflare.register` permission. Neither `core.platform.admin` nor
+`domains.cloudflare.register` permission. Neither `core.platform.admin` nor
 `users.is_superadmin` is required:
 
 ```text
@@ -108,7 +108,7 @@ covered by the existing policy test file.
 ### Preconditions
 
 1. The user has `domains.dns.cloudflare` and the dedicated
-   `domains.dns.cloudflare.register` permission, assigned through a durable
+   `domains.cloudflare.register` permission, assigned through a durable
    tenant role (for example with `scripts/grant_tenant_permission.py`).
 2. The backend has a valid encryption key and public URL.
 3. The submitted token has `OAuth Clients: Edit` on the target account.
@@ -130,7 +130,7 @@ covered by the existing policy test file.
 
 ```yaml
 invariants:
-  - Registration endpoints require domains.dns.cloudflare.register; neither core.platform.admin nor users.is_superadmin is consulted.
+  - Registration endpoints require domains.cloudflare.register; neither core.platform.admin nor users.is_superadmin is consulted.
   - The bootstrap token is never persisted, audited, logged, echoed in validation errors or HTTP responses, and is cleared from the browser state on modal close.
   - The client secret is encrypted before persistence and never returned to the browser.
   - Registration never overwrites an existing client; conflict returns 409.

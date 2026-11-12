@@ -1,7 +1,7 @@
 import type { CloudflareStatus } from "./types";
 
 export const CLOUDFLARE_PERMISSION = "domains.dns.cloudflare";
-export const CLOUDFLARE_REGISTER_PERMISSION = "domains.dns.cloudflare.register";
+export const CLOUDFLARE_REGISTER_PERMISSION = "domains.cloudflare.register";
 export const CLOUDFLARE_POLL_INTERVAL_MS = 2000;
 export const CLOUDFLARE_FLOW_MAX_MS = 5 * 60 * 1000;
 

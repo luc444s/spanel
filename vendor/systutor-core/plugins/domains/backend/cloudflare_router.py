@@ -36,7 +36,7 @@ from systutor.kernel.tenants.context import TenantContext
 router = APIRouter(tags=["domains-cloudflare"])
 
 CLOUDFLARE = "domains.dns.cloudflare"
-CLOUDFLARE_REGISTER = "domains.dns.cloudflare.register"
+CLOUDFLARE_REGISTER = "domains.cloudflare.register"
 
 
 class _OAuthCallbackAccessLogFilter(logging.Filter):

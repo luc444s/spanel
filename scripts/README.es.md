@@ -84,7 +84,7 @@ python3 scripts/grant_tenant_permission.py \
   --tenant TENANT_SLUG \
   --email operador@example.com \
   --role cloudflare_registrar \
-  --permission domains.dns.cloudflare.register \
+  --permission domains.cloudflare.register \
   --dry-run
 
 # Repetir sin --dry-run después de revisar el plan.

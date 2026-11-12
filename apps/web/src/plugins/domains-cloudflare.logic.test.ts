@@ -33,7 +33,7 @@ describe("Cloudflare panel policy", () => {
 
   it("uses a dedicated permission to register the OAuth client", () => {
     const tenant = ["domains.dns.cloudflare"];
-    const registrar = [...tenant, "domains.dns.cloudflare.register"];
+    const registrar = [...tenant, "domains.cloudflare.register"];
     expect(canManageCloudflareClient(tenant)).toBe(false);
     expect(canManageCloudflareClient(registrar)).toBe(true);
     expect(needsClientRegistration({ registered: false })).toBe(true);

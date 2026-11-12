@@ -29,7 +29,7 @@
       "description": "Connect Cloudflare and read authorized zones and DNS records"
     },
     {
-      "name": "domains.dns.cloudflare.register",
+      "name": "domains.cloudflare.register",
       "description": "Register the shared Cloudflare OAuth client"
     }
   ]

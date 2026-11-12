@@ -350,7 +350,7 @@ def test_oauth_client_registration_routes_require_dedicated_permission(
             assert client.get(status_path).status_code == 403
 
             holder["context"] = context(
-                "t1", "domains.dns.cloudflare", "domains.dns.cloudflare.register"
+                "t1", "domains.dns.cloudflare", "domains.cloudflare.register"
             )
             status = client.get("/api/v1/plugins/domains/dns/cloudflare/oauth/client")
             assert status.status_code == 200
@@ -370,7 +370,7 @@ def test_platform_registers_client_from_pasted_token(tmp_path: Path, monkeypatch
         db.query(CloudflareOAuthClient).delete()
         db.commit()
         holder["context"] = context(
-            "t1", "domains.dns.cloudflare", "domains.dns.cloudflare.register"
+            "t1", "domains.dns.cloudflare", "domains.cloudflare.register"
         )
         with TestClient(app) as client:
             invalid = client.post(
@@ -414,7 +414,7 @@ def test_registration_requests_account_id_when_token_cannot_list_accounts(
         db.commit()
         fake.list_token_accounts = lambda _token: []
         holder["context"] = context(
-            "t1", "domains.dns.cloudflare", "domains.dns.cloudflare.register"
+            "t1", "domains.dns.cloudflare", "domains.cloudflare.register"
         )
         with TestClient(app) as client:
             response = client.post(
