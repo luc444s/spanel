@@ -54,7 +54,7 @@ function CertificateCell({
   // Un dominio reservado no tiene ruta ni certificado: no se consulta la red.
   if (!published || !readable) {
     return (
-      <span className="text-sm text-muted-foreground" title={t("Reserved domain, not published")}>
+      <span className="text-xs text-muted-foreground" title={t("Reserved domain, not published")}>
         {readable ? t("Not published") : t("Read only")}
       </span>
     );
@@ -66,14 +66,15 @@ function CertificateCell({
     : t("Not verified yet");
 
   return (
-    <div className="flex items-center gap-2">
-      <span className={`text-sm ${certificateTone(info)}`} title={tooltip}>
+    <div className="flex min-w-0 items-center gap-2">
+      <span className={`truncate text-xs ${certificateTone(info)}`} title={tooltip}>
         {certificateLabel(info)}
       </span>
       <Button
         type="button"
         variant="secondary"
         size="sm"
+        className="h-7 shrink-0 px-2 text-xs"
         onClick={() => void query.refetch()}
         disabled={query.isFetching}
       >
@@ -207,16 +208,24 @@ export default function DomainsPage() {
             : t("No domains yet. Add one to publish it in this tenant.")}
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-md border border-border">
-          <table className="w-full min-w-[640px] border-collapse text-sm">
-            <thead className="bg-muted text-left text-xs uppercase text-muted-foreground">
+        <div className="overflow-x-auto rounded-lg border border-border bg-card">
+          <table className="w-full min-w-[760px] table-fixed border-collapse text-sm">
+            <colgroup>
+              <col className="w-[29%]" />
+              {platform && <col className="w-[15%]" />}
+              <col className="w-[10%]" />
+              <col className="w-[12%]" />
+              <col className="w-[18%]" />
+              <col className="w-[16%]" />
+            </colgroup>
+            <thead className="bg-muted/70 text-left text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="px-3 py-2">{t("Domain")}</th>
-                {platform && <th className="px-3 py-2">{t("Tenant")}</th>}
-                <th className="px-3 py-2">{t("Status")}</th>
-                <th className="px-3 py-2">{t("Owner")}</th>
-                <th className="px-3 py-2">{t("Certificate")}</th>
-                <th className="px-3 py-2 text-right">{t("Actions")}</th>
+                <th className="px-3 py-2.5 font-medium">{t("Domain")}</th>
+                {platform && <th className="px-3 py-2.5 font-medium">{t("Tenant")}</th>}
+                <th className="px-3 py-2.5 font-medium">{t("Status")}</th>
+                <th className="px-3 py-2.5 font-medium">{t("Owner")}</th>
+                <th className="px-3 py-2.5 font-medium">{t("Certificate")}</th>
+                <th className="px-3 py-2.5 text-right font-medium">{t("Actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -225,78 +234,105 @@ export default function DomainsPage() {
                 const published = item.published ?? true;
                 const isOwned = !item.tenant_id || item.tenant_id === currentTenant?.id;
                 return (
-                  <tr key={item.domain} className="border-t border-border">
-                    <td className="px-3 py-2 font-medium text-foreground">
-                      {item.domain}
-                      {extraConflict && (
-                        <span
-                          className="ml-2 rounded bg-red-100 px-1.5 py-0.5 text-xs
-                            text-red-700"
-                        >
-                          {t("Two owners")}
+                  <tr
+                    key={item.domain}
+                    className="border-t border-border/70 transition-colors hover:bg-muted/30"
+                  >
+                    <td className="px-3 py-3 font-medium text-foreground">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span className="truncate" title={item.domain}>
+                          {item.domain}
                         </span>
-                      )}
+                        {extraConflict && (
+                          <span
+                            className="shrink-0 rounded bg-red-100 px-1.5 py-0.5 text-xs
+                              font-medium text-red-700"
+                          >
+                            {t("Two owners")}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     {platform && (
-                      <td className="px-3 py-2 text-muted-foreground">
-                        {item.tenant_name ?? item.tenant_id ?? "—"}
+                      <td className="px-3 py-3 text-muted-foreground">
+                        <div
+                          className="truncate"
+                          title={item.tenant_name ?? item.tenant_id ?? undefined}
+                        >
+                          {item.tenant_name ?? item.tenant_id ?? "—"}
+                        </div>
                       </td>
                     )}
-                    <td className="px-3 py-2">
-                      {published ? (
-                        <span className="text-muted-foreground">{t("Published")}</span>
-                      ) : (
-                        <span className="text-amber-600">{t("Not published")}</span>
-                      )}
+                    <td className="px-3 py-3">
+                      <span
+                        className={`inline-flex items-center gap-1.5 whitespace-nowrap
+                          text-xs font-medium ${
+                            published ? "text-emerald-600" : "text-amber-600"
+                          }`}
+                      >
+                        <span
+                          className={`h-1.5 w-1.5 rounded-full ${
+                            published ? "bg-emerald-500" : "bg-amber-500"
+                          }`}
+                        />
+                        {published ? t("Published") : t("Not published")}
+                      </span>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-3">
                       {item.owner === "hosting" ? (
-                        <span className="text-muted-foreground" title={t("Managed by Hosting")}>
-                          {t("Hosting")} 🔒
+                        <span
+                          className="inline-flex items-center gap-1 whitespace-nowrap
+                            rounded-full border border-border bg-muted px-2 py-0.5 text-xs
+                            text-muted-foreground"
+                          title={t("Managed by Hosting")}
+                        >
+                          {t("Hosting")} <span aria-hidden>🔒</span>
                         </span>
-                      ) : published ? (
-                        <span className="text-foreground">{t("Extra")}</span>
                       ) : (
-                        <span className="text-foreground">{t("Domain")}</span>
+                        <span className="text-xs text-foreground">
+                          {published ? t("Extra") : t("Domain")}
+                        </span>
                       )}
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-3">
                       <CertificateCell
                         domain={item.domain}
                         published={published}
                         readable={isOwned}
                       />
                     </td>
-                    <td className="px-3 py-2 text-right">
-                      {item.owner === "domains" && canManage && isOwned && item.editable && (
-                        <span className="inline-flex gap-2">
-                          {!published && ownSites.length > 0 && (
+                    <td className="px-3 py-3">
+                      <div className="flex items-center justify-end gap-1.5">
+                        {item.owner === "domains" && canManage && isOwned && item.editable && (
+                          <>
+                            {!published && ownSites.length > 0 && (
+                              <Button
+                                variant="secondary"
+                                className="h-7 whitespace-nowrap px-2 text-xs"
+                                onClick={() => openLink(item)}
+                              >
+                                {t("Link")}
+                              </Button>
+                            )}
                             <Button
                               variant="secondary"
-                              size="sm"
-                              onClick={() => openLink(item)}
+                              className="h-7 whitespace-nowrap px-2 text-xs"
+                              onClick={() => setRemoving(item)}
                             >
-                              {t("Link")}
+                              {t("Remove")}
                             </Button>
-                          )}
+                          </>
+                        )}
+                        {extraConflict && canManage && isOwned && item.owner !== "domains" && (
                           <Button
                             variant="secondary"
-                            size="sm"
+                            className="h-7 whitespace-nowrap px-2 text-xs"
                             onClick={() => setRemoving(item)}
                           >
-                            {t("Remove")}
+                            {t("Remove extra")}
                           </Button>
-                        </span>
-                      )}
-                      {extraConflict && canManage && isOwned && item.owner !== "domains" && (
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => setRemoving(item)}
-                        >
-                          {t("Remove extra")}
-                        </Button>
-                      )}
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
