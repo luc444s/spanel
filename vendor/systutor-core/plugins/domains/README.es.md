@@ -180,7 +180,8 @@ El backend y la CLI pueden conectar un tenant con Cloudflare mediante
 Authorization Code con PKCE S256. Esta capa es **de solo lectura**: lista
 cuentas autorizadas, zonas y registros DNS redactados, pero no tiene ningún
 endpoint que cree, edite o elimine registros, zonas, nameservers ni proxy.
-Todavía no existe interfaz web.
+La A.SPEC 0072 añade una tarjeta de conexión de Cloudflare, con alcance de
+tenant, en la página de Dominios para usuarios con `domains.dns.cloudflare`.
 
 Configuración del host:
 
@@ -220,14 +221,24 @@ retorna de inmediato. `disconnect` es dry-run salvo `--apply`; revoca
 best-effort y elimina credenciales locales de forma idempotente. Todos aceptan
 `--json`; el contenido de registros siempre se redacta.
 
+### Panel
+
+Los usuarios con `domains.dns.cloudflare` ven una tarjeta de Cloudflare en la
+página de Dominios. **Conectar Cloudflare** pide al backend la URL de
+autorización, la abre en una ventana y consulta el estado autenticado cada dos
+segundos hasta que el flujo termina o expira. Un administrador de tenant puede
+conectar y desconectar el suyo; el cliente OAuth se sigue registrando una vez
+desde la CLI del operador de plataforma. El navegador nunca recibe tokens,
+client secrets ni contenido de registros.
+
 ### API
 
 | Método | Ruta | Permiso |
 |---|---|---|
-| POST | `/api/v1/plugins/domains/dns/cloudflare/oauth/start` | `domains.dns.cloudflare` + `core.platform.admin` |
+| POST | `/api/v1/plugins/domains/dns/cloudflare/oauth/start` | `domains.dns.cloudflare` |
 | GET | `/api/v1/plugins/domains/dns/cloudflare/oauth/callback` | público, solo state hasheado de un uso |
 | GET | `/api/v1/plugins/domains/dns/cloudflare/status` | `domains.dns.cloudflare` |
-| POST | `/api/v1/plugins/domains/dns/cloudflare/disconnect` | `domains.dns.cloudflare` + `core.platform.admin` |
+| POST | `/api/v1/plugins/domains/dns/cloudflare/disconnect` | `domains.dns.cloudflare` |
 | GET | `/api/v1/plugins/domains/dns/cloudflare/zones` | `domains.dns.cloudflare` |
 | GET | `/api/v1/plugins/domains/dns/cloudflare/zones/{zone_id}/records` | `domains.dns.cloudflare` |
 

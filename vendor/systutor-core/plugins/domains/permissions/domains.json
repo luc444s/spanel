@@ -26,7 +26,7 @@
     },
     {
       "name": "domains.dns.cloudflare",
-      "description": "Connect Cloudflare and read authorized zones and DNS records (platform administrator only for connect/disconnect)"
+      "description": "Connect Cloudflare and read authorized zones and DNS records"
     }
   ]
 }

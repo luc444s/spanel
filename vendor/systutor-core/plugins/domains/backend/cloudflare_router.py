@@ -63,9 +63,7 @@ def _translate(exc: CloudflareError) -> AppError:
 def start_oauth(
     request: Request,
     tenant_context: TenantContext = Depends(get_current_tenant_context),
-    _current_user: User = Depends(
-        require_permission(CLOUDFLARE, platform_only=True)
-    ),
+    _current_user: User = Depends(require_permission(CLOUDFLARE)),
     db: Session = Depends(get_db_session),
 ) -> OAuthStartResponse:
     try:
@@ -114,9 +112,7 @@ def disconnect(
     request: Request,
     body: DisconnectRequest | None = None,
     tenant_context: TenantContext = Depends(get_current_tenant_context),
-    _current_user: User = Depends(
-        require_permission(CLOUDFLARE, platform_only=True)
-    ),
+    _current_user: User = Depends(require_permission(CLOUDFLARE)),
     db: Session = Depends(get_db_session),
 ) -> DisconnectResponse:
     apply = True if body is None else body.apply

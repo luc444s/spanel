@@ -181,11 +181,11 @@ def test_status_requires_cloudflare_permission_and_tenant_scope(
         engine.dispose()
 
 
-def test_start_and_disconnect_are_platform_only(tmp_path: Path, monkeypatch) -> None:
+def test_start_and_disconnect_are_tenant_scoped(tmp_path: Path, monkeypatch) -> None:
     app, fake, db, holder, _cipher, engine = build_app(tmp_path, monkeypatch)
     try:
         with TestClient(app) as client:
-            holder["context"] = context("t1", "domains.dns.cloudflare")
+            holder["context"] = context("t1", "domains.dns.read")
             assert (
                 client.post("/api/v1/plugins/domains/dns/cloudflare/oauth/start").status_code
                 == 403
@@ -195,7 +195,9 @@ def test_start_and_disconnect_are_platform_only(tmp_path: Path, monkeypatch) -> 
                 == 403
             )
 
-            holder["context"] = context("t1", "domains.dns.cloudflare", platform=True)
+            # A tenant administrator with the plugin permission no longer needs
+            # core.platform.admin to authorize or remove its own connection.
+            holder["context"] = context("t1", "domains.dns.cloudflare")
             started = client.post("/api/v1/plugins/domains/dns/cloudflare/oauth/start")
             assert started.status_code == 200
             body = started.json()
@@ -203,6 +205,13 @@ def test_start_and_disconnect_are_platform_only(tmp_path: Path, monkeypatch) -> 
             assert body["flow_id"]
             assert "secret-canary" not in started.text
 
+            holder["context"] = context("t2", "domains.dns.cloudflare")
+            foreign = client.post("/api/v1/plugins/domains/dns/cloudflare/disconnect")
+            assert foreign.status_code == 200
+            assert foreign.json()["already_disconnected"] is True
+            assert db.query(CloudflareConnection).count() == 1
+
+            holder["context"] = context("t1", "domains.dns.cloudflare")
             planned = client.post(
                 "/api/v1/plugins/domains/dns/cloudflare/disconnect", json={"apply": False}
             )

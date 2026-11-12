@@ -20,7 +20,8 @@
     "domains.domains.manage",
     "domains.dns.read",
     "domains.dns.records",
-    "domains.dns.zones"
+    "domains.dns.zones",
+    "domains.dns.cloudflare"
   ],
   "events": [
     "domains.domain.added",

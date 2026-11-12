@@ -17,6 +17,7 @@ import { Input } from "@systutor/shell/ui/input";
 import { toast } from "@systutor/shell/ui/toast";
 import { t } from "@/i18n";
 import { DomainsTable } from "../components/DomainsTable";
+import { CloudflareConnectionCard } from "../cloudflare/CloudflareConnectionCard";
 import { DnsZoneDialog } from "../dns/DnsZoneDialog";
 import { NameserversDialog } from "../dns/NameserversDialog";
 import { dnsKeys, listZones } from "../dns/api";
@@ -149,6 +150,11 @@ export default function DomainsPage() {
           {canManage && <Button size="sm" onClick={openAdd}>{t("Add domain")}</Button>}
         </div>
       </div>
+
+      <CloudflareConnectionCard
+        permissions={permissions}
+        onConnected={() => void zonesQuery.refetch()}
+      />
 
       {domainsQuery.isError && (
         <Alert title={t("Could not load domains")}>
