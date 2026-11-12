@@ -287,6 +287,20 @@ They are not day-to-day administration tools. Use them only in a prepared
 lab and review their variables/requirements with `--help` and their tests in
 `scripts/tests/`.
 
+### `configure_powerdns.sh`
+
+Automates the authoritative lab and the panel's private deployment. The plan
+is read-only; `apply` starts PowerDNS, generates mode-`0600` `.env.powerdns`,
+mounts the key by path (never by value), rebuilds the panel and verifies the
+authenticated API from the `app` container.
+
+```bash
+scripts/configure_powerdns.sh plan
+scripts/configure_powerdns.sh apply
+scripts/configure_powerdns.sh status
+scripts/configure_powerdns.sh verify
+```
+
 ## Domains, proxy and static sites
 
 ### `domains_sync.py`
