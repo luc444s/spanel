@@ -81,6 +81,8 @@ class CloudflareConfig:
         )
         public_url = _clean(env.get("SPANEL_CLOUDFLARE_PUBLIC_URL")).rstrip("/")
         if not public_url:
+            public_url = _clean(env.get("SPANEL_APPS_PUBLIC_URL")).rstrip("/")
+        if not public_url:
             domain = _clean(env.get("SPANEL_DOMAIN"))
             if domain:
                 public_url = f"https://{domain}"
@@ -89,7 +91,8 @@ class CloudflareConfig:
 
         if not public_url:
             raise CloudflareConfigError(
-                "SPANEL_DOMAIN or SPANEL_CLOUDFLARE_PUBLIC_URL is required"
+                "SPANEL_APPS_PUBLIC_URL, SPANEL_DOMAIN or "
+                "SPANEL_CLOUDFLARE_PUBLIC_URL is required"
             )
         parts = urlsplit(public_url)
         if parts.scheme != "https" or not parts.hostname:

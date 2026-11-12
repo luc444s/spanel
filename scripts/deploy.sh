@@ -38,7 +38,33 @@ PY
 }
 
 SPANEL_DOMAIN_VALUE=${SPANEL_DOMAIN:-$(read_env_value "$ENV_DOCKER" SPANEL_DOMAIN)}
-[[ -n "$SPANEL_DOMAIN_VALUE" ]] || fail "SPANEL_DOMAIN is required in $ENV_DOCKER"
+if [[ -z "$SPANEL_DOMAIN_VALUE" ]]; then
+  SPANEL_APPS_PUBLIC_URL_VALUE=${SPANEL_APPS_PUBLIC_URL:-$(
+    read_env_value "$ENV_DOCKER" SPANEL_APPS_PUBLIC_URL
+  )}
+  [[ -n "$SPANEL_APPS_PUBLIC_URL_VALUE" ]] || fail \
+    "SPANEL_DOMAIN or SPANEL_APPS_PUBLIC_URL is required in $ENV_DOCKER"
+  SPANEL_DOMAIN_VALUE=$(python3 - "$SPANEL_APPS_PUBLIC_URL_VALUE" <<'PY'
+import sys
+from urllib.parse import urlsplit
+
+value = sys.argv[1].rstrip("/")
+parts = urlsplit(value)
+if (
+    parts.scheme != "https"
+    or not parts.hostname
+    or parts.username
+    or parts.password
+    or parts.path not in {"", "/"}
+    or parts.query
+    or parts.fragment
+):
+    raise SystemExit("ERROR: SPANEL_APPS_PUBLIC_URL must be an HTTPS origin")
+print(parts.hostname)
+PY
+  )
+fi
+export SPANEL_DOMAIN=$SPANEL_DOMAIN_VALUE
 
 KEY_PATH_VALUE=${SPANEL_APPS_ENCRYPTION_KEY_PATH:-$(
   read_env_value "$ENV_DOCKER" SPANEL_APPS_ENCRYPTION_KEY_PATH

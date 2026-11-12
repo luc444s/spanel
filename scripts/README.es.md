@@ -68,8 +68,9 @@ falta, la valida cuando existe y nunca la rota.
 ./scripts/deploy.sh
 ```
 
-Requiere `.env.docker`, `.env.powerdns` y `SPANEL_DOMAIN`. Para seleccionar
-otra ruta de clave, define `SPANEL_APPS_ENCRYPTION_KEY_PATH` en `.env.docker`.
+Requiere `.env.docker`, `.env.powerdns` y `SPANEL_APPS_PUBLIC_URL` o
+`SPANEL_DOMAIN`. Para seleccionar otra ruta de clave, define
+`SPANEL_APPS_ENCRYPTION_KEY_PATH` en `.env.docker`.
 
 ## Hosting y WordPress
 

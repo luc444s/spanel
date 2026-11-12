@@ -68,8 +68,9 @@ mode `600` when absent, validates it when present, and never rotates it.
 ./scripts/deploy.sh
 ```
 
-Requires `.env.docker`, `.env.powerdns`, and `SPANEL_DOMAIN`. To select another
-key location, set `SPANEL_APPS_ENCRYPTION_KEY_PATH` in `.env.docker`.
+Requires `.env.docker`, `.env.powerdns`, and either `SPANEL_APPS_PUBLIC_URL` or
+`SPANEL_DOMAIN`. To select another key location, set
+`SPANEL_APPS_ENCRYPTION_KEY_PATH` in `.env.docker`.
 
 ## Hosting and WordPress
 

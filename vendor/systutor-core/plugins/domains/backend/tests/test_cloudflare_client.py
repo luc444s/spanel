@@ -120,6 +120,17 @@ def test_config_derives_cloudflare_defaults_from_spanel_domain() -> None:
     assert parsed.timeout_seconds == 10
 
 
+def test_config_uses_existing_apps_public_url() -> None:
+    parsed = CloudflareConfig.from_env(
+        {"SPANEL_APPS_PUBLIC_URL": "https://spanel.systutor.com"}
+    )
+    assert parsed.public_url == "https://spanel.systutor.com"
+    assert parsed.redirect_uri == (
+        "https://spanel.systutor.com"
+        "/api/v1/plugins/domains/dns/cloudflare/oauth/callback"
+    )
+
+
 def test_default_transport_identifies_paneltutor_instead_of_python_urllib(monkeypatch) -> None:
     captured = {}
 

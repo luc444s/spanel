@@ -183,11 +183,12 @@ for users with `domains.dns.cloudflare`.
 Host configuration is derived automatically from the normal Spanel deployment:
 
 ```text
-SPANEL_DOMAIN=spanel.example.com
+SPANEL_APPS_PUBLIC_URL=https://spanel.example.com
 ```
 
-This selects `/run/secrets/apps_key`, `https://${SPANEL_DOMAIN}` and a 10-second
-timeout. `SPANEL_CLOUDFLARE_ENCRYPTION_KEY_FILE`,
+This selects `/run/secrets/apps_key`, the same public URL and a 10-second
+timeout. `SPANEL_DOMAIN` is also accepted for deployments that use it.
+`SPANEL_CLOUDFLARE_ENCRYPTION_KEY_FILE`,
 `SPANEL_CLOUDFLARE_PUBLIC_URL` and `SPANEL_CLOUDFLARE_TIMEOUT_SECONDS` remain
 optional advanced overrides.
 

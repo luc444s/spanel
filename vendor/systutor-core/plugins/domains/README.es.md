@@ -186,11 +186,12 @@ tenant, en la página de Dominios para usuarios con `domains.dns.cloudflare`.
 La configuración se deriva automáticamente del despliegue normal de Spanel:
 
 ```text
-SPANEL_DOMAIN=spanel.example.com
+SPANEL_APPS_PUBLIC_URL=https://spanel.example.com
 ```
 
-Esto selecciona `/run/secrets/apps_key`, `https://${SPANEL_DOMAIN}` y un timeout
-de 10 segundos. `SPANEL_CLOUDFLARE_ENCRYPTION_KEY_FILE`,
+Esto selecciona `/run/secrets/apps_key`, la misma URL pública y un timeout de 10
+segundos. `SPANEL_DOMAIN` también se acepta en despliegues que la utilicen.
+`SPANEL_CLOUDFLARE_ENCRYPTION_KEY_FILE`,
 `SPANEL_CLOUDFLARE_PUBLIC_URL` y `SPANEL_CLOUDFLARE_TIMEOUT_SECONDS` siguen
 disponibles como overrides avanzados opcionales.
 
