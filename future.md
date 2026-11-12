@@ -211,3 +211,153 @@ un dominio nuevo de correo; solo lo refleja si el tenant y la cuenta coinciden.
 El que desbloquea todo es **certificado de correo por dominio con DNS-01 de
 Cloudflare**: resuelve proxied, evita depender de puertos 80/443 en el origen
 y elimina el caso especial de un solo dominio del laboratorio.
+
+---
+
+## Reorientación 2026-11-12 — PowerDNS Authoritative
+
+La dirección nueva reemplaza la integración Cloudflare como objetivo principal:
+PanelTutor administrará zonas propias mediante PowerDNS Authoritative. La primera
+etapa migrará un solo dominio piloto fuera de Cloudflare y publicará dos
+nameservers (`ns1` y `ns2`), aunque inicialmente puedan apuntar al mismo servidor
+PowerDNS. El resto de dominios permanece sin cambios en Cloudflare.
+
+### Decisión de interfaz: la zona se abre desde el dominio
+
+Una zona DNS no tendrá una página ni un flujo paralelo. El punto de entrada es
+la tabla existente de **Dominios**:
+
+- doble clic sobre una fila abre la zona DNS correspondiente;
+- `Enter` sobre la fila y una acción visible **DNS** ofrecen el mismo acceso por
+  teclado y para usuarios que no descubran el doble clic;
+- el diálogo reutiliza `Dialog` con ancho máximo de `800px`;
+- si el dominio pertenece a una zona PowerDNS administrada, abre directamente
+  sus registros;
+- si todavía usa Cloudflare o no tiene zona administrada, abre el estado y la
+  acción **Activar zona DNS**; no crea una zona automáticamente;
+- no habrá un botón global de creación **Zonas DNS** en el MVP: primero debe
+  existir un dominio propiedad del tenant.
+
+Flujo:
+
+```text
+Agregar/reservar dominio
+        ↓
+Doble clic en la fila
+        ↓
+¿Existe zona PowerDNS administrada?
+        ├─ Sí → abrir Registros
+        └─ No → mostrar proveedor/estado y Activar zona DNS
+```
+
+El diálogo inicial tendrá solo dos pestañas implementadas:
+
+1. **Registros** — listar, buscar, crear, editar y eliminar RRsets de la zona.
+2. **Zona** — SOA, serial, `ns1`/`ns2`, salud de ambos nombres y estado de la
+   delegación pública.
+
+DNSSEC queda para una fase posterior. Los cambios se registran en la auditoría
+general existente, por lo que el MVP no necesita una pestaña propia de
+Actividad.
+
+### Decisión de interfaz: Nameservers y Configurar
+
+La cabecera de Dominios tendrá una acción global **Nameservers**. Abre el estado
+de `ns1` y `ns2`: hostname, IP, resolución pública, salud de PowerDNS y pruebas
+TCP/UDP 53. Ambos nombres pueden apuntar inicialmente al mismo servidor; la UI
+debe advertir que no existe redundancia física.
+
+El diálogo incluye **Configurar**, visible solo con `core.platform.admin`. Esa
+acción administra:
+
+- hostname público de `ns1` y `ns2`;
+- IPv4 e IPv6 públicas;
+- contacto SOA;
+- TTL predeterminado.
+
+Antes de guardar muestra una validación y el impacto sobre zonas existentes. No
+crea glue records ni cambia el registrador: muestra las instrucciones. La URL y
+la API key de PowerDNS son secretos de infraestructura configurados por archivo
+o entorno y nunca se muestran ni editan desde el navegador.
+
+## Plan de entrega — cuatro A.SPECs
+
+### A.SPEC 0066 — PowerDNS Authoritative en contenedor y laboratorio
+
+Objetivo: instalar y demostrar la infraestructura antes de conectarla al panel.
+
+- PowerDNS Authoritative y su base PostgreSQL en contenedores.
+- Una sola instancia PowerDNS para `ns1` y `ns2` en esta etapa.
+- API PowerDNS únicamente en red interna o loopback.
+- DNS público por TCP/UDP 53; puertos alternativos aislados en laboratorio.
+- Secretos fuera de Compose y permisos mínimos.
+- Healthchecks, instalación, estado y eliminación segura del laboratorio.
+- Zona de prueba y evidencia real con `dig` por UDP, TCP y consulta SOA.
+- Detección explícita de conflicto si BIND u otro daemon ya ocupa el puerto 53.
+
+No incluye API de PanelTutor, frontend, migración Cloudflare, DNSSEC, AXFR ni un
+segundo servidor físico.
+
+### A.SPEC 0067 — CLI operativo y backend DNS sobre la API PowerDNS
+
+Orden interno obligatorio: primero se prueba el contrato mediante scripts de
+operador; después se expone desde FastAPI reutilizando la misma implementación,
+sin duplicar comandos ni lógica.
+
+CLI inicial:
+
+```text
+doctor
+nameservers show|plan|apply|verify
+zones list|create|show|delete
+rrsets list|plan|apply|delete
+zone import|export
+```
+
+Backend:
+
+- cliente PowerDNS con timeout, redacción de secretos y errores normalizados;
+- propiedad tenant ↔ zona en PostgreSQL; PowerDNS sigue siendo autoridad de los
+  RRsets;
+- resolución dominio/subdominio → zona administrada más cercana;
+- CRUD de zonas y RRsets con preview/apply y versión optimista;
+- configuración pública de `ns1`, `ns2`, IP, SOA y TTL;
+- permisos separados de lectura, registros, zonas y configuración;
+- auditoría y eventos para toda escritura;
+- validación de A, AAAA, CNAME, MX, TXT, CAA, SRV y NS;
+- aislamiento estricto por tenant.
+
+La API key y URL administrativa de PowerDNS permanecen en secretos de host, no
+en las tablas ni en respuestas HTTP.
+
+### A.SPEC 0068 — Frontend DNS integrado en Dominios
+
+- Acción global **Nameservers** junto a las acciones de la cabecera.
+- Estado y verificación de `ns1`/`ns2`.
+- Diálogo **Configurar nameservers** solo para plataforma.
+- Columna/estado DNS y acción visible **DNS** por dominio.
+- Doble clic y `Enter` abren la zona del dominio.
+- `Dialog` responsivo con máximo `800px`.
+- Dominio sin zona: estado externo/no administrado y **Activar zona DNS**.
+- Zona administrada: pestañas **Registros** y **Zona**.
+- Editor estructurado por RRset, búsqueda, filtros, preview y confirmaciones.
+- Estados de carga, error, solo lectura y conflicto de versión.
+- i18n English-first y traducciones españolas.
+
+### A.SPEC 0069 — E2E real PowerDNS + API + frontend
+
+- Levantar el laboratorio desde cero con recursos etiquetados.
+- Configurar `ns1` y `ns2` sobre la misma instancia del lab.
+- Crear una zona piloto desde PanelTutor.
+- Abrirla por doble clic en Dominios.
+- Crear, editar y eliminar RRsets desde la UI.
+- Confirmar respuestas reales con `dig` por UDP y TCP.
+- Verificar SOA, serial, NS y consistencia API ↔ respuesta autoritativa.
+- Probar permisos tenant/plataforma y aislamiento entre tenants.
+- Probar reintento, PowerDNS caído y conflicto optimista.
+- Limpiar únicamente recursos propios del laboratorio.
+
+La delegación real del dominio piloto desde Cloudflare será una aceptación
+manual y opt-in: exportar/comparar la zona, revisar registros proxied y DNSSEC,
+bajar TTL, crear glue si corresponde, cambiar ambos NS y conservar Cloudflare
+como rollback. No formará parte de los tests automáticos normales.

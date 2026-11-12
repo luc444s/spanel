@@ -74,3 +74,40 @@ class DomainSyncState(Base):
     orphan_count: Mapped[int] = mapped_column(Integer, default=0)
     invalid_count: Mapped[int] = mapped_column(Integer, default=0)
     last_error: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+
+
+class DnsZoneOwnership(Base):
+    """PostgreSQL ownership authority for one PowerDNS zone."""
+
+    __tablename__ = "domains_dns_zones"
+    __table_args__ = (UniqueConstraint("zone_name"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    zone_name: Mapped[str] = mapped_column(String(253), index=True)
+    kind: Mapped[str] = mapped_column(String(16), default="Native")
+    observed_version: Mapped[str] = mapped_column(String(64), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+class DnsPublicSettings(Base):
+    """Singleton public nameserver contract (never stores URL or key)."""
+
+    __tablename__ = "domains_dns_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    ns1_hostname: Mapped[str] = mapped_column(String(253))
+    ns2_hostname: Mapped[str] = mapped_column(String(253))
+    ns1_ipv4: Mapped[str | None] = mapped_column(String(45), nullable=True)
+    ns1_ipv6: Mapped[str | None] = mapped_column(String(45), nullable=True)
+    ns2_ipv4: Mapped[str | None] = mapped_column(String(45), nullable=True)
+    ns2_ipv6: Mapped[str | None] = mapped_column(String(45), nullable=True)
+    soa_contact: Mapped[str] = mapped_column(String(253))
+    default_ttl: Mapped[int] = mapped_column(Integer, default=300)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )

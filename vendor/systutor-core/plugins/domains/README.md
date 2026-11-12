@@ -81,3 +81,92 @@ transport, operations answer `503 domains.proxy_unavailable`.
 `python3 scripts/proxy_domain.py` keeps the `doctor`, `list`, `add`, `status` and
 `remove` commands. The implementation lives in `backend/proxy/`; the script is a
 shim.
+
+## Authoritative DNS (A.SPEC 0067)
+
+The plugin operates PowerDNS Authoritative through one shared
+`PowerDnsClient`. The CLI and FastAPI use the same client, validation,
+versioning and zone-file modules; neither shells out nor implements a second
+HTTP path.
+
+Host-owned configuration:
+
+```text
+SPANEL_PDNS_API_URL
+SPANEL_PDNS_API_KEY_FILE
+SPANEL_PDNS_SERVER_ID=localhost
+SPANEL_PDNS_TIMEOUT_SECONDS=5
+```
+
+The key file must be regular and owner-only. There is no plaintext key
+fallback and the URL/key are never returned by the API, written to the
+database, logged or included in CLI JSON.
+
+PostgreSQL owns tenant-to-zone ownership (`domains_dns_zones`) and the public
+nameserver contract (`domains_dns_settings`). PowerDNS owns SOA, NS and every
+RRset. A zone belongs to exactly one tenant. `ns1` and `ns2` may share one
+address and the API always reports that this is **not physical redundancy**.
+
+### CLI
+
+```text
+python3 scripts/spanel_dns.py doctor
+python3 scripts/spanel_dns.py nameservers show|plan|apply|verify
+python3 scripts/spanel_dns.py zones list|create|show|delete
+python3 scripts/spanel_dns.py rrsets list|plan|apply|delete
+python3 scripts/spanel_dns.py zone import|export
+```
+
+Mutations are plans unless `--apply` is present. Destructive deletion requires
+`--confirm-zone` or `--confirm-name` when stdin is not interactive. Exit codes:
+`0` success/no drift, `2` validation, `3` drift/unapplied plan, `4` conflict,
+`5` PowerDNS unavailable, `6` ownership/data. `--json` output is sorted and
+stable.
+
+`nameservers verify --zone ... --resolver ... --port ...` performs real UDP and
+TCP SOA/NS queries.
+
+### API
+
+| Method | Path | Permission |
+|---|---|---|
+| GET | `/api/v1/plugins/domains/dns/doctor` | `domains.dns.read` |
+| GET | `/api/v1/plugins/domains/dns/nameservers` | `domains.dns.read` |
+| POST | `/api/v1/plugins/domains/dns/nameservers/plan` | `domains.dns.read` |
+| POST | `/api/v1/plugins/domains/dns/nameservers/apply` | `domains.dns.nameservers` + `core.platform.admin` |
+| POST | `/api/v1/plugins/domains/dns/nameservers/verify` | `domains.dns.read` |
+| GET/POST | `/api/v1/plugins/domains/dns/zones` | `domains.dns.read` / `domains.dns.zones` |
+| GET/DELETE | `/api/v1/plugins/domains/dns/zones/{zone_name}` | `domains.dns.read` / `domains.dns.zones` |
+| GET | `/api/v1/plugins/domains/dns/resolve?domain=...` | `domains.dns.read` |
+| GET | `/api/v1/plugins/domains/dns/zones/{zone_name}/rrsets` | `domains.dns.read` |
+| POST | `/api/v1/plugins/domains/dns/zones/{zone_name}/rrsets/plan` | `domains.dns.records` |
+| POST | `/api/v1/plugins/domains/dns/zones/{zone_name}/rrsets/apply` | `domains.dns.records` |
+| POST | `/api/v1/plugins/domains/dns/zones/{zone_name}/rrsets/delete` | `domains.dns.records` |
+| POST/GET | `/api/v1/plugins/domains/dns/zones/{zone_name}/import` / `export` | `domains.dns.records` / `domains.dns.read` |
+
+Tenant administrators receive read, records and zones by default. They never
+receive nameserver configuration. Every write requires an explicit
+`expected_version`; a stale or externally changed zone returns `409`.
+TXT values are never copied to audit rows: only owner, type, count and hash.
+`nameservers plan` reports one entry per approved zone with its current
+fingerprint in `version` (also exposed as `zone_versions`). `nameservers apply`
+requires `--zone ZONE --zone-version ZONE=VERSION` for every approved existing
+zone and rejects missing/stale versions with conflict before changing
+PowerDNS. `--no-zones` explicitly approves an empty set, which is the safe
+bootstrap path for persisting the first public settings; omitting the zone
+flags is never interpreted as “all zones”.
+
+### Domains DNS interface (A.SPEC 0068)
+
+The Domains page reads the tenant zone list once and shows `Managed`,
+`External`, `No zone` or `Error` for every domain. An owned row opens its DNS
+zone on double click or `Enter`; there is deliberately no per-row DNS button.
+The zone dialog supports RRset search/filter, structured plan/apply with the
+plan version, protected apex SOA/NS records, import/export and exact-name zone
+deletion. Conflicts are shown and are never retried automatically.
+
+The global **Nameservers** dialog displays and verifies UDP/TCP state.
+Configuration requires both `domains.dns.nameservers` and
+`core.platform.admin`, plans all explicitly listed owned zones and always
+sends an explicit approved set. An empty set is reserved for first-settings
+bootstrap. Registrar delegation, DNSSEC and Cloudflare remain outside the UI.

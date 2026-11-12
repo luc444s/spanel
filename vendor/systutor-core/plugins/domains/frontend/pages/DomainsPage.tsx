@@ -18,6 +18,11 @@ import { Dialog } from "@systutor/shell/ui/dialog";
 import { Input } from "@systutor/shell/ui/input";
 import { toast } from "@systutor/shell/ui/toast";
 import { t } from "@/i18n";
+import { DnsStatusCell } from "../dns/DnsStatusCell";
+import { DnsZoneDialog } from "../dns/DnsZoneDialog";
+import { NameserversDialog } from "../dns/NameserversDialog";
+import { dnsKeys, listZones } from "../dns/api";
+import { dnsStatus, longestOwnedZone, shouldOpenDnsRow } from "../dns/logic";
 
 const RESERVAR = "";
 
@@ -90,10 +95,17 @@ export default function DomainsPage() {
   const currentTenant = useAuthStore((state) => state.currentTenant);
   const platform = permissions.includes("core.platform.admin");
   const canManage = permissions.includes("domains.domains.manage");
+  const canReadDns = permissions.includes("domains.dns.read");
 
   const domainsQuery = useQuery({
     queryKey: [...domainsKeys.list, platform ? "all" : "tenant"],
     queryFn: () => listDomains(platform),
+  });
+  const zonesQuery = useQuery({
+    queryKey: dnsKeys.zones,
+    queryFn: listZones,
+    enabled: canReadDns,
+    retry: false,
   });
 
   const [addOpen, setAddOpen] = useState(false);
@@ -104,6 +116,8 @@ export default function DomainsPage() {
   const [linking, setLinking] = useState<DomainItem | null>(null);
   const [linkSiteId, setLinkSiteId] = useState("");
   const [removing, setRemoving] = useState<DomainItem | null>(null);
+  const [dnsDomain, setDnsDomain] = useState<DomainItem | null>(null);
+  const [nameserversOpen, setNameserversOpen] = useState(false);
 
   const items = domainsQuery.data?.items ?? [];
   const sites = domainsQuery.data?.sites ?? [];
@@ -179,8 +193,14 @@ export default function DomainsPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold text-foreground">{t("Domains")}</h1>
+          {canReadDns && <p className="text-sm text-muted-foreground">
+            {t("Double-click a domain to access its DNS zone.")}
+          </p>}
         </div>
-        {canManage && <Button size="sm" onClick={openAdd}>{t("Add domain")}</Button>}
+        <div className="flex gap-2">
+          {canReadDns && <Button size="sm" variant="secondary" onClick={() => setNameserversOpen(true)}>{t("Nameservers")}</Button>}
+          {canManage && <Button size="sm" onClick={openAdd}>{t("Add domain")}</Button>}
+        </div>
       </div>
 
       {domainsQuery.isError && (
@@ -216,6 +236,7 @@ export default function DomainsPage() {
               <col className="w-[10%]" />
               <col className="w-[12%]" />
               <col className="w-[18%]" />
+              {canReadDns && <col className="w-[12%]" />}
               <col className="w-[16%]" />
             </colgroup>
             <thead className="bg-muted/70 text-left text-xs uppercase tracking-wide text-muted-foreground">
@@ -225,6 +246,7 @@ export default function DomainsPage() {
                 <th className="px-3 py-2.5 font-medium">{t("Status")}</th>
                 <th className="px-3 py-2.5 font-medium">{t("Owner")}</th>
                 <th className="px-3 py-2.5 font-medium">{t("Certificate")}</th>
+                {canReadDns && <th className="px-3 py-2.5 font-medium">{t("DNS")}</th>}
                 <th className="px-3 py-2.5 text-right font-medium">{t("Actions")}</th>
               </tr>
             </thead>
@@ -236,7 +258,17 @@ export default function DomainsPage() {
                 return (
                   <tr
                     key={item.domain}
-                    className="border-t border-border/70 transition-colors hover:bg-muted/30"
+                    className={`border-t border-border/70 transition-colors hover:bg-muted/30 ${canReadDns && isOwned ? "cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary" : ""}`}
+                    tabIndex={canReadDns && isOwned ? 0 : undefined}
+                    aria-label={canReadDns && isOwned ? t("Open DNS zone for {domain}", { domain: item.domain }) : undefined}
+                    onDoubleClick={(event) => {
+                      const blocked = (event.target as HTMLElement).closest("button,a,input,select,textarea");
+                      if (canReadDns && shouldOpenDnsRow(isOwned, blocked?.tagName ?? (event.target as HTMLElement).tagName)) setDnsDomain(item);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.currentTarget !== event.target && (event.target as HTMLElement).closest("button,a,input,select,textarea")) return;
+                      if (canReadDns && shouldOpenDnsRow(isOwned, (event.target as HTMLElement).tagName, event.key)) setDnsDomain(item);
+                    }}
                   >
                     <td className="px-3 py-3 font-medium text-foreground">
                       <div className="flex min-w-0 items-center gap-2">
@@ -278,6 +310,9 @@ export default function DomainsPage() {
                         {published ? t("Published") : t("Not published")}
                       </span>
                     </td>
+                    {canReadDns && <td className="px-3 py-3">
+                      <DnsStatusCell status={dnsStatus(item.domain, zonesQuery.data?.items ?? [], zonesQuery.isError)} />
+                    </td>}
                     <td className="px-3 py-3">
                       {item.owner === "hosting" ? (
                         <span
@@ -477,6 +512,18 @@ export default function DomainsPage() {
           </Button>
         </div>
       </Dialog>
+
+      <DnsZoneDialog
+        domain={dnsDomain?.domain ?? null}
+        zoneName={dnsDomain ? longestOwnedZone(dnsDomain.domain, zonesQuery.data?.items ?? [])?.name ?? null : null}
+        permissions={permissions}
+        owned={Boolean(dnsDomain && (!dnsDomain.tenant_id || dnsDomain.tenant_id === currentTenant?.id))}
+        zoneListError={zonesQuery.isError}
+        retryZoneList={() => void zonesQuery.refetch()}
+        onClose={() => setDnsDomain(null)}
+      />
+      <NameserversDialog open={nameserversOpen} onClose={() => setNameserversOpen(false)}
+        permissions={permissions} zones={zonesQuery.data?.items ?? []} />
     </section>
   );
 }

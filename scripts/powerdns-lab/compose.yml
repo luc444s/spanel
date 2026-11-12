@@ -1,0 +1,71 @@
+name: spanel-powerdns-lab
+
+services:
+  postgres:
+    image: postgres:16.10-bookworm@sha256:38471f330eb885e04de130b768d6db4e10469e2311879c7e5c699f6d2d8a1c74
+    container_name: spanel-powerdns-lab-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: pdns
+      POSTGRES_USER: pdns
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets:
+      - postgres_password
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./init/001-schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
+    networks:
+      - lab
+    labels:
+      com.spanel.powerdns-lab: "true"
+      com.spanel.powerdns-lab.role: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pdns -d pdns"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  auth:
+    image: powerdns/pdns-auth-49:4.9.18@sha256:b2088f8bd0099a27a56b84837ae21ebbb45f83345bef34c55f63890148288f93
+    container_name: spanel-powerdns-lab-auth
+    restart: unless-stopped
+    user: "0:0"
+    entrypoint: ["pdns_server"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    secrets:
+      - pdns_api_key
+    volumes:
+      - ${POWERDNS_LAB_STATE_DIR}/pdns.conf:/etc/powerdns/pdns.conf:ro
+    ports:
+      - "127.0.0.1:${POWERDNS_LAB_DNS_PORT:-5300}:53/tcp"
+      - "127.0.0.1:${POWERDNS_LAB_DNS_PORT:-5300}:53/udp"
+    networks:
+      - lab
+    labels:
+      com.spanel.powerdns-lab: "true"
+      com.spanel.powerdns-lab.role: auth
+    healthcheck:
+      test: ["CMD", "pdns_control", "rping"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+networks:
+  lab:
+    name: spanel-powerdns-lab-net
+    labels:
+      com.spanel.powerdns-lab: "true"
+
+volumes:
+  postgres-data:
+    name: spanel-powerdns-lab-postgres-data
+    labels:
+      com.spanel.powerdns-lab: "true"
+
+secrets:
+  postgres_password:
+    file: ${POWERDNS_LAB_STATE_DIR}/postgres-password
+  pdns_api_key:
+    file: ${POWERDNS_LAB_STATE_DIR}/api-key

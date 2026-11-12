@@ -6,6 +6,7 @@ import logging
 
 from sqlalchemy.orm import Session
 
+from plugins.domains.backend.dns_router import router as dns_router
 from plugins.domains.backend.proxy import ProxyOperations, build_runner
 from plugins.domains.backend.publisher import register_domains_publisher
 from plugins.domains.backend.router import router
@@ -42,6 +43,7 @@ def check_extra_claim(db: Session, domain: str) -> bool:
 def register(context: PluginContext) -> None:
     register_domains_settings()
     context.register_router(router)
+    context.register_router(dns_router)
     app = context.router_registry
     if app is not None:
         app.state.domains_context = context

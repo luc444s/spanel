@@ -8,16 +8,27 @@
   "frontend_entrypoint": "frontend/register.ts",
   "permissions": [
     "domains.domains.read",
-    "domains.domains.manage"
+    "domains.domains.manage",
+    "domains.dns.read",
+    "domains.dns.records",
+    "domains.dns.zones",
+    "domains.dns.nameservers"
   ],
   "tenant_admin_permissions": [
     "domains.domains.read",
-    "domains.domains.manage"
+    "domains.domains.manage",
+    "domains.dns.read",
+    "domains.dns.records",
+    "domains.dns.zones"
   ],
   "events": [
     "domains.domain.added",
     "domains.domain.linked",
-    "domains.domain.removed"
+    "domains.domain.removed",
+    "domains.dns.zone_created",
+    "domains.dns.zone_deleted",
+    "domains.dns.rrsets_changed",
+    "domains.dns.nameservers_changed"
   ],
-  "description": "Web domains: Hosting primaries in read-only mode and extra proxy domains"
+  "description": "Web domains: Hosting primaries in read-only mode, extra proxy domains and authoritative DNS"
 }

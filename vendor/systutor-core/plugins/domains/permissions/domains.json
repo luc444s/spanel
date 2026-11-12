@@ -7,6 +7,22 @@
     {
       "name": "domains.domains.manage",
       "description": "Add and remove extra domains routed by the proxy"
+    },
+    {
+      "name": "domains.dns.read",
+      "description": "View owned DNS zones, records and public nameserver settings"
+    },
+    {
+      "name": "domains.dns.records",
+      "description": "Plan, apply and delete RRsets in owned DNS zones"
+    },
+    {
+      "name": "domains.dns.zones",
+      "description": "Create and delete owned DNS zones"
+    },
+    {
+      "name": "domains.dns.nameservers",
+      "description": "Change public nameserver settings (platform administrator only)"
     }
   ]
 }

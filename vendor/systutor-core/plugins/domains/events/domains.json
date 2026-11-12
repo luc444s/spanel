@@ -7,6 +7,22 @@
     {
       "name": "domains.domain.removed",
       "description": "An extra domain was removed from a site"
+    },
+    {
+      "name": "domains.dns.zone_created",
+      "description": "A tenant-owned authoritative zone was created"
+    },
+    {
+      "name": "domains.dns.zone_deleted",
+      "description": "A tenant-owned authoritative zone was removed"
+    },
+    {
+      "name": "domains.dns.rrsets_changed",
+      "description": "One or more complete RRsets changed in an owned zone"
+    },
+    {
+      "name": "domains.dns.nameservers_changed",
+      "description": "Public nameserver settings or managed apex records changed"
     }
   ]
 }
