@@ -21,6 +21,35 @@ export function longestOwnedZone(domain: string, zones: ZoneItem[]) {
     .sort((left, right) => right.name.length - left.name.length)[0] ?? null;
 }
 
+export function activationZoneDomain(domain: string, registeredDomains: string[]) {
+  const candidate = normalizeDnsName(domain);
+  return registeredDomains
+    .map(normalizeDnsName)
+    .filter((name) => candidate.endsWith(`.${name}`))
+    .sort((left, right) => right.length - left.length)[0] ?? candidate;
+}
+
+export type DomainGroup<T> = { parent: T; children: T[] };
+
+export function groupRegisteredDomains<
+  T extends { domain: string; tenant_id?: string | null },
+>(items: T[]): DomainGroup<T>[] {
+  const sameTenant = (left: T, right: T) => (left.tenant_id ?? null) === (right.tenant_id ?? null);
+  const roots = items.filter((item) => !items.some((candidate) => sameTenant(item, candidate)
+    && normalizeDnsName(item.domain).endsWith(`.${normalizeDnsName(candidate.domain)}`)));
+  return roots.map((parent) => ({
+    parent,
+    children: items.filter((item) => sameTenant(item, parent)
+      && normalizeDnsName(item.domain).endsWith(`.${normalizeDnsName(parent.domain)}`)),
+  }));
+}
+
+export function dnsNameInScope(name: string, scope: string) {
+  const candidate = normalizeDnsName(name);
+  const boundary = normalizeDnsName(scope);
+  return !boundary || candidate === boundary || candidate.endsWith(`.${boundary}`);
+}
+
 export function dnsStatus(domain: string, zones: ZoneItem[], failed = false): DnsStatus {
   if (failed) return "error";
   if (longestOwnedZone(domain, zones)) return "managed";

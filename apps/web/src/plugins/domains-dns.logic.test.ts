@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  activationZoneDomain,
   buildNameserverApply,
   canApplyNameserverPlan,
   canConfigureNameservers,
   describePlanChanges,
+  dnsNameInScope,
   dnsStatus,
+  groupRegisteredDomains,
   longestOwnedZone,
   relativeOwner,
   shouldOpenDnsRow,
@@ -24,6 +27,43 @@ describe("Domains DNS pure policy", () => {
     expect(dnsStatus("outside.test", zones)).toBe("external");
     expect(dnsStatus("outside.test", [])).toBe("no-zone");
     expect(dnsStatus("outside.test", [], true)).toBe("error");
+  });
+
+  it("distinguishes an apex from a child covered by its parent zone", () => {
+    expect(longestOwnedZone("example.com", zones)?.name).toBe("example.com");
+    expect(longestOwnedZone("infra.example.com", zones)?.name).toBe("example.com");
+  });
+
+  it("activates the nearest registered parent instead of an undelegated child", () => {
+    const domains = ["example.com", "deep.example.com", "www.deep.example.com"];
+    expect(activationZoneDomain("example.com", domains)).toBe("example.com");
+    expect(activationZoneDomain("deep.example.com", domains)).toBe("example.com");
+    expect(activationZoneDomain("www.deep.example.com", domains)).toBe("deep.example.com");
+    expect(activationZoneDomain("standalone.test", domains)).toBe("standalone.test");
+  });
+
+  it("groups registered children under the highest parent without crossing tenants", () => {
+    const domains = [
+      { domain: "example.com", tenant_id: "t1" },
+      { domain: "api.example.com", tenant_id: "t1" },
+      { domain: "v2.api.example.com", tenant_id: "t1" },
+      { domain: "api.example.com", tenant_id: "t2" },
+      { domain: "other.test", tenant_id: "t1" },
+    ];
+    const groups = groupRegisteredDomains(domains);
+    expect(groups.map((group) => `${group.parent.tenant_id}:${group.parent.domain}`)).toEqual([
+      "t1:example.com", "t2:api.example.com", "t1:other.test",
+    ]);
+    expect(groups[0].children.map((item) => item.domain)).toEqual([
+      "api.example.com", "v2.api.example.com",
+    ]);
+  });
+
+  it("scopes records to a selected child and names below it", () => {
+    expect(dnsNameInScope("infra.example.com", "infra.example.com")).toBe(true);
+    expect(dnsNameInScope("api.infra.example.com", "infra.example.com")).toBe(true);
+    expect(dnsNameInScope("other.example.com", "infra.example.com")).toBe(false);
+    expect(dnsNameInScope("example.com", "")).toBe(true);
   });
 
   it("opens only owned rows with double-click or Enter outside controls", () => {

@@ -10,9 +10,10 @@ import { applyRrsets, getZone, planRrsets } from "./api";
 import { describePlanChanges, safeErrorMessage, SUPPORTED_TYPES, validateRrset } from "./logic";
 import type { Plan, RrsetDraft } from "./types";
 
-export function RrsetEditor({ zone, initial, onClose, onApplied }: {
+export function RrsetEditor({ zone, initial, isNew = false, onClose, onApplied }: {
   zone: string;
   initial: RrsetDraft | null | undefined;
+  isNew?: boolean;
   onClose: () => void;
   onApplied: () => void;
 }) {
@@ -72,7 +73,7 @@ export function RrsetEditor({ zone, initial, onClose, onApplied }: {
 
   return <Dialog
     open={initial !== undefined}
-    title={t(initial ? "Edit RRset — {name}" : "New RRset", { name: initial?.name ?? "" })}
+    title={t(initial && !isNew ? "Edit RRset — {name}" : "New RRset", { name: initial?.name ?? "" })}
     onClose={onClose}
     maxWidthClassName="max-w-2xl"
   >

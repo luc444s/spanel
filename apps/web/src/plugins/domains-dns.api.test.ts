@@ -16,8 +16,17 @@ describe("Domains DNS API contract", () => {
       "../../../../vendor/systutor-core/plugins/domains/frontend/pages/DomainsPage.tsx",
       import.meta.url,
     ), "utf8");
+    const table = readFileSync(new URL(
+      "../../../../vendor/systutor-core/plugins/domains/frontend/components/DomainsTable.tsx",
+      import.meta.url,
+    ), "utf8");
     expect(source).not.toMatch(/<Button[^>]*>\s*\{t\("DNS"\)\}\s*<\/Button>/);
     expect(source).toContain('t("Double-click a domain to access its DNS zone.")');
+    const rows = table.slice(table.indexOf("{rows.map"));
+    expect(rows.indexOf("item.owner")).toBeLessThan(rows.indexOf("<CertificateCell"));
+    expect(rows.indexOf("<CertificateCell")).toBeLessThan(rows.indexOf("<DnsStatusCell"));
+    expect(table).toContain("groupRegisteredDomains(items)");
+    expect(table).toContain("aria-expanded={expanded}");
   });
 
   it("keeps query keys DNS and zone scoped", () => {

@@ -153,6 +153,19 @@ def test_create_rejects_unregistered_domain(tmp_path: Path) -> None:
         engine.dispose()
 
 
+def test_create_rejects_child_of_registered_parent_without_mutation(tmp_path: Path) -> None:
+    db, fake, service, _events, engine = build_service(tmp_path)
+    try:
+        with pytest.raises(AppError) as caught:
+            service.create_zone("deep.example.com", context("t1"))
+        assert caught.value.status_code == 409
+        assert "deep.example.com" not in fake.zones
+        assert fake.zones == {}
+    finally:
+        db.close()
+        engine.dispose()
+
+
 def test_cross_tenant_operations_are_404(tmp_path: Path) -> None:
     db, _fake, service, _events, engine = build_service(tmp_path)
     try:
@@ -177,7 +190,13 @@ def test_resolve_uses_longest_owned_suffix(tmp_path: Path) -> None:
     db, _fake, service, _events, engine = build_service(tmp_path)
     try:
         service.create_zone("example.com", context("t1"))
-        service.create_zone("deep.example.com", context("t1"))
+        db.add(DnsZoneOwnership(
+            tenant_id="t1",
+            zone_name="deep.example.com",
+            kind="Native",
+            observed_version="delegated-v1",
+        ))
+        db.commit()
         assert service.resolve("www.deep.example.com", context("t1"))["zone"] == (
             "deep.example.com"
         )

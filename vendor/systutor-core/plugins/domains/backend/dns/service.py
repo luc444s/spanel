@@ -239,8 +239,22 @@ class DnsService:
         registered = list_tenant_domains(self._app, self._db, tenant_id)
         if zone_name not in registered:
             raise DnsPermissionError("the domain is not registered to the active tenant")
+        registered_parent = any(
+            zone_name.endswith(f".{candidate}")
+            for candidate in registered
+        )
+        if registered_parent:
+            raise DnsConflictError(
+                "domain must be managed through its registered parent zone"
+            )
         if get_ownership(self._db, zone_name) is not None:
             raise DnsConflictError("zone already belongs to a tenant")
+        parent_owned = any(
+            zone_name.endswith(f".{row.zone_name}")
+            for row in list_ownerships(self._db)
+        )
+        if parent_owned:
+            raise DnsConflictError("domain is already managed by an authoritative parent zone")
         settings = get_public_settings(self._db)
         if settings is None:
             raise DnsValidationError("public nameserver settings are not configured")
