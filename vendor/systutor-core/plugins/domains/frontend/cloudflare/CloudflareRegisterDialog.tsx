@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Alert } from "@systutor/shell/ui/alert";
 import { Button } from "@systutor/shell/ui/button";
 import { Dialog } from "@systutor/shell/ui/dialog";
-import { Input, newCredentialProps } from "@systutor/shell/ui/input";
+import { Input, noAutofillProps } from "@systutor/shell/ui/input";
 import { toast } from "@systutor/shell/ui/toast";
 import { t } from "@/i18n";
 
@@ -82,13 +82,17 @@ export function CloudflareRegisterDialog({ open, redirectUri, onClose, onRegiste
           <span>{t("API token")}</span>
           <div className="flex gap-2">
             <Input
-              type={showToken ? "text" : "password"}
+              type="text"
+              name="cloudflare-api-token"
               value={token}
               onChange={(event) => setToken(event.target.value)}
               placeholder="cf-..."
               spellCheck={false}
+              autoCapitalize="none"
               autoFocus
-              {...newCredentialProps}
+              {...noAutofillProps}
+              data-bwignore="true"
+              style={showToken ? undefined : { WebkitTextSecurity: "disc" }}
             />
             <Button
               type="button"

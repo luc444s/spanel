@@ -66,7 +66,8 @@ POST /dns/cloudflare/oauth/register   -> OAuthClientStatus
 The modal (`CloudflareRegisterDialog`) contains:
 
 - title **Register Cloudflare** and a one-line explanation;
-- a masked **API token** field (password input, no autocomplete, show/hide);
+- a masked **API token** field (technical text input with visual masking,
+  password-manager ignore hints and show/hide; never a password input);
 - helper text: the token needs `Account → OAuth Clients → Edit`, is used once
   and is not stored;
 - a link to the Cloudflare OAuth clients dashboard page;
