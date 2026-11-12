@@ -6,6 +6,7 @@ import logging
 
 from sqlalchemy.orm import Session
 
+from plugins.domains.backend.cloudflare_router import router as cloudflare_router
 from plugins.domains.backend.dns_router import router as dns_router
 from plugins.domains.backend.proxy import ProxyOperations, build_runner
 from plugins.domains.backend.publisher import register_domains_publisher
@@ -44,6 +45,7 @@ def register(context: PluginContext) -> None:
     register_domains_settings()
     context.register_router(router)
     context.register_router(dns_router)
+    context.register_router(cloudflare_router)
     app = context.router_registry
     if app is not None:
         app.state.domains_context = context

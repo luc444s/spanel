@@ -173,3 +173,64 @@ UDP/TCP. Configurar exige `domains.dns.nameservers` y `core.platform.admin`,
 planifica las zonas propias listadas explícitamente y siempre envía un conjunto
 aprobado explícito. El conjunto vacío queda reservado al bootstrap inicial.
 La delegación del registrador, DNSSEC y Cloudflare quedan fuera de la interfaz.
+
+## Cloudflare OAuth y descubrimiento (A.SPEC 0071)
+
+El backend y la CLI pueden conectar un tenant con Cloudflare mediante
+Authorization Code con PKCE S256. Esta capa es **de solo lectura**: lista
+cuentas autorizadas, zonas y registros DNS redactados, pero no tiene ningún
+endpoint que cree, edite o elimine registros, zonas, nameservers ni proxy.
+Todavía no existe interfaz web.
+
+Configuración del host:
+
+```text
+SPANEL_CLOUDFLARE_ENCRYPTION_KEY_FILE=/run/secrets/apps_key
+SPANEL_CLOUDFLARE_PUBLIC_URL=https://spanel.lab
+SPANEL_CLOUDFLARE_TIMEOUT_SECONDS=10
+```
+
+El archivo de clave es regular, solo propietario y contiene exactamente 32
+bytes crudos. Los sobres usan AES-256-GCM con nonces aleatorios y AAD que une
+propósito, identidad de tenant/flujo y versión de clave. Client secrets,
+tokens de acceso/refresco, códigos de autorización, verificadores PKCE y
+bootstrap tokens nunca se guardan ni imprimen en claro. No hay fallback de
+secreto por variable de entorno.
+
+### CLI
+
+```text
+python3 scripts/spanel_dns.py cloudflare oauth register \
+  --account-id CUENTA --bootstrap-token-file RUTA \
+  --redirect-uri https://spanel.lab/api/v1/plugins/domains/dns/cloudflare/oauth/callback
+python3 scripts/spanel_dns.py cloudflare connect --tenant TENANT [--wait-seconds 300]
+python3 scripts/spanel_dns.py cloudflare status --tenant TENANT
+python3 scripts/spanel_dns.py cloudflare disconnect --tenant TENANT [--apply]
+python3 scripts/spanel_dns.py cloudflare zones list --tenant TENANT
+python3 scripts/spanel_dns.py cloudflare records list ZONA --tenant TENANT
+```
+
+`oauth register` es dry-run salvo `--apply`; el bootstrap token debe ser
+solo-propietario y nunca se persiste. Re-registrar es conflicto; la rotación
+está fuera de alcance. `connect` imprime la URL de autorización y espera el
+callback del backend sin recibir nunca el token OAuth; `--wait-seconds 0`
+retorna de inmediato. `disconnect` es dry-run salvo `--apply`; revoca
+best-effort y elimina credenciales locales de forma idempotente. Todos aceptan
+`--json`; el contenido de registros siempre se redacta.
+
+### API
+
+| Método | Ruta | Permiso |
+|---|---|---|
+| POST | `/api/v1/plugins/domains/dns/cloudflare/oauth/start` | `domains.dns.cloudflare` + `core.platform.admin` |
+| GET | `/api/v1/plugins/domains/dns/cloudflare/oauth/callback` | público, solo state hasheado de un uso |
+| GET | `/api/v1/plugins/domains/dns/cloudflare/status` | `domains.dns.cloudflare` |
+| POST | `/api/v1/plugins/domains/dns/cloudflare/disconnect` | `domains.dns.cloudflare` + `core.platform.admin` |
+| GET | `/api/v1/plugins/domains/dns/cloudflare/zones` | `domains.dns.cloudflare` |
+| GET | `/api/v1/plugins/domains/dns/cloudflare/zones/{zone_id}/records` | `domains.dns.cloudflare` |
+
+El callback valida un state aleatorio, hasheado, con expiración y de un solo
+uso, más la redirect URI y la transacción PKCE guardadas. Nunca acepta tenant
+desde la query y no revela existencia de tenant/cuenta en replay, expiración o
+denegación. Los errores se normalizan a `422`, `403`, `404`, `409`, `429`,
+`502`, `503` y `504`.

@@ -5,11 +5,23 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import stat
 import sys
+import time
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+from plugins.domains.backend.cloudflare.client import (
+    CloudflareClient,
+    CloudflareNotFound,
+    CloudflareValidation,
+)
+from plugins.domains.backend.cloudflare.config import (
+    CloudflareConfig,
+    CloudflareConfigError,
+)
+from plugins.domains.backend.cloudflare.service import CloudflareService
 from plugins.domains.backend.dns.client import PowerDnsClient
 from plugins.domains.backend.dns.errors import (
     DnsConfigError,
@@ -567,3 +579,214 @@ def _zone_export(args: argparse.Namespace, client: PowerDnsClient) -> int:
     return 0
 
 
+# -- Cloudflare OAuth and discovery CLI -----------------------------------
+def _cloudflare_runtime(args: argparse.Namespace, factory: Any):
+    config = getattr(args, "cloudflare_config", None)
+    if config is None:
+        try:
+            config = CloudflareConfig.from_env()
+        except CloudflareConfigError as exc:
+            raise CloudflareValidation(str(exc)) from exc
+    client = getattr(args, "cloudflare_client", None) or CloudflareClient(config)
+    sessions = _session_factory(args, factory)
+    return config, client, sessions
+
+
+def _read_bootstrap_token(path_value: str) -> str:
+    path = Path(path_value)
+    try:
+        details = path.stat()
+    except OSError as exc:
+        raise CloudflareValidation("the bootstrap token file is missing") from exc
+    if not stat.S_ISREG(details.st_mode):
+        raise CloudflareValidation("the bootstrap token file must be a regular file")
+    if stat.S_IMODE(details.st_mode) & 0o077:
+        raise CloudflareValidation("the bootstrap token file must be owner-only")
+    try:
+        value = path.read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        raise CloudflareValidation("the bootstrap token file cannot be read") from exc
+    if not value or "\x00" in value:
+        raise CloudflareValidation("the bootstrap token file is empty or malformed")
+    return value
+
+
+def _cloudflare_register(args: argparse.Namespace, factory: Any) -> int:
+    config, client, sessions = _cloudflare_runtime(args, factory)
+    token = _read_bootstrap_token(args.bootstrap_token_file) if args.apply else "<not-read>"
+    with sessions() as db:
+        service = CloudflareService(db, None, client, config)
+        payload = service.register(
+            account_id=args.account_id,
+            bootstrap_token=token,
+            redirect_uri=args.redirect_uri,
+            apply=args.apply,
+        )
+    if args.apply:
+        lines = [
+            "SUCCESS Cloudflare OAuth client registered",
+            f"Client ID: {payload['client_id']}",
+            f"Redirect URI: {payload['redirect_uri']}",
+            f"Scopes: {', '.join(payload['scopes'])}",
+        ]
+    else:
+        lines = [
+            "Cloudflare OAuth registration plan",
+            f"Account: {payload['account_id']}",
+            f"Redirect URI: {payload['redirect_uri']}",
+            f"Scopes: {', '.join(payload['scopes'])}",
+            "Client secret: <redacted>",
+            "dry-run; pass --apply to register",
+        ]
+    _emit(payload, json_output=args.json, lines=lines)
+    return 0
+
+
+def _cloudflare_connect(args: argparse.Namespace, factory: Any) -> int:
+    config, client, sessions = _cloudflare_runtime(args, factory)
+    wait_seconds = max(0, min(int(args.wait_seconds), 900))
+    with sessions() as db:
+        service = CloudflareService(db, None, client, config)
+        start = service.start_flow_for_tenant(args.tenant)
+    if not args.json:
+        print(f"Authorize Cloudflare in the browser: {start['authorization_url']}")
+        print(f"Waiting up to {wait_seconds}s for the callback...")
+    if wait_seconds == 0:
+        payload = {**start, "status": "pending"}
+        _emit(
+            payload,
+            json_output=args.json,
+            lines=[f"flow: {start['flow_id']}", "status: pending"],
+        )
+        return 0
+
+    deadline = time.monotonic() + wait_seconds
+    state = "pending"
+    while time.monotonic() < deadline:
+        time.sleep(min(1.0, max(0.0, deadline - time.monotonic())))
+        with sessions() as db:
+            state = str(
+                CloudflareService(db, None, client, config).flow_status(start["flow_id"])[
+                    "status"
+                ]
+            )
+        if state != "pending":
+            break
+    if state != "consumed":
+        payload = {**start, "status": state}
+        _emit(
+            payload,
+            json_output=args.json,
+            lines=[f"authorization {state}", "run connect again if the flow expired"],
+        )
+        return 4 if state in {"failed", "denied", "expired"} else 3
+
+    with sessions() as db:
+        service = CloudflareService(db, None, client, config)
+        connection = service.status_for_tenant(args.tenant)
+        zones = service.zones_for_tenant(args.tenant)
+    payload = {"connection": connection, "zones": zones, "status": "consumed"}
+    lines = [
+        "SUCCESS Cloudflare connected",
+        f"Account: {connection['account_name']}",
+        f"Scopes: {', '.join(connection['scopes'])}",
+        f"Zones discovered: {len(zones)}",
+        *(
+            f"  {zone['name']}  {zone['status']}  {zone['record_count']} records"
+            for zone in zones
+        ),
+    ]
+    _emit(payload, json_output=args.json, lines=lines)
+    return 0
+
+
+def _cloudflare_status(args: argparse.Namespace, factory: Any) -> int:
+    config, client, sessions = _cloudflare_runtime(args, factory)
+    with sessions() as db:
+        payload = CloudflareService(db, None, client, config).status_for_tenant(args.tenant)
+    lines = [
+        "Cloudflare connected" if payload["connected"] else "Cloudflare not connected",
+        f"Account: {payload['account_name']} ({payload['account_id']})",
+        f"Scopes: {', '.join(payload['scopes'])}",
+        f"Status: {payload['status']}",
+        f"Expires: {payload['expires_at']}",
+    ]
+    _emit(payload, json_output=args.json, lines=lines)
+    return 0
+
+
+def _cloudflare_disconnect(args: argparse.Namespace, factory: Any) -> int:
+    config, client, sessions = _cloudflare_runtime(args, factory)
+    with sessions() as db:
+        payload = CloudflareService(db, None, client, config).disconnect_for_tenant(
+            args.tenant, apply=args.apply
+        )
+    if payload["already_disconnected"]:
+        lines = ["Cloudflare is already disconnected"]
+    elif args.apply:
+        lines = [
+            "Cloudflare disconnected",
+            f"Revoked upstream: {'yes' if payload['revoked'] else 'no'}",
+            f"Cancelled flows: {payload.get('cancelled_flows', 0)}",
+        ]
+    else:
+        lines = [
+            "Cloudflare disconnect plan",
+            f"Account: {payload['account_name']} ({payload['account_id']})",
+            f"Pending flows: {payload.get('pending_flows', 0)}",
+            "dry-run; pass --apply to revoke and remove credentials",
+        ]
+    _emit(payload, json_output=args.json, lines=lines)
+    return 0
+
+
+def _cloudflare_zones_list(args: argparse.Namespace, factory: Any) -> int:
+    config, client, sessions = _cloudflare_runtime(args, factory)
+    with sessions() as db:
+        zones = CloudflareService(db, None, client, config).zones_for_tenant(args.tenant)
+    payload = {"tenant_id": args.tenant, "zones": zones}
+    lines = [
+        f"Zones discovered: {len(zones)}",
+        *(
+            f"  {zone['name']}  {zone['status']}  {zone['record_count']} records"
+            for zone in zones
+        ),
+    ]
+    _emit(payload, json_output=args.json, lines=lines)
+    return 0
+
+
+def _cloudflare_records_list(args: argparse.Namespace, factory: Any) -> int:
+    config, client, sessions = _cloudflare_runtime(args, factory)
+    needle = args.zone.strip()
+    with sessions() as db:
+        service = CloudflareService(db, None, client, config)
+        zones = service.zones_for_tenant(args.tenant)
+        match = next(
+            (
+                zone
+                for zone in zones
+                if zone["id"] == needle or zone["name"].rstrip(".") == needle.rstrip(".")
+            ),
+            None,
+        )
+        if match is None:
+            raise CloudflareNotFound("Cloudflare zone not found")
+        zone_id = str(match["id"])
+        records = service.records_for_tenant(args.tenant, zone_id)
+    payload = {
+        "tenant_id": args.tenant,
+        "zone_id": zone_id,
+        "zone": match["name"],
+        "records": records,
+    }
+    lines = [
+        f"zone: {match['name']}",
+        *(
+            f"  {record['name']}  {record['type']}  TTL {record['ttl']}"
+            f"  proxied={'yes' if record['proxied'] else 'no'}"
+            for record in records
+        ),
+    ]
+    _emit(payload, json_output=args.json, lines=lines)
+    return 0

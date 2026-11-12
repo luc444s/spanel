@@ -12,7 +12,8 @@
     "domains.dns.read",
     "domains.dns.records",
     "domains.dns.zones",
-    "domains.dns.nameservers"
+    "domains.dns.nameservers",
+    "domains.dns.cloudflare"
   ],
   "tenant_admin_permissions": [
     "domains.domains.read",
@@ -28,7 +29,9 @@
     "domains.dns.zone_created",
     "domains.dns.zone_deleted",
     "domains.dns.rrsets_changed",
-    "domains.dns.nameservers_changed"
+    "domains.dns.nameservers_changed",
+    "domains.dns.cloudflare_connected",
+    "domains.dns.cloudflare_disconnected"
   ],
   "description": "Web domains: Hosting primaries in read-only mode, extra proxy domains and authoritative DNS"
 }
