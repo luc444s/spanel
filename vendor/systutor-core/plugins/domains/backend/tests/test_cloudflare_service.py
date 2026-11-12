@@ -95,7 +95,7 @@ class FakeCloudflare:
         return self.tokens
 
     def list_accounts(self, credentials, refresh=None):
-        return list(self.accounts)
+        raise AssertionError("OAuth discovery must not require Account Settings Read")
 
     def refresh(self, **kwargs):
         self.refresh_calls += 1

@@ -557,13 +557,18 @@ class CloudflareService:
             refresh_token=tokens.refresh_token,
             expires_at=tokens.expires_at(self._clock()),
         )
-        accounts = self._client.list_accounts(credentials)
-        if not accounts:
-            raise CloudflareNotFound("Cloudflare did not return an authorized account")
-        for account in accounts:
-            if account["id"] == preferred:
-                return account["id"], account.get("name", "")
-        return accounts[0]["id"], accounts[0].get("name", "")
+        # `/accounts` requires Account Settings Read, which is deliberately not
+        # part of this client's consent. Zone Read already returns each zone's
+        # account id/name, and a private OAuth client is bound to `preferred`.
+        # An account with no zones is still a valid connection, so retain its
+        # registered id and use a neutral display name.
+        zones = self._client.list_zones(credentials)
+        for zone in zones:
+            if zone.account_id == preferred:
+                return preferred, zone.account_name or "Cloudflare"
+        if zones:
+            return zones[0].account_id, zones[0].account_name or "Cloudflare"
+        return preferred, "Cloudflare"
 
     def _upsert_connection(
         self,
