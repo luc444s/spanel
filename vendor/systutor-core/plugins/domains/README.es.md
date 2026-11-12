@@ -191,7 +191,9 @@ SPANEL_CLOUDFLARE_TIMEOUT_SECONDS=10
 ```
 
 El archivo de clave es regular, solo propietario y contiene exactamente 32
-bytes crudos. Los sobres usan AES-256-GCM con nonces aleatorios y AAD que une
+bytes crudos o una codificación base64/base64url de 32 bytes. La ruta por
+defecto reutiliza el mismo archivo `apps_key` que monta el plugin Apps (texto
+base64url). Los sobres usan AES-256-GCM con nonces aleatorios y AAD que une
 propósito, identidad de tenant/flujo y versión de clave. Client secrets,
 tokens de acceso/refresco, códigos de autorización, verificadores PKCE y
 bootstrap tokens nunca se guardan ni imprimen en claro. No hay fallback de

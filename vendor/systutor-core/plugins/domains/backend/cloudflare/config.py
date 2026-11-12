@@ -1,12 +1,16 @@
 """Cloudflare host configuration and fixed trusted endpoints.
 
 Only the encryption-key file, the public HTTPS origin and a finite timeout are
-configurable.  The key is a raw 32-byte regular, owner-only file; there is no
-plaintext environment fallback for any secret.
+configurable.  The key is an owner-only regular file holding exactly 32 raw
+bytes or a base64/base64url encoding of 32 bytes (the same format the Apps
+plugin already mounts); there is no plaintext environment fallback for any
+secret.
 """
 
 from __future__ import annotations
 
+import base64
+import binascii
 import os
 import stat
 from collections.abc import Mapping
@@ -39,6 +43,26 @@ def _origin(parts) -> str:
     if parts.port is not None:
         origin = f"{origin}:{parts.port}"
     return origin
+
+
+def _decode_key(raw: bytes) -> bytes | None:
+    """Return the 32-byte key, accepting raw bytes or a base64url/base64 text key.
+
+    The Apps plugin stores its key as base64url text (44 characters plus a
+    trailing newline) and the host mounts the same file here.  Raw 32-byte files
+    keep working unchanged.  Anything that does not resolve to exactly 32 bytes
+    is rejected.
+    """
+    if len(raw) == 32:
+        return raw
+    text = raw.strip()
+    if not text or b"\n" in text or b"\r" in text or len(text) > 64:
+        return None
+    try:
+        decoded = base64.urlsafe_b64decode(text + b"=" * (-len(text) % 4))
+    except (ValueError, binascii.Error):
+        return None
+    return decoded if len(decoded) == 32 else None
 
 
 @dataclass(frozen=True)
@@ -132,7 +156,7 @@ class CloudflareConfig:
                 regular = stat.S_ISREG(mode)
                 private = regular and (stat.S_IMODE(mode) & 0o077) == 0
                 readable = os.access(path, os.R_OK)
-                exact = regular and path.stat().st_size == 32
+                exact = regular and _decode_key(path.read_bytes()) is not None
             except OSError:
                 regular = private = readable = exact = False
         return {
@@ -155,16 +179,19 @@ class CloudflareConfig:
             )
         if not facts["readable"]:
             raise CloudflareConfigError("the Cloudflare encryption key file is not readable")
-        if not facts["exact_32_bytes"]:
-            raise CloudflareConfigError(
-                "the Cloudflare encryption key file must contain exactly 32 bytes"
-            )
         try:
-            return self.encryption_key_file.read_bytes()
+            raw = self.encryption_key_file.read_bytes()
         except OSError as exc:
             raise CloudflareConfigError(
                 "the Cloudflare encryption key file could not be read"
             ) from exc
+        key = _decode_key(raw)
+        if key is None:
+            raise CloudflareConfigError(
+                "the Cloudflare encryption key file must contain exactly 32 bytes "
+                "or a base64url-encoded 32-byte key"
+            )
+        return key
 
     def describe(self) -> dict[str, object]:
         facts = self.inspect_key_file()

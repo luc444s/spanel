@@ -187,12 +187,14 @@ SPANEL_CLOUDFLARE_PUBLIC_URL=https://spanel.lab
 SPANEL_CLOUDFLARE_TIMEOUT_SECONDS=10
 ```
 
-The key file is a regular, owner-only file containing exactly 32 raw bytes.
-Envelopes use AES-256-GCM with random nonces and AAD binding the purpose, the
-tenant/flow identity and the key version. Client secrets, access/refresh
-tokens, authorization codes, PKCE verifiers and bootstrap tokens are never
-stored or printed in plaintext. A missing/unsafe key file is a configuration
-error; there is no plaintext environment fallback.
+The key file is a regular, owner-only file containing exactly 32 raw bytes or a
+base64/base64url encoding of 32 bytes. The default path reuses the same
+`apps_key` file the Apps plugin mounts (base64url text). Envelopes use
+AES-256-GCM with random nonces and AAD binding the purpose, the tenant/flow
+identity and the key version. Client secrets, access/refresh tokens,
+authorization codes, PKCE verifiers and bootstrap tokens are never stored or
+printed in plaintext. A missing/unsafe key file is a configuration error; there
+is no plaintext environment fallback.
 
 ### CLI
 

@@ -34,6 +34,15 @@ def write_key(tmp_path: Path, size: int = 32, mode: int = 0o600) -> Path:
     return path
 
 
+def write_base64_key(tmp_path: Path, raw: bytes = b"k" * 32) -> Path:
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    path = tmp_path / "cloudflare_key_b64"
+    encoded = base64.urlsafe_b64encode(raw).decode()
+    path.write_text(encoded + "\n", encoding="utf-8")
+    path.chmod(0o600)
+    return path
+
+
 def config(tmp_path: Path, **kwargs) -> CloudflareConfig:
     return CloudflareConfig(
         encryption_key_file=write_key(tmp_path),
@@ -85,6 +94,11 @@ def test_config_requires_private_exact_32_byte_key(tmp_path: Path) -> None:
     assert parsed.redirect_uri.endswith("/dns/cloudflare/oauth/callback")
     assert parsed.load_key() == b"k" * 32
     assert parsed.inspect_key_file()["exact_32_bytes"] is True
+
+    encoded = write_base64_key(tmp_path)
+    parsed_encoded = CloudflareConfig(encoded, "https://spanel.lab")
+    assert parsed_encoded.load_key() == b"k" * 32
+    assert parsed_encoded.inspect_key_file()["exact_32_bytes"] is True
 
     short = write_key(tmp_path / "short", size=31)
     with pytest.raises(CloudflareConfigError, match="exactly 32"):
