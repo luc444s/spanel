@@ -18,9 +18,8 @@ Remove platform admin from one user while keeping the rest of the admin role:
     python3 scripts/grant_tenant_permission.py --tenant milton \
         --email ops@example.com \
         --role tenant_operator \
-        --clone-role admin \
-        --exclude-permission core.platform.admin \
-        --remove-role admin
+        --clone-platform-role \
+        --remove-platform-roles
 
 Exit codes: 0 ok, 1 failure.
 """
@@ -149,6 +148,22 @@ def _assign_role(db: Session, user: User, role: Role) -> bool:
     return True
 
 
+def _roles_with_permission(
+    db: Session, tenant_id: str, permission_name: str
+) -> list[Role]:
+    stmt = (
+        select(Role)
+        .join(RolePermission, RolePermission.role_id == Role.id)
+        .join(Permission, Permission.id == RolePermission.permission_id)
+        .where(
+            Role.tenant_id == tenant_id,
+            Permission.name == permission_name,
+        )
+        .order_by(Role.name.asc())
+    )
+    return list(db.scalars(stmt).all())
+
+
 def _role_permissions(db: Session, role_id: str) -> list[Permission]:
     stmt = (
         select(Permission)
@@ -204,8 +219,10 @@ def grant(
     emails: list[str],
     dry_run: bool,
     clone_role: str | None = None,
+    clone_platform_role: bool = False,
     exclude_permissions: list[str] | None = None,
     remove_roles: list[str] | None = None,
+    remove_platform_roles: bool = False,
 ) -> dict[str, object]:
     tenant = _resolve_tenant(db, tenant_value)
     if role_name == MANAGED_ROLE:
@@ -215,6 +232,20 @@ def grant(
     users = _resolve_users(db, tenant, emails)
     if not users:
         raise GrantError(f"tenant {tenant.slug!r} has no active users to assign")
+
+    if clone_platform_role:
+        platform_roles = _roles_with_permission(
+            db, tenant.id, "core.platform.admin"
+        )
+        if not platform_roles:
+            raise GrantError("no role in this tenant grants core.platform.admin")
+        if len(platform_roles) > 1:
+            names = ", ".join(role.name for role in platform_roles)
+            raise GrantError(
+                f"multiple roles grant core.platform.admin ({names}); "
+                "use --clone-role to choose one"
+            )
+        clone_role = platform_roles[0].name
 
     role, role_created = _get_or_create_role(db, tenant.id, role_name)
     resolved: list[Permission] = []
@@ -239,10 +270,13 @@ def grant(
         if _assign_role(db, user, role):
             users_assigned.append(user.email)
 
-    roles_removed: dict[str, list[str]] = {}
+    roles_to_remove: dict[str, Role] = {}
+    if remove_platform_roles:
+        for platform_role in _roles_with_permission(
+            db, tenant.id, "core.platform.admin"
+        ):
+            roles_to_remove[platform_role.name] = platform_role
     for remove_name in remove_roles or []:
-        if remove_name == role_name:
-            raise GrantError("cannot remove the role being granted")
         role_to_remove = db.scalar(
             select(Role).where(
                 Role.tenant_id == tenant.id,
@@ -251,6 +285,12 @@ def grant(
         )
         if role_to_remove is None:
             raise GrantError(f"unknown role to remove {remove_name!r}")
+        roles_to_remove[remove_name] = role_to_remove
+
+    roles_removed: dict[str, list[str]] = {}
+    for remove_name, role_to_remove in roles_to_remove.items():
+        if remove_name == role_name:
+            raise GrantError("cannot remove the role being granted")
         roles_removed[remove_name] = _remove_role_from_users(
             db, users, role_to_remove
         )
@@ -332,6 +372,11 @@ def main(argv: list[str] | None = None) -> int:
         help="copy permissions from an existing role in the same tenant",
     )
     parser.add_argument(
+        "--clone-platform-role",
+        action="store_true",
+        help="clone the only role in the tenant that grants core.platform.admin",
+    )
+    parser.add_argument(
         "--exclude-permission",
         action="append",
         dest="exclude_permissions",
@@ -344,6 +389,11 @@ def main(argv: list[str] | None = None) -> int:
         dest="remove_roles",
         default=[],
         help="remove this role from the selected users (repeatable)",
+    )
+    parser.add_argument(
+        "--remove-platform-roles",
+        action="store_true",
+        help="remove every role granting core.platform.admin from the selected users",
     )
     parser.add_argument(
         "--dry-run",
@@ -364,8 +414,10 @@ def main(argv: list[str] | None = None) -> int:
                 emails=args.email,
                 dry_run=args.dry_run,
                 clone_role=args.clone_role,
+                clone_platform_role=args.clone_platform_role,
                 exclude_permissions=args.exclude_permissions,
                 remove_roles=args.remove_roles,
+                remove_platform_roles=args.remove_platform_roles,
             )
         except GrantError as exc:
             print(f"FAILED: {exc}")
