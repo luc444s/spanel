@@ -65,7 +65,7 @@ export function cloudflareErrorMessage(
     case 409:
       return "A Cloudflare authorization is already pending. Finish it in the browser.";
     case 422:
-      return "Cloudflare is not configured correctly on this server.";
+      return "Cloudflare is not configured correctly on this server. The OAuth client may not be registered yet.";
     case 429:
       return "Cloudflare is rate limiting requests. Try again in a moment.";
     case 502:

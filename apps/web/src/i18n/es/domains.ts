@@ -203,7 +203,7 @@ const messages: Record<string, string> = {
   "You do not have permission to manage the Cloudflare connection.": "No tienes permiso para gestionar la conexión de Cloudflare.",
   "Cloudflare is not connected for this tenant.": "Cloudflare no está conectado para este tenant.",
   "A Cloudflare authorization is already pending. Finish it in the browser.": "Ya hay una autorización de Cloudflare pendiente. Termínala en el navegador.",
-  "Cloudflare is not configured correctly on this server.": "Cloudflare no está configurado correctamente en este servidor.",
+  "Cloudflare is not configured correctly on this server. The OAuth client may not be registered yet.": "Cloudflare no está configurado correctamente en este servidor. Puede que el cliente OAuth aún no esté registrado.",
   "Cloudflare is rate limiting requests. Try again in a moment.": "Cloudflare está limitando las peticiones. Inténtalo en un momento.",
   "Cloudflare returned an invalid response.": "Cloudflare devolvió una respuesta inválida.",
   "Cloudflare is unavailable right now.": "Cloudflare no está disponible ahora mismo.",
