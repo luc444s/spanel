@@ -53,6 +53,7 @@ class FakeCloudflare:
     def __init__(self) -> None:
         self.scope_calls = 0
         self.register_calls = 0
+        self.authorization_scopes: list[str] = []
         self.exchange_calls = 0
         self.refresh_calls = 0
         self.revoked: list[str] = []
@@ -85,7 +86,8 @@ class FakeCloudflare:
         assert kwargs["bootstrap_token"] == BOOTSTRAP
         return "client-1", CLIENT_SECRET
 
-    def authorization_url(self, *, state, code_challenge, **_kwargs):
+    def authorization_url(self, *, state, code_challenge, scopes, **_kwargs):
+        self.authorization_scopes = list(scopes)
         return f"https://dash.cloudflare.com/oauth2/auth?state={state}&code_challenge={code_challenge}"
 
     def exchange_code(self, **kwargs):
@@ -227,11 +229,39 @@ def test_register_encrypts_secret_and_conflicts_on_reregistration(tmp_path: Path
         engine.dispose()
 
 
+def test_register_repairs_legacy_scope_names_without_rotating_client(tmp_path: Path) -> None:
+    db, fake, _cipher, service, _events, engine = build(tmp_path)
+    try:
+        register(service, service.config)
+        row = db.scalar(select(CloudflareOAuthClient))
+        assert row is not None
+        row.scopes_json = ["Zone Read", "DNS Read", "DNS Write"]
+        db.commit()
+
+        repaired = service.register(
+            account_id="acct1",
+            bootstrap_token=BOOTSTRAP,
+            redirect_uri=service.config.redirect_uri,
+            apply=True,
+        )
+        assert repaired["client_id"] == "client-1"
+        assert fake.register_calls == 1
+        assert row.scopes_json == [
+            {"id": "1", "name": "Zone Read"},
+            {"id": "2", "name": "DNS Read"},
+            {"id": "3", "name": "DNS Write"},
+        ]
+    finally:
+        db.close()
+        engine.dispose()
+
+
 def test_start_flow_persists_only_hashed_state_and_encrypted_verifier(tmp_path: Path) -> None:
-    db, _fake, cipher, service, _events, engine = build(tmp_path)
+    db, fake, cipher, service, _events, engine = build(tmp_path)
     try:
         register(service, service.config)
         payload = service.start_flow_for_tenant("t1")
+        assert fake.authorization_scopes == ["1", "2", "3"]
         flow = db.scalar(select(CloudflareOAuthFlow))
         assert flow is not None
         state = parse_qs(urlsplit(payload["authorization_url"]).query)["state"][0]

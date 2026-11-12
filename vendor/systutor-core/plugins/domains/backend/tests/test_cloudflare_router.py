@@ -135,7 +135,11 @@ def build_app(tmp_path: Path, monkeypatch):
             secret_nonce=secret.nonce,
             key_version=secret.key_version,
             redirect_uri=config.redirect_uri,
-            scopes_json=["Zone Read", "DNS Read", "DNS Write"],
+            scopes_json=[
+                {"id": "scope-zone-read", "name": "Zone Read"},
+                {"id": "scope-dns-read", "name": "DNS Read"},
+                {"id": "scope-dns-write", "name": "DNS Write"},
+            ],
         )
     )
     access = cipher.encrypt(PURPOSE_ACCESS, "t1", "access-canary")

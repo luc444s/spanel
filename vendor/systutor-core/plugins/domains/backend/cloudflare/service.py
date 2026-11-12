@@ -77,6 +77,24 @@ _ACCOUNT_RE = re.compile(r"^[A-Za-z0-9]{1,32}$")
 _ERROR_RE = re.compile(r"^[a-z0-9_.-]{1,64}$")
 
 
+def _oauth_scope_names(values: object) -> list[str]:
+    if not isinstance(values, list):
+        return []
+    names: list[str] = []
+    for value in values:
+        if isinstance(value, dict) and value.get("name"):
+            names.append(str(value["name"]))
+        elif isinstance(value, str):
+            names.append(value)
+    return names
+
+
+def _oauth_scope_ids(values: object) -> list[str]:
+    if not isinstance(values, list):
+        return []
+    return [str(value["id"]) for value in values if isinstance(value, dict) and value.get("id")]
+
+
 def _now() -> datetime:
     return datetime.now(UTC)
 
@@ -242,11 +260,34 @@ class CloudflareService:
         if not apply:
             return plan
 
-        if get_oauth_client(self._db) is not None:
-            raise CloudflareConflict("a Cloudflare OAuth client is already registered")
-
         scopes = self._client.list_scopes(bootstrap_token)
         scope_ids = resolve_scope_ids(scopes)
+        scope_rows = [
+            {"id": scope_id, "name": name}
+            for name, scope_id in zip(REQUIRED_SCOPE_NAMES, scope_ids, strict=True)
+        ]
+        existing = get_oauth_client(self._db)
+        if existing is not None:
+            # A.SPEC 0071 originally persisted display names and reused them in
+            # the authorization URL. Cloudflare requires scope IDs there. A
+            # one-shot bootstrap token repairs that legacy row without rotating
+            # or exposing the already-encrypted client secret.
+            if _oauth_scope_ids(existing.scopes_json):
+                raise CloudflareConflict("a Cloudflare OAuth client is already registered")
+            if existing.account_id != account:
+                raise CloudflareConflict(
+                    "a Cloudflare OAuth client is registered for another account"
+                )
+            existing.scopes_json = scope_rows
+            self._db.commit()
+            return {
+                "applied": True,
+                "account_id": existing.account_id,
+                "client_id": existing.client_id,
+                "redirect_uri": existing.redirect_uri,
+                "scopes": list(REQUIRED_SCOPE_NAMES),
+            }
+
         client_id, secret = self._client.register_client(
             account_id=account,
             bootstrap_token=bootstrap_token,
@@ -266,7 +307,7 @@ class CloudflareService:
             secret_nonce=encrypted.nonce,
             key_version=encrypted.key_version,
             redirect_uri=callback,
-            scopes_json=list(REQUIRED_SCOPE_NAMES),
+            scopes_json=scope_rows,
         )
         self._db.add(row)
         self._db.flush()
@@ -324,11 +365,11 @@ class CloudflareService:
                 "scopes": list(REQUIRED_SCOPE_NAMES),
             }
         return {
-            "registered": True,
+            "registered": bool(_oauth_scope_ids(row.scopes_json)),
             "account_id": row.account_id,
             "client_id": row.client_id,
             "redirect_uri": row.redirect_uri,
-            "scopes": list(row.scopes_json or []),
+            "scopes": _oauth_scope_names(row.scopes_json),
         }
 
     def _client_secrets(self) -> tuple[CloudflareOAuthClient, str]:
@@ -374,14 +415,14 @@ class CloudflareService:
             redirect_uri=client_row.redirect_uri,
             state=state,
             code_challenge=challenge,
-            scopes=list(client_row.scopes_json or REQUIRED_SCOPE_NAMES),
+            scopes=_oauth_scope_ids(client_row.scopes_json),
         )
         return {
             "tenant_id": tenant_id,
             "flow_id": flow.id,
             "authorization_url": url,
             "redirect_uri": client_row.redirect_uri,
-            "scopes": list(client_row.scopes_json or REQUIRED_SCOPE_NAMES),
+            "scopes": _oauth_scope_names(client_row.scopes_json),
             "expires_at": _iso(flow.expires_at),
         }
 
