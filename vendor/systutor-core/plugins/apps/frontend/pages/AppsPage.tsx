@@ -8,6 +8,7 @@ import { useAuthStore } from "../../../../../../apps/web/src/features/auth/store
 import { useT } from "@/i18n/use-i18n";
 
 import { appsKeys, listApplications } from "../api";
+import { domainsKeys, listRoutes } from "../../../domains/frontend/api";
 import { canDeploy, canPlatformMutate, isOwnedByTenant } from "../logic";
 import type { Application, OperationSummary } from "../types";
 import { ApplicationDetail } from "../components/ApplicationDetail";
@@ -35,6 +36,12 @@ export default function AppsPage() {
     queryKey: [...appsKeys.applications, platform ? "all" : "tenant"],
     queryFn: () => listApplications(platform),
   });
+  const routesQuery = useQuery({
+    queryKey: domainsKeys.routes(),
+    queryFn: () => listRoutes(),
+    enabled: canReadDomains,
+  });
+  const routes = routesQuery.data?.items ?? [];
   const githubStatus = useGithubStatus(canConnect);
 
   useEffect(() => {
@@ -77,13 +84,24 @@ export default function AppsPage() {
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
       {applications.data?.map((application) => {
         const owned = isOwnedByTenant(application.tenant_id, currentTenant?.id);
+        const appRoutes = routes.filter((route) =>
+          route.site_id.startsWith(`${application.id}:`));
+        const domainLabel = !canReadDomains
+          ? application.domain ?? t("No domain")
+          : routesQuery.isLoading
+            ? t("Loading domains...")
+            : appRoutes.length === 0
+              ? application.domain ?? t("No domains")
+              : appRoutes.length === 1
+                ? `${appRoutes[0].domain}${appRoutes[0].path === "/" ? "" : appRoutes[0].path}`
+                : t("{count} domains", { count: appRoutes.length });
         return <button key={application.id} type="button"
           aria-disabled={!owned}
           className={`rounded-md border border-border bg-card p-4 text-left ${owned ? "hover:bg-muted" : "cursor-default"}`}
           onClick={() => { if (owned) setSelected(application); }}>
           <div className="flex items-center justify-between gap-2"><strong>{application.name}</strong><span className="rounded bg-muted px-2 py-0.5 text-xs">{application.status}</span></div>
           <p className="mt-2 text-sm text-muted-foreground">{application.repository} · {application.branch}</p>
-          <p className="mt-1 text-xs text-muted-foreground">{application.domain ?? t("No domain")}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{domainLabel}</p>
           {application.tenant_name ? <p className="mt-1 text-xs text-muted-foreground">{t("Tenant")}: {application.tenant_name}</p> : null}
           {!owned ? <p className="mt-2 text-xs font-medium text-muted-foreground">{t("Read only")}</p> : null}
         </button>;
