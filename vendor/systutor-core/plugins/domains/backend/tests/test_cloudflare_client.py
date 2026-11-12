@@ -9,6 +9,7 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
+import plugins.domains.backend.cloudflare.client as cloudflare_client_module
 from plugins.domains.backend.cloudflare.client import (
     CloudflareClient,
     CloudflareConflict,
@@ -107,6 +108,38 @@ def test_config_requires_private_exact_32_byte_key(tmp_path: Path) -> None:
     public = write_key(tmp_path / "public", mode=0o644)
     with pytest.raises(CloudflareConfigError, match="group/world"):
         CloudflareConfig(public, "https://spanel.lab").load_key()
+
+
+def test_default_transport_identifies_paneltutor_instead_of_python_urllib(monkeypatch) -> None:
+    captured = {}
+
+    class Response:
+        status = 200
+        headers = {}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def read(self):
+            return b"{}"
+
+    def fake_urlopen(request, timeout):
+        captured["user_agent"] = request.get_header("User-agent")
+        captured["timeout"] = timeout
+        return Response()
+
+    monkeypatch.setattr(cloudflare_client_module, "urlopen", fake_urlopen)
+    status, _headers, _body = cloudflare_client_module._default_transport(
+        "GET", "https://api.cloudflare.com/client/v4/zones", {}, None, 3
+    )
+    assert status == 200
+    assert captured == {
+        "user_agent": "PanelTutor/0.1 (+https://spanel.lab)",
+        "timeout": 3,
+    }
 
 
 def test_no_plaintext_env_secret_and_redirect_origin_is_exact(tmp_path: Path) -> None:

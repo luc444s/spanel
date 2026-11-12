@@ -171,7 +171,14 @@ def _default_transport(
     body: bytes | None,
     timeout: float,
 ) -> tuple[int, dict[str, str], bytes]:
-    request = Request(url, data=body, method=method, headers=headers)
+    # dash.cloudflare.com rejects Python urllib's default fingerprint with a
+    # Cloudflare 1010/403 before OAuth is evaluated. Use an honest, stable
+    # application identifier; this is not browser impersonation.
+    request_headers = {
+        "User-Agent": "PanelTutor/0.1 (+https://spanel.lab)",
+        **headers,
+    }
+    request = Request(url, data=body, method=method, headers=request_headers)
     try:
         with urlopen(request, timeout=timeout) as response:  # noqa: S310 - fixed trusted URL
             return (
