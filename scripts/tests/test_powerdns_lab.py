@@ -66,6 +66,9 @@ def test_compose_pins_images_and_publishes_only_dns() -> None:
     assert 'entrypoint: ["pdns_server"]' in text
     assert "${POWERDNS_LAB_STATE_DIR}/pdns.conf:/etc/powerdns/pdns.conf:ro" in text
     assert 'test: ["CMD", "pdns_control", "rping"]' in text
+    assert "  pdns-postgres:\n" in text
+    assert "  postgres:\n" not in text
+    assert "gpgsql-host=pdns-postgres" in SCRIPT.read_text()
 
 
 def test_up_refuses_tcp_udp_conflict_before_compose_mutation(tmp_path: Path) -> None:

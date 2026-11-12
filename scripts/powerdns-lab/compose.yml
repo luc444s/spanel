@@ -1,7 +1,7 @@
 name: spanel-powerdns-lab
 
 services:
-  postgres:
+  pdns-postgres:
     image: postgres:16.10-bookworm@sha256:38471f330eb885e04de130b768d6db4e10469e2311879c7e5c699f6d2d8a1c74
     container_name: spanel-powerdns-lab-postgres
     restart: unless-stopped
@@ -32,7 +32,7 @@ services:
     user: "0:0"
     entrypoint: ["pdns_server"]
     depends_on:
-      postgres:
+      pdns-postgres:
         condition: service_healthy
     secrets:
       - pdns_api_key
