@@ -9,6 +9,7 @@ import { t } from "@/i18n";
 import {
   cloudflareKeys,
   disconnectCloudflare,
+  getCloudflareClient,
   getCloudflareStatus,
   startCloudflareOAuth,
 } from "./api";
@@ -18,8 +19,11 @@ import {
   errorMessageFrom,
   flowDeadline,
   isCloudflareConnected,
+  isPlatformAdmin,
+  needsClientRegistration,
   pollDecision,
 } from "./logic";
+import { CloudflareRegisterDialog } from "./CloudflareRegisterDialog";
 
 type PendingFlow = { deadline: number };
 
@@ -36,6 +40,7 @@ export function CloudflareConnectButton({ permissions, onConnected }: Props) {
   const queryClient = useQueryClient();
   const [pending, setPending] = useState<PendingFlow | null>(null);
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+  const [registerOpen, setRegisterOpen] = useState(false);
   const mounted = useRef(true);
 
   useEffect(() => {
@@ -46,6 +51,13 @@ export function CloudflareConnectButton({ permissions, onConnected }: Props) {
   }, []);
 
   const visible = canUseCloudflare(permissions);
+  const platform = isPlatformAdmin(permissions);
+  const clientQuery = useQuery({
+    queryKey: cloudflareKeys.client,
+    queryFn: getCloudflareClient,
+    enabled: visible && platform,
+    retry: false,
+  });
   const statusQuery = useQuery({
     queryKey: cloudflareKeys.status,
     queryFn: getCloudflareStatus,
@@ -158,7 +170,15 @@ export function CloudflareConnectButton({ permissions, onConnected }: Props) {
         size="sm"
         variant="secondary"
         disabled={busy || disconnectMutation.isPending}
-        onClick={() => (connected ? setConfirmDisconnect(true) : startMutation.mutate())}
+        onClick={() => {
+          if (connected) {
+            setConfirmDisconnect(true);
+          } else if (platform && needsClientRegistration(clientQuery.data)) {
+            setRegisterOpen(true);
+          } else {
+            startMutation.mutate();
+          }
+        }}
       >
         {busy
           ? t("Authorizing Cloudflare...")
@@ -166,6 +186,15 @@ export function CloudflareConnectButton({ permissions, onConnected }: Props) {
             ? t("Disconnect Cloudflare")
             : t("Connect Cloudflare")}
       </Button>
+
+      <CloudflareRegisterDialog
+        open={registerOpen}
+        redirectUri={clientQuery.data?.redirect_uri ?? null}
+        onClose={() => setRegisterOpen(false)}
+        onRegistered={() => {
+          void queryClient.invalidateQueries({ queryKey: cloudflareKeys.client });
+        }}
+      />
 
       <ConfirmDialog
         open={confirmDisconnect}

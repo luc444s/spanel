@@ -18,6 +18,21 @@ class OAuthStartResponse(BaseModel):
     expires_at: str | None = None
 
 
+class OAuthClientStatusResponse(BaseModel):
+    registered: bool
+    account_id: str | None = None
+    client_id: str | None = None
+    redirect_uri: str | None = None
+    scopes: list[str] = Field(default_factory=list)
+
+
+class OAuthClientRegistrationRequest(BaseModel):
+    """The bootstrap token is optional in the type so validation never echoes it."""
+
+    bootstrap_token: str | None = None
+    account_id: str | None = None
+
+
 class ConnectionStatusResponse(BaseModel):
     connected: bool
     tenant_id: str

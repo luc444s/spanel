@@ -8,6 +8,23 @@ export function canUseCloudflare(permissions: readonly string[]): boolean {
   return permissions.includes(CLOUDFLARE_PERMISSION);
 }
 
+export function isPlatformAdmin(permissions: readonly string[]): boolean {
+  return permissions.includes("core.platform.admin");
+}
+
+export function needsClientRegistration(
+  status: { registered: boolean } | null | undefined,
+): boolean {
+  return status?.registered === false;
+}
+
+export function canRegisterClient(
+  permissions: readonly string[],
+  status: { registered: boolean } | null | undefined,
+): boolean {
+  return isPlatformAdmin(permissions) && needsClientRegistration(status);
+}
+
 export function isCloudflareConnected(status: CloudflareStatus | null): boolean {
   return Boolean(status?.connected && status.status === "active");
 }
@@ -63,7 +80,7 @@ export function cloudflareErrorMessage(
     case 404:
       return "Cloudflare is not connected for this tenant.";
     case 409:
-      return "A Cloudflare authorization is already pending. Finish it in the browser.";
+      return "Cloudflare already has a pending authorization or a registered client.";
     case 422:
       return "Cloudflare is not configured correctly on this server. The OAuth client may not be registered yet.";
     case 429:
@@ -76,7 +93,7 @@ export function cloudflareErrorMessage(
       return "Cloudflare did not respond in time.";
     default:
       if (code === "domains.dns.cloudflare.conflict") {
-        return "A Cloudflare authorization is already pending. Finish it in the browser.";
+        return "Cloudflare already has a pending authorization or a registered client.";
       }
       return "Could not reach Cloudflare. Try again.";
   }

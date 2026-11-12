@@ -295,6 +295,20 @@ class CloudflareClient:
         return urlencode(values).encode("utf-8")
 
     # -- OAuth client registration ----------------------------------------
+    def list_token_accounts(self, bootstrap_token: str) -> list[dict[str, str]]:
+        """Accounts visible to the bootstrap token; used only for registration."""
+        result, _info = self._api_get("/accounts?per_page=50", bootstrap_token)
+        if not isinstance(result, list):
+            raise CloudflareUpstream("Cloudflare returned an invalid account list")
+        accounts: list[dict[str, str]] = []
+        for item in result:
+            if not isinstance(item, dict):
+                continue
+            account_id = str(item.get("id", "")).strip()
+            if account_id:
+                accounts.append({"id": account_id, "name": str(item.get("name", "")).strip()})
+        return accounts
+
     def list_scopes(self, bootstrap_token: str) -> list[dict[str, str]]:
         result, _info = self._api_get("/oauth/scopes?per_page=200", bootstrap_token)
         if not isinstance(result, list):

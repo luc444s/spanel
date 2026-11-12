@@ -222,9 +222,7 @@ class CloudflareService:
         redirect_uri: str,
         apply: bool,
     ) -> dict[str, object]:
-        account = (account_id or "").strip()
-        if not _ACCOUNT_RE.match(account):
-            raise CloudflareValidation("the Cloudflare account id is invalid")
+        account = self._resolve_account(account_id, bootstrap_token)
         try:
             callback = self._config.validate_redirect_uri(redirect_uri)
         except CloudflareConfigError as exc:
@@ -290,6 +288,47 @@ class CloudflareService:
             "client_id": client_id,
             "redirect_uri": callback,
             "scopes": list(REQUIRED_SCOPE_NAMES),
+        }
+
+    def _resolve_account(self, account_id: str, bootstrap_token: str) -> str:
+        account = (account_id or "").strip()
+        if account:
+            if not _ACCOUNT_RE.match(account):
+                raise CloudflareValidation("the Cloudflare account id is invalid")
+            return account
+        if not bootstrap_token:
+            raise CloudflareValidation("a Cloudflare bootstrap token is required")
+        try:
+            accounts = self._client.list_token_accounts(bootstrap_token)
+        except CloudflarePermission as exc:
+            raise CloudflareValidation(
+                "the token cannot list accounts; provide the Cloudflare account id"
+            ) from exc
+        ids = [entry["id"] for entry in accounts if entry.get("id")]
+        if len(ids) == 1:
+            return ids[0]
+        if not ids:
+            raise CloudflareValidation("the token has no accessible Cloudflare account")
+        raise CloudflareValidation(
+            "the token can access multiple accounts; provide the Cloudflare account id"
+        )
+
+    def client_status(self) -> dict[str, object]:
+        row = get_oauth_client(self._db)
+        if row is None:
+            return {
+                "registered": False,
+                "account_id": None,
+                "client_id": None,
+                "redirect_uri": self._config.redirect_uri,
+                "scopes": list(REQUIRED_SCOPE_NAMES),
+            }
+        return {
+            "registered": True,
+            "account_id": row.account_id,
+            "client_id": row.client_id,
+            "redirect_uri": row.redirect_uri,
+            "scopes": list(row.scopes_json or []),
         }
 
     def _client_secrets(self) -> tuple[CloudflareOAuthClient, str]:

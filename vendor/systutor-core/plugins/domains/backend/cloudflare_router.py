@@ -20,6 +20,8 @@ from plugins.domains.backend.cloudflare_schemas import (
     ConnectionStatusResponse,
     DisconnectRequest,
     DisconnectResponse,
+    OAuthClientRegistrationRequest,
+    OAuthClientStatusResponse,
     OAuthStartResponse,
 )
 from systutor.api.deps import get_db_session
@@ -71,6 +73,52 @@ def start_oauth(
     except CloudflareError as exc:
         raise _translate(exc) from exc
     return OAuthStartResponse.model_validate(payload)
+
+
+@router.get("/dns/cloudflare/oauth/client", response_model=OAuthClientStatusResponse)
+def oauth_client_status(
+    request: Request,
+    _current_user: User = Depends(require_permission(CLOUDFLARE, platform_only=True)),
+    db: Session = Depends(get_db_session),
+) -> OAuthClientStatusResponse:
+    return OAuthClientStatusResponse.model_validate(_service(request, db).client_status())
+
+
+@router.post("/dns/cloudflare/oauth/register", response_model=OAuthClientStatusResponse)
+def register_oauth_client(
+    request: Request,
+    body: OAuthClientRegistrationRequest | None = None,
+    _current_user: User = Depends(require_permission(CLOUDFLARE, platform_only=True)),
+    db: Session = Depends(get_db_session),
+) -> OAuthClientStatusResponse:
+    payload = body or OAuthClientRegistrationRequest()
+    token = (payload.bootstrap_token or "").strip()
+    if not token or len(token) > 4096:
+        # Fixed message: never echo the submitted token.
+        raise AppError(
+            "a Cloudflare bootstrap token is required",
+            status_code=422,
+            code="domains.dns.cloudflare.validation",
+        )
+    service = _service(request, db)
+    try:
+        result = service.register(
+            account_id=(payload.account_id or "").strip(),
+            bootstrap_token=token,
+            redirect_uri=service.config.redirect_uri,
+            apply=True,
+        )
+    except CloudflareError as exc:
+        raise _translate(exc) from exc
+    raw_scopes = result.get("scopes")
+    scopes = [str(name) for name in raw_scopes] if isinstance(raw_scopes, list) else []
+    return OAuthClientStatusResponse(
+        registered=True,
+        account_id=str(result["account_id"]),
+        client_id=str(result["client_id"]),
+        redirect_uri=str(result["redirect_uri"]),
+        scopes=scopes,
+    )
 
 
 @router.get("/dns/cloudflare/oauth/callback", response_class=HTMLResponse)

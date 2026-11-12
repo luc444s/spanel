@@ -42,6 +42,7 @@ class FakeCloudflare:
         self.zone_error: Exception | None = None
         self.record_error: Exception | None = None
         self.revoked: list[str] = []
+        self.registered: list[dict[str, object]] = []
         self.zones = [
             CloudflareZone("z1", "example.com", "active", "acct1", "Lab", ("ns1",), None, None)
         ]
@@ -77,6 +78,20 @@ class FakeCloudflare:
 
     def revoke(self, **kwargs):
         self.revoked.append(kwargs["token"])
+
+    def list_token_accounts(self, token):
+        return [{"id": "acct1", "name": "Lab"}]
+
+    def list_scopes(self, token):
+        return [
+            {"id": "scope-zone-read", "name": "Zone Read"},
+            {"id": "scope-dns-read", "name": "DNS Read"},
+            {"id": "scope-dns-write", "name": "DNS Write"},
+        ]
+
+    def register_client(self, **kwargs):
+        self.registered.append(kwargs)
+        return "client-new", "secret-new"
 
     def refresh(self, **kwargs):
         return OAuthTokens("new", "new-refresh", 3600, "")
@@ -279,6 +294,74 @@ def test_callback_is_public_and_opaque(tmp_path: Path, monkeypatch) -> None:
             assert response.status_code == 400
             assert "authorization failed" in response.text.lower()
             assert "t1" not in response.text
+    finally:
+        db.close()
+        engine.dispose()
+
+
+def test_oauth_client_registration_routes_are_platform_only(
+    tmp_path: Path, monkeypatch
+) -> None:
+    app, _fake, db, holder, _cipher, engine = build_app(tmp_path, monkeypatch)
+    try:
+        with TestClient(app) as client:
+            holder["context"] = context("t1", "domains.dns.cloudflare")
+            status_path = "/api/v1/plugins/domains/dns/cloudflare/oauth/client"
+            assert client.get(status_path).status_code == 403
+            assert (
+                client.post(
+                    "/api/v1/plugins/domains/dns/cloudflare/oauth/register",
+                    json={"bootstrap_token": "token-canary"},
+                ).status_code
+                == 403
+            )
+
+            holder["context"] = context("t1", "domains.dns.cloudflare", platform=True)
+            status = client.get("/api/v1/plugins/domains/dns/cloudflare/oauth/client")
+            assert status.status_code == 200
+            body = status.json()
+            assert body["registered"] is True
+            assert body["client_id"] == "client-1"
+            assert "secret-canary" not in status.text
+    finally:
+        db.close()
+        engine.dispose()
+
+
+def test_platform_registers_client_from_pasted_token(tmp_path: Path, monkeypatch) -> None:
+    app, fake, db, holder, _cipher, engine = build_app(tmp_path, monkeypatch)
+    token = "bootstrap-token-canary"
+    try:
+        db.query(CloudflareOAuthClient).delete()
+        db.commit()
+        holder["context"] = context("t1", "domains.dns.cloudflare", platform=True)
+        with TestClient(app) as client:
+            invalid = client.post(
+                "/api/v1/plugins/domains/dns/cloudflare/oauth/register",
+                json={"bootstrap_token": token, "account_id": "not valid!"},
+            )
+            assert invalid.status_code == 422
+            assert token not in invalid.text
+
+            registered = client.post(
+                "/api/v1/plugins/domains/dns/cloudflare/oauth/register",
+                json={"bootstrap_token": token},
+            )
+            assert registered.status_code == 200
+            payload = registered.json()
+            assert payload["registered"] is True
+            assert payload["client_id"] == "client-new"
+            assert payload["account_id"] == "acct1"
+            assert token not in registered.text
+            assert "secret-new" not in registered.text
+            assert fake.registered and fake.registered[0]["account_id"] == "acct1"
+
+            conflict = client.post(
+                "/api/v1/plugins/domains/dns/cloudflare/oauth/register",
+                json={"bootstrap_token": token},
+            )
+            assert conflict.status_code == 409
+            assert token not in conflict.text
     finally:
         db.close()
         engine.dispose()

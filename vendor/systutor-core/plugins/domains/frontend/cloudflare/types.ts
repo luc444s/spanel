@@ -1,3 +1,11 @@
+export type CloudflareClientStatus = {
+  registered: boolean;
+  account_id: string | null;
+  client_id: string | null;
+  redirect_uri: string | null;
+  scopes: string[];
+};
+
 export type CloudflareStartResponse = {
   tenant_id: string;
   flow_id: string;

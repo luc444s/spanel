@@ -232,11 +232,21 @@ conectar y desconectar el suyo; el cliente OAuth se sigue registrando una vez
 desde la CLI del operador de plataforma. El navegador nunca recibe tokens,
 client secrets ni contenido de registros.
 
+Los administradores de plataforma ven además el estado del cliente. Si no hay
+cliente OAuth, **Conectar Cloudflare** abre un modal para pegar un token de API
+de Cloudflare con `Cuenta → Clientes OAuth → Editar`. El token se usa una vez,
+no se guarda, y el cliente privado se crea con la redirect URI fija y los
+scopes requeridos. Si el token no puede listar una única cuenta, aparece un
+campo opcional de Account ID. La CLI `cloudflare oauth register` sigue
+disponible como vía de operador.
+
 ### API
 
 | Método | Ruta | Permiso |
 |---|---|---|
 | POST | `/api/v1/plugins/domains/dns/cloudflare/oauth/start` | `domains.dns.cloudflare` |
+| GET | `/api/v1/plugins/domains/dns/cloudflare/oauth/client` | `domains.dns.cloudflare` + `core.platform.admin` |
+| POST | `/api/v1/plugins/domains/dns/cloudflare/oauth/register` | `domains.dns.cloudflare` + `core.platform.admin` |
 | GET | `/api/v1/plugins/domains/dns/cloudflare/oauth/callback` | público, solo state hasheado de un uso |
 | GET | `/api/v1/plugins/domains/dns/cloudflare/status` | `domains.dns.cloudflare` |
 | POST | `/api/v1/plugins/domains/dns/cloudflare/disconnect` | `domains.dns.cloudflare` |

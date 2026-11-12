@@ -229,11 +229,20 @@ disconnect their own tenant; the OAuth client itself is still registered once
 by the platform operator with the CLI. The browser never receives tokens,
 client secrets or record content.
 
+Platform administrators also see the client state. When no OAuth client exists,
+**Connect Cloudflare** opens a modal to paste a Cloudflare API token with
+`Account → OAuth Clients → Edit`. The token is used once, never stored, and the
+private client is created with the fixed redirect URI and required scopes. If
+the token cannot list a single account, an optional Account ID field appears.
+The CLI `cloudflare oauth register` remains available as the operator path.
+
 ### API
 
 | Method | Path | Permission |
 |---|---|---|
 | POST | `/api/v1/plugins/domains/dns/cloudflare/oauth/start` | `domains.dns.cloudflare` |
+| GET | `/api/v1/plugins/domains/dns/cloudflare/oauth/client` | `domains.dns.cloudflare` + `core.platform.admin` |
+| POST | `/api/v1/plugins/domains/dns/cloudflare/oauth/register` | `domains.dns.cloudflare` + `core.platform.admin` |
 | GET | `/api/v1/plugins/domains/dns/cloudflare/oauth/callback` | public, single-use hashed state only |
 | GET | `/api/v1/plugins/domains/dns/cloudflare/status` | `domains.dns.cloudflare` |
 | POST | `/api/v1/plugins/domains/dns/cloudflare/disconnect` | `domains.dns.cloudflare` |

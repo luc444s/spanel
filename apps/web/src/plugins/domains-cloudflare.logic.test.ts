@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import {
   CLOUDFLARE_FLOW_MAX_MS,
+  canRegisterClient,
   canUseCloudflare,
   cloudflareErrorMessage,
   errorMessageFrom,
   flowDeadline,
   isCloudflareConnected,
+  isPlatformAdmin,
+  needsClientRegistration,
   pollDecision,
   zoneCount,
 } from "../../../../vendor/systutor-core/plugins/domains/frontend/cloudflare/logic";
@@ -26,6 +29,19 @@ describe("Cloudflare panel policy", () => {
   it("is visible only with the plugin permission", () => {
     expect(canUseCloudflare(["domains.dns.read"])).toBe(false);
     expect(canUseCloudflare(["domains.dns.cloudflare"])).toBe(true);
+  });
+
+  it("only platform administrators can register the OAuth client", () => {
+    const tenant = ["domains.dns.cloudflare"];
+    const platform = [...tenant, "core.platform.admin"];
+    expect(isPlatformAdmin(tenant)).toBe(false);
+    expect(isPlatformAdmin(platform)).toBe(true);
+    expect(needsClientRegistration({ registered: false })).toBe(true);
+    expect(needsClientRegistration({ registered: true })).toBe(false);
+    expect(needsClientRegistration(null)).toBe(false);
+    expect(canRegisterClient(tenant, { registered: false })).toBe(false);
+    expect(canRegisterClient(platform, { registered: false })).toBe(true);
+    expect(canRegisterClient(platform, { registered: true })).toBe(false);
   });
 
   it("treats only an active connection as connected", () => {
