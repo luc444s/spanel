@@ -500,8 +500,8 @@ class CloudflareService:
         flow.consumed_at = now
         self._db.commit()
 
+        client_row, secret = self._client_secrets()
         try:
-            client_row, secret = self._client_secrets()
             tokens = self._client.exchange_code(
                 client_id=client_row.client_id,
                 client_secret=secret,
@@ -509,6 +509,11 @@ class CloudflareService:
                 redirect_uri=flow.redirect_uri,
                 code_verifier=verifier,
             )
+        except Exception as exc:  # noqa: BLE001 - public callback stays opaque
+            self._mark_callback_failed(flow.id, now, exc, stage="token_exchange")
+            return CallbackResult(False, failure_page())
+
+        try:
             account_id, account_name = self._discover_account(
                 tokens, client_row.account_id
             )
@@ -519,15 +524,7 @@ class CloudflareService:
                 tokens=tokens,
             )
         except Exception as exc:  # noqa: BLE001 - the public page must stay opaque
-            self._db.rollback()
-            failed = get_flow(self._db, flow.id)
-            if failed is not None:
-                failed.status = FLOW_FAILED
-                failed.error_code = (
-                    exc.code if isinstance(exc, CloudflareError) else "exchange_failed"
-                )
-                failed.consumed_at = now
-                self._db.commit()
+            self._mark_callback_failed(flow.id, now, exc, stage="account_discovery")
             return CallbackResult(False, failure_page())
 
         self._audit(
@@ -548,6 +545,20 @@ class CloudflareService:
             flow.tenant_id,
         )
         return CallbackResult(True, success_page())
+
+    def _mark_callback_failed(
+        self, flow_id: str, now: datetime, exc: Exception, *, stage: str
+    ) -> None:
+        """Persist only a stage and normalized code; never an upstream body."""
+        self._db.rollback()
+        failed = get_flow(self._db, flow_id)
+        if failed is None:
+            return
+        code = exc.code.rsplit(".", 1)[-1] if isinstance(exc, CloudflareError) else "failed"
+        failed.status = FLOW_FAILED
+        failed.error_code = f"{stage}.{code}"[:64]
+        failed.consumed_at = now
+        self._db.commit()
 
     def _discover_account(
         self, tokens: OAuthTokens, preferred: str

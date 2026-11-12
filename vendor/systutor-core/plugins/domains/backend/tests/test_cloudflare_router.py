@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -27,7 +28,7 @@ from plugins.domains.backend.cloudflare.service import (
     PURPOSE_CLIENT_SECRET,
     PURPOSE_REFRESH,
 )
-from plugins.domains.backend.cloudflare_router import router
+from plugins.domains.backend.cloudflare_router import _OAuthCallbackAccessLogFilter, router
 from plugins.domains.backend.models import CloudflareConnection, CloudflareOAuthClient
 from systutor.api.deps import get_db_session
 from systutor.core.database import Base
@@ -95,6 +96,29 @@ class FakeCloudflare:
 
     def refresh(self, **kwargs):
         return OAuthTokens("new", "new-refresh", 3600, "")
+
+
+def test_callback_access_log_filter_redacts_code_and_state() -> None:
+    record = logging.LogRecord(
+        "uvicorn.access",
+        logging.INFO,
+        "",
+        0,
+        '%s - "%s %s HTTP/%s" %d',
+        (
+            "127.0.0.1",
+            "GET",
+            "/api/v1/plugins/domains/dns/cloudflare/oauth/callback?code=secret&state=secret",
+            "1.1",
+            200,
+        ),
+        None,
+    )
+    assert _OAuthCallbackAccessLogFilter().filter(record) is True
+    rendered = record.getMessage()
+    assert "code=secret" not in rendered
+    assert "state=secret" not in rendered
+    assert "?<redacted>" in rendered
 
 
 def context(tenant_id: str, *extra: str, platform: bool = False) -> TenantContext:

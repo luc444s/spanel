@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import logging
+from typing import Any
+
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
@@ -33,6 +36,22 @@ from systutor.kernel.tenants.context import TenantContext
 router = APIRouter(tags=["domains-cloudflare"])
 
 CLOUDFLARE = "domains.dns.cloudflare"
+
+
+class _OAuthCallbackAccessLogFilter(logging.Filter):
+    """Strip callback query data (authorization code/state) from Uvicorn logs."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        args: Any = record.args
+        if isinstance(args, tuple) and len(args) >= 3:
+            path = str(args[2])
+            if "/dns/cloudflare/oauth/callback?" in path:
+                cleaned = path.split("?", 1)[0] + "?<redacted>"
+                record.args = (*args[:2], cleaned, *args[3:])
+        return True
+
+
+logging.getLogger("uvicorn.access").addFilter(_OAuthCallbackAccessLogFilter())
 
 
 def _config() -> CloudflareConfig:

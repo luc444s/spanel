@@ -218,7 +218,7 @@ def test_callback_success_is_single_use_and_never_stores_plaintext(tmp_path: Pat
         assert ACCESS_CANARY.encode() not in connection.access_ciphertext
         assert REFRESH_CANARY.encode() not in (connection.refresh_ciphertext or b"")
         assert connection.status == "active"
-        assert connection.account_name == "Lab"
+        assert connection.account_name == "Cloudflare"
         assert connection.scopes_json == ["Zone Read", "DNS Read", "DNS Write"]
 
         replay = service.complete_callback(state=state, code="auth-code")
