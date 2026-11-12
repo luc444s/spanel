@@ -57,6 +57,16 @@ from systutor.kernel.tenants.models import Tenant
 DEFAULT_PERMISSION = "apps.deployments.create"
 DEFAULT_ROLE = "apps_deployer"
 MANAGED_ROLE = "tenant_admin"
+# Endpoints behind these permissions still require core.platform.admin. Keeping
+# them in a cloned tenant role would only render dead UI and 403 responses.
+PLATFORM_ONLY_PERMISSIONS = {
+    "core.platform.admin",
+    "apps.applications.delete",
+    "hosting.sites.delete",
+    "hosting.profiles.manage",
+    "tenant.tenants.read",
+    "tenant.tenants.manage",
+}
 
 
 class GrantError(Exception):
@@ -211,7 +221,7 @@ def grant(
     permissions_added: list[str] = []
     cloned: list[str] = []
     if clone_role:
-        excluded = {"core.platform.admin", *(exclude_permissions or [])}
+        excluded = PLATFORM_ONLY_PERMISSIONS | set(exclude_permissions or [])
         cloned = _clone_permissions(db, tenant.id, role, clone_role, excluded)
 
     for permission_name in permissions:
@@ -326,7 +336,7 @@ def main(argv: list[str] | None = None) -> int:
         action="append",
         dest="exclude_permissions",
         default=None,
-        help="permission skipped when cloning (repeatable; default: core.platform.admin)",
+        help="extra permission skipped when cloning (platform-only ones are always skipped)",
     )
     parser.add_argument(
         "--remove-role",
