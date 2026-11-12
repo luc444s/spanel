@@ -75,17 +75,22 @@ class CloudflareConfig:
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None) -> CloudflareConfig:
         env = os.environ if environ is None else environ
-        key_file = _clean(env.get("SPANEL_CLOUDFLARE_ENCRYPTION_KEY_FILE"))
+        key_file = (
+            _clean(env.get("SPANEL_CLOUDFLARE_ENCRYPTION_KEY_FILE"))
+            or "/run/secrets/apps_key"
+        )
         public_url = _clean(env.get("SPANEL_CLOUDFLARE_PUBLIC_URL")).rstrip("/")
+        if not public_url:
+            domain = _clean(env.get("SPANEL_DOMAIN"))
+            if domain:
+                public_url = f"https://{domain}"
         raw_timeout = _clean(env.get("SPANEL_CLOUDFLARE_TIMEOUT_SECONDS")) or "10"
         raw_version = _clean(env.get("SPANEL_CLOUDFLARE_KEY_VERSION")) or "1"
 
-        if not key_file:
-            raise CloudflareConfigError(
-                "SPANEL_CLOUDFLARE_ENCRYPTION_KEY_FILE is not configured"
-            )
         if not public_url:
-            raise CloudflareConfigError("SPANEL_CLOUDFLARE_PUBLIC_URL is not configured")
+            raise CloudflareConfigError(
+                "SPANEL_DOMAIN or SPANEL_CLOUDFLARE_PUBLIC_URL is required"
+            )
         parts = urlsplit(public_url)
         if parts.scheme != "https" or not parts.hostname:
             raise CloudflareConfigError(

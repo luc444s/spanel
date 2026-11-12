@@ -183,13 +183,16 @@ endpoint que cree, edite o elimine registros, zonas, nameservers ni proxy.
 La A.SPEC 0072 añade una tarjeta de conexión de Cloudflare, con alcance de
 tenant, en la página de Dominios para usuarios con `domains.dns.cloudflare`.
 
-Configuración del host:
+La configuración se deriva automáticamente del despliegue normal de Spanel:
 
 ```text
-SPANEL_CLOUDFLARE_ENCRYPTION_KEY_FILE=/run/secrets/apps_key
-SPANEL_CLOUDFLARE_PUBLIC_URL=https://spanel.lab
-SPANEL_CLOUDFLARE_TIMEOUT_SECONDS=10
+SPANEL_DOMAIN=spanel.example.com
 ```
+
+Esto selecciona `/run/secrets/apps_key`, `https://${SPANEL_DOMAIN}` y un timeout
+de 10 segundos. `SPANEL_CLOUDFLARE_ENCRYPTION_KEY_FILE`,
+`SPANEL_CLOUDFLARE_PUBLIC_URL` y `SPANEL_CLOUDFLARE_TIMEOUT_SECONDS` siguen
+disponibles como overrides avanzados opcionales.
 
 El archivo de clave es regular, solo propietario y contiene exactamente 32
 bytes crudos o una codificación base64/base64url de 32 bytes. La ruta por

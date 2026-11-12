@@ -180,13 +180,16 @@ creates, edits or deletes records, zones, nameservers or proxy settings.
 A.SPEC 0072 adds a tenant-scoped Cloudflare connection card to the Domains page
 for users with `domains.dns.cloudflare`.
 
-Host configuration:
+Host configuration is derived automatically from the normal Spanel deployment:
 
 ```text
-SPANEL_CLOUDFLARE_ENCRYPTION_KEY_FILE=/run/secrets/apps_key
-SPANEL_CLOUDFLARE_PUBLIC_URL=https://spanel.lab
-SPANEL_CLOUDFLARE_TIMEOUT_SECONDS=10
+SPANEL_DOMAIN=spanel.example.com
 ```
+
+This selects `/run/secrets/apps_key`, `https://${SPANEL_DOMAIN}` and a 10-second
+timeout. `SPANEL_CLOUDFLARE_ENCRYPTION_KEY_FILE`,
+`SPANEL_CLOUDFLARE_PUBLIC_URL` and `SPANEL_CLOUDFLARE_TIMEOUT_SECONDS` remain
+optional advanced overrides.
 
 The key file is a regular, owner-only file containing exactly 32 raw bytes or a
 base64/base64url encoding of 32 bytes. The default path reuses the same

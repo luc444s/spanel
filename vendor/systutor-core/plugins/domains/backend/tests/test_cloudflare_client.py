@@ -110,6 +110,16 @@ def test_config_requires_private_exact_32_byte_key(tmp_path: Path) -> None:
         CloudflareConfig(public, "https://spanel.lab").load_key()
 
 
+def test_config_derives_cloudflare_defaults_from_spanel_domain() -> None:
+    parsed = CloudflareConfig.from_env({"SPANEL_DOMAIN": "panel.example.com"})
+    assert parsed.encryption_key_file == Path("/run/secrets/apps_key")
+    assert parsed.public_url == "https://panel.example.com"
+    assert parsed.redirect_uri == (
+        "https://panel.example.com/api/v1/plugins/domains/dns/cloudflare/oauth/callback"
+    )
+    assert parsed.timeout_seconds == 10
+
+
 def test_default_transport_identifies_paneltutor_instead_of_python_urllib(monkeypatch) -> None:
     captured = {}
 
@@ -143,13 +153,14 @@ def test_default_transport_identifies_paneltutor_instead_of_python_urllib(monkey
 
 
 def test_no_plaintext_env_secret_and_redirect_origin_is_exact(tmp_path: Path) -> None:
-    with pytest.raises(CloudflareConfigError, match="ENCRYPTION_KEY_FILE"):
-        CloudflareConfig.from_env(
-            {
-                "SPANEL_CLOUDFLARE_PUBLIC_URL": "https://spanel.lab",
-                "SPANEL_CLOUDFLARE_CLIENT_SECRET": CANARY,
-            }
-        )
+    defaults = CloudflareConfig.from_env(
+        {
+            "SPANEL_CLOUDFLARE_PUBLIC_URL": "https://spanel.lab",
+            "SPANEL_CLOUDFLARE_CLIENT_SECRET": CANARY,
+        }
+    )
+    assert defaults.encryption_key_file == Path("/run/secrets/apps_key")
+    assert CANARY not in str(defaults.describe())
     parsed = config(tmp_path)
     with pytest.raises(CloudflareConfigError, match="HTTPS"):
         parsed.validate_redirect_uri("http://spanel.lab/callback")
