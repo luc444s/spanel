@@ -72,7 +72,7 @@ certificados o tenants.
 ```bash
 # 1. Clonar el repositorio
 git clone <repository-url>
-cd mailadmin
+cd PanelTutor
 
 # 2. Configurar variables de entorno
 cp .env.docker.example .env.docker
@@ -94,7 +94,7 @@ docker compose up -d --build
 ```bash
 # 1. Clonar el repositorio
 git clone <repository-url>
-cd mailadmin
+cd PanelTutor
 
 # 2. Configurar entorno Python
 python -m venv .venv

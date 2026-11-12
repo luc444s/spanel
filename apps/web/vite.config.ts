@@ -23,7 +23,7 @@ function resolveLanHost() {
 
 const devPort = Number(process.env.VITE_DEV_PORT ?? "5173");
 const hmrHost = process.env.VITE_HMR_HOST ?? resolveLanHost();
-// Puerto del backend en dev. Permite correr mailadmin junto a otro proyecto
+// Puerto del backend en dev. Permite correr PanelTutor junto a otro proyecto
 // que ya ocupe el 8000 (ver script "services" de package.json).
 const apiPort = Number(process.env.SYSTUTOR_API_PORT ?? "8000");
 

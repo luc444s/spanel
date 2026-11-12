@@ -1,6 +1,6 @@
 import { useT } from "../../i18n/use-i18n";
 
-const REPOSITORY_URL = "https://github.com/luc444s/spanel";
+const REPOSITORY_URL = "https://github.com/luc444s/PanelTutor";
 
 /**
  * The public repository, pinned to the bottom-right corner. It sits below the
