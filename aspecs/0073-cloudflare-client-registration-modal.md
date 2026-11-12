@@ -2,27 +2,27 @@
 
 > `risk: high` — receives a privileged Cloudflare bootstrap token over HTTP,
 > creates an OAuth client and persists its secret. The token is used once and
-> never stored. Platform administrators only. Human approver: `luc444s`.
+> never stored. Dedicated registrar permission only. Human approver: `luc444s`.
 
 ## WHY
 
 A.SPEC 0071 requires an operator terminal and a bootstrap-token file to create
 the single platform Cloudflare OAuth client. A.SPEC 0072 added the tenant-facing
 Connect button, but when no client exists the panel only reports a generic
-`422`. A platform administrator should be able to paste the Cloudflare API token
+`422`. An explicitly authorized operator should be able to paste the Cloudflare API token
 in the panel, create the private client and then authorize normally, without
 SSH or a CLI.
 
 ## WHAT
 
-Add one platform-only registration modal to the existing Cloudflare header
+Add one permission-gated registration modal to the existing Cloudflare header
 button.
 
 ### Backend surface
 
-Two routes, both authorized by `domains.dns.cloudflare` plus
-`TenantContext.is_platform` (`core.platform.admin`); `users.is_superadmin` is
-never consulted:
+Two routes, both authorized by the dedicated
+`domains.dns.cloudflare.register` permission. Neither `core.platform.admin` nor
+`users.is_superadmin` is required:
 
 ```text
 GET  /dns/cloudflare/oauth/client     -> OAuthClientStatus
@@ -54,12 +54,12 @@ POST /dns/cloudflare/oauth/register   -> OAuthClientStatus
 
 ### Panel surface
 
-`CloudflareConnectButton` gains platform awareness:
+`CloudflareConnectButton` gains registrar awareness:
 
-- Non-platform users: unchanged Connect/Disconnect behavior. If the client is
-  absent, the normalized `422` explains that the platform administrator must
+- Users without the registrar permission: unchanged Connect/Disconnect behavior. If the client is
+  absent, the normalized `422` explains that an authorized operator must
   register it.
-- Platform administrators: the button also queries `GET /oauth/client`. When
+- Registrars: the button also queries `GET /oauth/client`. When
   no client is registered, clicking **Connect Cloudflare** opens a compact
   modal instead of starting OAuth.
 
@@ -82,13 +82,13 @@ state.
 
 ### Pure helpers
 
-Extend `cloudflare/logic.ts` with `isPlatformAdmin(permissions)`,
+Extend `cloudflare/logic.ts` with `canManageCloudflareClient(permissions)`,
 `needsClientRegistration(status)` and `canRegisterClient(permissions, status)`,
 covered by the existing policy test file.
 
 ## SCOPE
 
-- Platform-only client status and registration API.
+- Dedicated-permission client status and registration API.
 - Automatic single-account resolution from the bootstrap token.
 - Compact registration modal wired to the existing Cloudflare button.
 - Fixed, secret-free error messages and Spanish translations.
@@ -107,15 +107,16 @@ covered by the existing policy test file.
 
 ### Preconditions
 
-1. The user is authenticated as a platform administrator and has
-   `domains.dns.cloudflare`.
+1. The user has `domains.dns.cloudflare` and the dedicated
+   `domains.dns.cloudflare.register` permission, assigned through a durable
+   tenant role (for example with `scripts/grant_tenant_permission.py`).
 2. The backend has a valid encryption key and public URL.
 3. The submitted token has `OAuth Clients: Edit` on the target account.
 4. The account has no Cloudflare OAuth client registered by this panel yet.
 
 ### Postconditions
 
-1. A platform administrator can register the client from the panel with only
+1. An authorized registrar can register the client from the panel with only
    the token when the token can list exactly one account, or with token plus
    Account ID otherwise.
 2. The token never appears in persistence, responses, audit, logs or the DOM
@@ -129,7 +130,7 @@ covered by the existing policy test file.
 
 ```yaml
 invariants:
-  - Registration endpoints require both domains.dns.cloudflare and core.platform.admin; users.is_superadmin is never consulted.
+  - Registration endpoints require domains.dns.cloudflare.register; neither core.platform.admin nor users.is_superadmin is consulted.
   - The bootstrap token is never persisted, audited, logged, echoed in validation errors or HTTP responses, and is cleared from the browser state on modal close.
   - The client secret is encrypted before persistence and never returned to the browser.
   - Registration never overwrites an existing client; conflict returns 409.

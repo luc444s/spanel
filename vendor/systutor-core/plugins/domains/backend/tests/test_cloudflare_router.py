@@ -327,7 +327,7 @@ def test_callback_is_public_and_opaque(tmp_path: Path, monkeypatch) -> None:
         engine.dispose()
 
 
-def test_oauth_client_registration_routes_are_platform_only(
+def test_oauth_client_registration_routes_require_dedicated_permission(
     tmp_path: Path, monkeypatch
 ) -> None:
     app, _fake, db, holder, _cipher, engine = build_app(tmp_path, monkeypatch)
@@ -344,7 +344,14 @@ def test_oauth_client_registration_routes_are_platform_only(
                 == 403
             )
 
-            holder["context"] = context("t1", "domains.dns.cloudflare", platform=True)
+            holder["context"] = context(
+                "t1", "domains.dns.cloudflare", platform=True
+            )
+            assert client.get(status_path).status_code == 403
+
+            holder["context"] = context(
+                "t1", "domains.dns.cloudflare", "domains.dns.cloudflare.register"
+            )
             status = client.get("/api/v1/plugins/domains/dns/cloudflare/oauth/client")
             assert status.status_code == 200
             body = status.json()
@@ -362,7 +369,9 @@ def test_platform_registers_client_from_pasted_token(tmp_path: Path, monkeypatch
     try:
         db.query(CloudflareOAuthClient).delete()
         db.commit()
-        holder["context"] = context("t1", "domains.dns.cloudflare", platform=True)
+        holder["context"] = context(
+            "t1", "domains.dns.cloudflare", "domains.dns.cloudflare.register"
+        )
         with TestClient(app) as client:
             invalid = client.post(
                 "/api/v1/plugins/domains/dns/cloudflare/oauth/register",
@@ -404,7 +413,9 @@ def test_registration_requests_account_id_when_token_cannot_list_accounts(
         db.query(CloudflareOAuthClient).delete()
         db.commit()
         fake.list_token_accounts = lambda _token: []
-        holder["context"] = context("t1", "domains.dns.cloudflare", platform=True)
+        holder["context"] = context(
+            "t1", "domains.dns.cloudflare", "domains.dns.cloudflare.register"
+        )
         with TestClient(app) as client:
             response = client.post(
                 "/api/v1/plugins/domains/dns/cloudflare/oauth/register",

@@ -36,6 +36,7 @@ from systutor.kernel.tenants.context import TenantContext
 router = APIRouter(tags=["domains-cloudflare"])
 
 CLOUDFLARE = "domains.dns.cloudflare"
+CLOUDFLARE_REGISTER = "domains.dns.cloudflare.register"
 
 
 class _OAuthCallbackAccessLogFilter(logging.Filter):
@@ -97,7 +98,7 @@ def start_oauth(
 @router.get("/dns/cloudflare/oauth/client", response_model=OAuthClientStatusResponse)
 def oauth_client_status(
     request: Request,
-    _current_user: User = Depends(require_permission(CLOUDFLARE, platform_only=True)),
+    _current_user: User = Depends(require_permission(CLOUDFLARE_REGISTER)),
     db: Session = Depends(get_db_session),
 ) -> OAuthClientStatusResponse:
     return OAuthClientStatusResponse.model_validate(_service(request, db).client_status())
@@ -107,7 +108,7 @@ def oauth_client_status(
 def register_oauth_client(
     request: Request,
     body: OAuthClientRegistrationRequest | None = None,
-    _current_user: User = Depends(require_permission(CLOUDFLARE, platform_only=True)),
+    _current_user: User = Depends(require_permission(CLOUDFLARE_REGISTER)),
     db: Session = Depends(get_db_session),
 ) -> OAuthClientStatusResponse:
     payload = body or OAuthClientRegistrationRequest()

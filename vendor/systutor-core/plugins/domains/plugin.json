@@ -13,7 +13,8 @@
     "domains.dns.records",
     "domains.dns.zones",
     "domains.dns.nameservers",
-    "domains.dns.cloudflare"
+    "domains.dns.cloudflare",
+    "domains.dns.cloudflare.register"
   ],
   "tenant_admin_permissions": [
     "domains.domains.read",

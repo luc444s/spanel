@@ -43,6 +43,7 @@ English | [Español](README.es.md)
 | Need | Script |
 |---|---|
 | Deploy or update Spanel | [`deploy.sh`](#deploysh) |
+| Grant a permission to a tenant operator | [`grant_tenant_permission.py`](#grant_tenant_permissionpy) |
 | Adopt a specific WordPress | [`hosting_adopt.py`](#hosting_adoptpy) |
 | Discover and sync all published sites | [`hosting_sync.py`](#hosting_syncpy) |
 | Complete the domain of an adopted site | [`hosting_set_domain.py`](#hosting_set_domainpy) |
@@ -71,6 +72,25 @@ mode `600` when absent, validates it when present, and never rotates it.
 Requires `.env.docker`, `.env.powerdns`, and either `SPANEL_APPS_PUBLIC_URL` or
 `SPANEL_DOMAIN`. To select another key location, set
 `SPANEL_APPS_ENCRYPTION_KEY_PATH` in `.env.docker`.
+
+### `grant_tenant_permission.py`
+
+**Write operation; dry-run available.** Creates a durable tenant role and
+assigns explicit permissions without granting `core.platform.admin`. For the
+operator allowed to register the shared Cloudflare OAuth client:
+
+```bash
+python3 scripts/grant_tenant_permission.py \
+  --tenant TENANT_SLUG \
+  --email operator@example.com \
+  --role cloudflare_registrar \
+  --permission domains.dns.cloudflare.register \
+  --dry-run
+
+# Repeat without --dry-run after reviewing the plan.
+```
+
+In the production container, use `/app/scripts/grant_tenant_permission.py`.
 
 ## Hosting and WordPress
 

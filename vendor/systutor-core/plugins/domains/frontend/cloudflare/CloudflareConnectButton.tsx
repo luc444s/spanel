@@ -15,11 +15,11 @@ import {
 } from "./api";
 import {
   CLOUDFLARE_POLL_INTERVAL_MS,
+  canManageCloudflareClient,
   canUseCloudflare,
   errorMessageFrom,
   flowDeadline,
   isCloudflareConnected,
-  isPlatformAdmin,
   needsClientRegistration,
   pollDecision,
 } from "./logic";
@@ -51,11 +51,11 @@ export function CloudflareConnectButton({ permissions, onConnected }: Props) {
   }, []);
 
   const visible = canUseCloudflare(permissions);
-  const platform = isPlatformAdmin(permissions);
+  const canRegister = canManageCloudflareClient(permissions);
   const clientQuery = useQuery({
     queryKey: cloudflareKeys.client,
     queryFn: getCloudflareClient,
-    enabled: visible && platform,
+    enabled: visible && canRegister,
     retry: false,
   });
   const statusQuery = useQuery({
@@ -173,7 +173,7 @@ export function CloudflareConnectButton({ permissions, onConnected }: Props) {
         onClick={() => {
           if (connected) {
             setConfirmDisconnect(true);
-          } else if (platform && needsClientRegistration(clientQuery.data)) {
+          } else if (canRegister && needsClientRegistration(clientQuery.data)) {
             setRegisterOpen(true);
           } else {
             startMutation.mutate();

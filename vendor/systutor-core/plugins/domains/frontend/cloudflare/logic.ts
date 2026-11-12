@@ -1,6 +1,7 @@
 import type { CloudflareStatus } from "./types";
 
 export const CLOUDFLARE_PERMISSION = "domains.dns.cloudflare";
+export const CLOUDFLARE_REGISTER_PERMISSION = "domains.dns.cloudflare.register";
 export const CLOUDFLARE_POLL_INTERVAL_MS = 2000;
 export const CLOUDFLARE_FLOW_MAX_MS = 5 * 60 * 1000;
 
@@ -8,8 +9,8 @@ export function canUseCloudflare(permissions: readonly string[]): boolean {
   return permissions.includes(CLOUDFLARE_PERMISSION);
 }
 
-export function isPlatformAdmin(permissions: readonly string[]): boolean {
-  return permissions.includes("core.platform.admin");
+export function canManageCloudflareClient(permissions: readonly string[]): boolean {
+  return permissions.includes(CLOUDFLARE_REGISTER_PERMISSION);
 }
 
 export function needsClientRegistration(
@@ -22,7 +23,7 @@ export function canRegisterClient(
   permissions: readonly string[],
   status: { registered: boolean } | null | undefined,
 ): boolean {
-  return isPlatformAdmin(permissions) && needsClientRegistration(status);
+  return canManageCloudflareClient(permissions) && needsClientRegistration(status);
 }
 
 export function isCloudflareConnected(status: CloudflareStatus | null): boolean {
