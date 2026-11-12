@@ -119,6 +119,12 @@ def register_oauth_client(
                 status_code=422,
                 code="domains.dns.cloudflare.account_id_required",
             ) from exc
+        if exc.status_code == 404:
+            raise AppError(
+                "Cloudflare could not find that Account ID or OAuth client resource",
+                status_code=422,
+                code="domains.dns.cloudflare.account_not_found",
+            ) from exc
         raise _translate(exc) from exc
     raw_scopes = result.get("scopes")
     scopes = [str(name) for name in raw_scopes] if isinstance(raw_scopes, list) else []

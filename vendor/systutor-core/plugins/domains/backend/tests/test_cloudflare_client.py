@@ -137,7 +137,7 @@ def test_registration_resolves_scopes_and_keeps_secret_out_of_calls(tmp_path: Pa
     def handler(method, url, body):
         if url.endswith("/oauth/scopes?per_page=200"):
             return 200, envelope(scope_result)
-        if "/oauth/clients" in url:
+        if "/oauth_clients" in url:
             return 200, envelope({"client_id": "client-1", "client_secret": CANARY})
         raise AssertionError(url)
 
@@ -163,6 +163,7 @@ def test_registration_resolves_scopes_and_keeps_secret_out_of_calls(tmp_path: Pa
     assert registered["grant_types"] == ["authorization_code"]
     assert registered["redirect_uris"] == [registered["redirect_uris"][0]]
     assert registered["scopes"] == ["scope-zone", "scope-dns-read", "scope-dns-write"]
+    assert transport.calls[1]["url"].endswith("/accounts/acct1/oauth_clients")
     assert transport.calls[1]["timeout"] == 3
 
 

@@ -332,7 +332,9 @@ class CloudflareClient:
         scope_ids: list[str],
         client_name: str = "PanelTutor",
     ) -> tuple[str, str]:
-        path = f"/accounts/{quote(account_id, safe='')}/oauth/clients"
+        # Cloudflare's current REST resource is `oauth_clients` (underscore),
+        # not the dashboard-style `/oauth/clients` path.
+        path = f"/accounts/{quote(account_id, safe='')}/oauth_clients"
         body = {
             "client_name": client_name,
             "client_type": "private",

@@ -75,6 +75,9 @@ export function cloudflareErrorMessage(
   if (code === "domains.dns.cloudflare.account_id_required") {
     return "Enter the Cloudflare Account ID shown in the account dashboard.";
   }
+  if (code === "domains.dns.cloudflare.account_not_found") {
+    return "Cloudflare could not find that Account ID. Check it and try again.";
+  }
   switch (httpStatus) {
     case 401:
       return "Your session expired. Sign in again.";

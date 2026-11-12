@@ -211,6 +211,7 @@ const messages: Record<string, string> = {
   "Account ID": "ID de cuenta",
   "Only needed when the token cannot list a single account.": "Solo hace falta si el token no puede listar una única cuenta.",
   "Enter the Cloudflare Account ID shown in the account dashboard.": "Ingresa el Account ID de Cloudflare que aparece en el panel de la cuenta.",
+  "Cloudflare could not find that Account ID. Check it and try again.": "Cloudflare no encontró ese Account ID. Revísalo e inténtalo de nuevo.",
   "The token cannot detect my account": "El token no detecta mi cuenta",
   "Redirect URI": "URI de redirección",
   "Open Cloudflare OAuth clients": "Abrir clientes OAuth de Cloudflare",
