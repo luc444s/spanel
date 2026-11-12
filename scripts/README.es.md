@@ -42,6 +42,7 @@ python3 scripts/<script>.py --help
 
 | Necesidad | Script |
 |---|---|
+| Desplegar o actualizar Spanel | [`deploy.sh`](#deploysh) |
 | Adoptar un WordPress concreto | [`hosting_adopt.py`](#hosting_adoptpy) |
 | Descubrir y sincronizar todos los sitios publicados | [`hosting_sync.py`](#hosting_syncpy) |
 | Completar el dominio de un sitio adoptado | [`hosting_set_domain.py`](#hosting_set_domainpy) |
@@ -54,6 +55,21 @@ python3 scripts/<script>.py --help
 | Refrescar/adoptar el inventario observado | [`domains_sync.py`](#domains_syncpy) / [`domains_adopt.py`](#domains_adoptpy) |
 | Diagnosticar/reparar rutas y TLS | [`spanel-repair.py`](#spanel-repairpy) |
 | Administrar certificados de correo | [`install_cert_agent.py`](#install_cert_agentpy) y [`spanel_cert_agent/`](#spanel_cert_agent) |
+
+## Despliegue
+
+### `deploy.sh`
+
+**Escritura.** Ejecuta el despliegue Compose canónico `spanel` con el override
+de PowerDNS. Crea la clave de cifrado de forma atómica y con modo `600` cuando
+falta, la valida cuando existe y nunca la rota.
+
+```bash
+./scripts/deploy.sh
+```
+
+Requiere `.env.docker`, `.env.powerdns` y `SPANEL_DOMAIN`. Para seleccionar
+otra ruta de clave, define `SPANEL_APPS_ENCRYPTION_KEY_PATH` en `.env.docker`.
 
 ## Hosting y WordPress
 

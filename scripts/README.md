@@ -42,6 +42,7 @@ English | [Español](README.es.md)
 
 | Need | Script |
 |---|---|
+| Deploy or update Spanel | [`deploy.sh`](#deploysh) |
 | Adopt a specific WordPress | [`hosting_adopt.py`](#hosting_adoptpy) |
 | Discover and sync all published sites | [`hosting_sync.py`](#hosting_syncpy) |
 | Complete the domain of an adopted site | [`hosting_set_domain.py`](#hosting_set_domainpy) |
@@ -54,6 +55,21 @@ English | [Español](README.es.md)
 | Refresh/adopt the observed domain inventory | [`domains_sync.py`](#domains_syncpy) / [`domains_adopt.py`](#domains_adoptpy) |
 | Diagnose/repair routes and TLS | [`spanel-repair.py`](#spanel-repairpy) |
 | Manage mail certificates | [`install_cert_agent.py`](#install_cert_agentpy) and [`spanel_cert_agent/`](#spanel_cert_agent) |
+
+## Deployment
+
+### `deploy.sh`
+
+**Write operation.** Runs the canonical `spanel` Compose deployment with the
+PowerDNS override. It creates the application encryption key atomically with
+mode `600` when absent, validates it when present, and never rotates it.
+
+```bash
+./scripts/deploy.sh
+```
+
+Requires `.env.docker`, `.env.powerdns`, and `SPANEL_DOMAIN`. To select another
+key location, set `SPANEL_APPS_ENCRYPTION_KEY_PATH` in `.env.docker`.
 
 ## Hosting and WordPress
 

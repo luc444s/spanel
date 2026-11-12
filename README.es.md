@@ -89,6 +89,17 @@ docker compose up -d --build
 #    (spanel.systutor.com por defecto). El puerto 3000 no se publica.
 ```
 
+Para un despliegue de producción con PowerDNS configurado en `.env.powerdns`,
+usa:
+
+```bash
+./scripts/deploy.sh
+```
+
+El script crea `secrets/apps_key` con modo `600` solo cuando falta, la valida en
+despliegues posteriores y nunca la reemplaza. Define
+`SPANEL_APPS_ENCRYPTION_KEY_PATH` en `.env.docker` para usar otra ruta.
+
 ### Desarrollo Local
 
 ```bash
