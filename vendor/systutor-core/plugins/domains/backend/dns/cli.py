@@ -13,7 +13,15 @@ import sys
 from collections.abc import Callable, Sequence
 from typing import Any
 
+from plugins.domains.backend.cloudflare.client import CloudflareClient, CloudflareError
+from plugins.domains.backend.cloudflare.config import CloudflareConfig
 from plugins.domains.backend.dns.cli_commands import (
+    _cloudflare_connect,
+    _cloudflare_disconnect,
+    _cloudflare_records_list,
+    _cloudflare_register,
+    _cloudflare_status,
+    _cloudflare_zones_list,
     _doctor,
     _emit,
     _nameserver_apply,
@@ -115,6 +123,51 @@ def build_parser() -> argparse.ArgumentParser:
     export_ = _leaf(zone_commands, "export", "Export a deterministic zone file.")
     export_.add_argument("zone")
     export_.add_argument("--output")
+
+    cloudflare = sub.add_parser("cloudflare", help="Cloudflare OAuth and read-only discovery")
+    cloudflare_commands = cloudflare.add_subparsers(
+        dest="cloudflare_command", required=True
+    )
+
+    oauth = cloudflare_commands.add_parser("oauth", help="Platform OAuth client registration")
+    oauth_commands = oauth.add_subparsers(dest="oauth_command", required=True)
+    register = _leaf(oauth_commands, "register", "Register the private Cloudflare OAuth client.")
+    register.add_argument("--account-id", required=True)
+    register.add_argument("--bootstrap-token-file", required=True)
+    register.add_argument("--redirect-uri", required=True)
+    _add_db(register)
+    register.add_argument("--apply", action="store_true")
+
+    connect = _leaf(cloudflare_commands, "connect", "Start browser authorization for a tenant.")
+    connect.add_argument("--tenant", required=True)
+    _add_db(connect)
+    connect.add_argument("--wait-seconds", type=int, default=300)
+
+    status = _leaf(cloudflare_commands, "status", "Show one tenant's Cloudflare connection.")
+    status.add_argument("--tenant", required=True)
+    _add_db(status)
+
+    disconnect = _leaf(
+        cloudflare_commands, "disconnect", "Plan or remove one tenant's Cloudflare authorization."
+    )
+    disconnect.add_argument("--tenant", required=True)
+    _add_db(disconnect)
+    disconnect.add_argument("--apply", action="store_true")
+
+    cf_zones = cloudflare_commands.add_parser("zones", help="Cloudflare zone discovery")
+    cf_zone_commands = cf_zones.add_subparsers(dest="cloudflare_zones_command", required=True)
+    cf_zones_list = _leaf(cf_zone_commands, "list", "List Cloudflare zones and record counts.")
+    cf_zones_list.add_argument("--tenant", required=True)
+    _add_db(cf_zones_list)
+
+    cf_records = cloudflare_commands.add_parser("records", help="Cloudflare DNS record discovery")
+    cf_record_commands = cf_records.add_subparsers(
+        dest="cloudflare_records_command", required=True
+    )
+    cf_records_list = _leaf(cf_record_commands, "list", "List redacted DNS records in a zone.")
+    cf_records_list.add_argument("zone")
+    cf_records_list.add_argument("--tenant", required=True)
+    _add_db(cf_records_list)
     return parser
 
 
@@ -163,8 +216,12 @@ def run(
     client: PowerDnsClient | None = None,
     client_factory: ClientFactory | None = None,
     session_factory: Any = None,
+    cloudflare_client: CloudflareClient | None = None,
+    cloudflare_config: CloudflareConfig | None = None,
 ) -> int:
     args = build_parser().parse_args(argv)
+    args.cloudflare_client = cloudflare_client
+    args.cloudflare_config = cloudflare_config
     try:
         need_client = args.command in {"doctor", "zones", "rrsets", "zone"} or (
             args.command == "nameservers" and args.nameservers_command in {"plan", "apply"}
@@ -175,6 +232,20 @@ def run(
                 active = client_factory()
             else:
                 active = PowerDnsClient(PowerDnsConfig.from_env())
+        if args.command == "cloudflare":
+            if args.cloudflare_command == "oauth":
+                return _cloudflare_register(args, session_factory)
+            if args.cloudflare_command == "connect":
+                return _cloudflare_connect(args, session_factory)
+            if args.cloudflare_command == "status":
+                return _cloudflare_status(args, session_factory)
+            if args.cloudflare_command == "disconnect":
+                return _cloudflare_disconnect(args, session_factory)
+            if args.cloudflare_command == "zones":
+                return _cloudflare_zones_list(args, session_factory)
+            if args.cloudflare_command == "records":
+                return _cloudflare_records_list(args, session_factory)
+            raise DnsValidationError("unknown cloudflare command")
         if args.command == "doctor":
             return _doctor(args, active)  # type: ignore[arg-type]
         if args.command == "nameservers":
@@ -222,7 +293,7 @@ def run(
                 "export": _zone_export,
             }[args.zone_command](args, active)  # type: ignore[arg-type]
         raise DnsValidationError("unknown command")
-    except DnsError as exc:
+    except (DnsError, CloudflareError) as exc:
         if getattr(args, "json", False):
             _print_json({"error": {"code": exc.code, "message": str(exc)}})
         else:

@@ -10,7 +10,16 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Integer,
+    LargeBinary,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from systutor.core.database import Base
@@ -87,6 +96,72 @@ class DnsZoneOwnership(Base):
     zone_name: Mapped[str] = mapped_column(String(253), index=True)
     kind: Mapped[str] = mapped_column(String(16), default="Native")
     observed_version: Mapped[str] = mapped_column(String(64), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+class CloudflareOAuthClient(Base):
+    """Platform singleton for the private Cloudflare OAuth client."""
+
+    __tablename__ = "domains_cloudflare_oauth_client"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    account_id: Mapped[str] = mapped_column(String(32))
+    client_id: Mapped[str] = mapped_column(String(255))
+    secret_ciphertext: Mapped[bytes] = mapped_column(LargeBinary)
+    secret_nonce: Mapped[bytes] = mapped_column(LargeBinary)
+    key_version: Mapped[int] = mapped_column(Integer, default=1)
+    redirect_uri: Mapped[str] = mapped_column(String(1000))
+    scopes_json: Mapped[list] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+class CloudflareConnection(Base):
+    """One active tenant authorization; credentials are always encrypted."""
+
+    __tablename__ = "domains_cloudflare_connections"
+    __table_args__ = (UniqueConstraint("tenant_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    cloudflare_account_id: Mapped[str] = mapped_column(String(32))
+    account_name: Mapped[str] = mapped_column(String(255))
+    access_ciphertext: Mapped[bytes] = mapped_column(LargeBinary)
+    access_nonce: Mapped[bytes] = mapped_column(LargeBinary)
+    refresh_ciphertext: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    refresh_nonce: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    key_version: Mapped[int] = mapped_column(Integer, default=1)
+    scopes_json: Mapped[list] = mapped_column(JSON, default=list)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), default="active")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+class CloudflareOAuthFlow(Base):
+    """Single-use, expiring authorization transaction, keyed by state hash."""
+
+    __tablename__ = "domains_cloudflare_oauth_flows"
+    __table_args__ = (UniqueConstraint("state_hash"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    state_hash: Mapped[str] = mapped_column(String(64), index=True)
+    verifier_ciphertext: Mapped[bytes] = mapped_column(LargeBinary)
+    verifier_nonce: Mapped[bytes] = mapped_column(LargeBinary)
+    key_version: Mapped[int] = mapped_column(Integer, default=1)
+    redirect_uri: Mapped[str] = mapped_column(String(1000))
+    status: Mapped[str] = mapped_column(String(32), default="pending")
+    error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, onupdate=utc_now

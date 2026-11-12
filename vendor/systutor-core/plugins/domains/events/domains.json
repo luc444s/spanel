@@ -23,6 +23,14 @@
     {
       "name": "domains.dns.nameservers_changed",
       "description": "Public nameserver settings or managed apex records changed"
+    },
+    {
+      "name": "domains.dns.cloudflare_connected",
+      "description": "A tenant completed the Cloudflare OAuth authorization"
+    },
+    {
+      "name": "domains.dns.cloudflare_disconnected",
+      "description": "A tenant's Cloudflare authorization was removed"
     }
   ]
 }
