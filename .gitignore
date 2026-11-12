@@ -14,6 +14,7 @@ node_modules/
 *.sqlite3
 dump.rdb
 *.sql
+!scripts/powerdns-lab/init/001-schema.sql
 *.log
 logs/
 *.pem
