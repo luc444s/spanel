@@ -256,8 +256,8 @@ structural_constraints:
 - Requirement: A platform administrator registers the private Cloudflare OAuth client from the panel by pasting a privileged API token.
 - owner: domains plugin
 - approver: luc444s
-- Commit: pending
-- Deployment: local HTTPS lab at `https://spanel.lab`; production deferred
+- Commit: `26df7ec` (registration fixes through `bbfd3ed`)
+- Deployment: local HTTPS lab at `https://spanel.lab`; private client registered and OAuth connection active 2026-11-12
 
 ## Definition of Done
 

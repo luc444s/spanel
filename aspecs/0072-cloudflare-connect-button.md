@@ -276,8 +276,8 @@ structural_constraints:
 - Requirement: A tenant administrator connects, observes and disconnects their Cloudflare account from the Domains panel, using the tenant-scoped backend flow.
 - owner: domains plugin
 - approver: luc444s
-- Commit: 8be4438
-- Deployment: local HTTPS lab at `https://spanel.lab`; production deferred
+- Commit: `d37f460` (compact header-button refinement `2c0c5f3`)
+- Deployment: local HTTPS lab at `https://spanel.lab`; tenant connection completed from the panel 2026-11-12
 
 ## Definition of Done
 

@@ -383,8 +383,8 @@ structural_constraints:
 - Requirement: Operator registers and authorizes Cloudflare, then receives SUCCESS and redacted DNS inventory through CLI/backend.
 - owner: domains plugin
 - approver: luc444s
-- Commit: pending
-- Deployment: local HTTPS lab at `https://spanel.lab`; production deferred
+- Commit: `40a8a95` (integration `917da88`; key-format compatibility `29fc14a`)
+- Deployment: local HTTPS lab at `https://spanel.lab`; real private-client consent completed 2026-11-12
 
 ## Definition of Done
 
