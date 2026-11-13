@@ -54,7 +54,7 @@ export function FileTable({
   }
 
   const checkboxClass =
-    "h-4 w-4 cursor-pointer rounded-sm border border-muted-foreground/40 bg-transparent accent-primary";
+    "h-4 w-4 shrink-0 cursor-pointer appearance-none rounded-[3px] border border-border bg-transparent align-middle checked:border-primary checked:bg-primary/15 indeterminate:border-primary indeterminate:bg-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0";
   const allSelected = entries.length > 0 && entries.every((entry) => selected.has(entry.name));
   const someSelected = entries.some((entry) => selected.has(entry.name)) && !allSelected;
 
@@ -62,7 +62,7 @@ export function FileTable({
     <table className="w-full table-fixed text-left text-sm">
       <thead className="sticky top-0 z-10 bg-muted text-xs uppercase tracking-wide text-muted-foreground">
         <tr>
-          <th className="w-10 p-2" aria-label={t("Select")} />
+          <th className="w-10 p-2 align-middle" aria-label={t("Select")} />
           {COLUMNS.map((column) => (
             <th key={column.label || "actions"} className={`p-2 font-medium ${column.className}`}>
               {column.key === "name" ? (
@@ -133,15 +133,17 @@ export function FileTable({
               onTouchMove={cancelLongPress}
               onTouchCancel={cancelLongPress}
             >
-              <td className="p-2">
-                <input
-                  type="checkbox"
-                  aria-label={t("Select {name}", { name: entry.name })}
-                  checked={isSelected}
-                  className={checkboxClass}
-                  onClick={(event) => event.stopPropagation()}
-                  onChange={(event) => onToggle(entry, event.target.checked)}
-                />
+              <td className="p-2 align-middle">
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    aria-label={t("Select {name}", { name: entry.name })}
+                    checked={isSelected}
+                    className={checkboxClass}
+                    onClick={(event) => event.stopPropagation()}
+                    onChange={(event) => onToggle(entry, event.target.checked)}
+                  />
+                </div>
               </td>
               <td className="truncate p-2">
                 <span className="mr-2 inline-flex align-middle text-muted-foreground" aria-hidden>
