@@ -245,11 +245,11 @@ def test_backfill_es_idempotente(app, db_session: Session, seeded_demo: dict[str
         "el backfill duplico filas de role_permissions"
     )
 
-    # A permission a plugin stops declaring is no longer granted.
+    # Boot synchronisation is additive: it never revokes an existing RBAC grant.
     register_tenant_admin_permissions("mail", ["mail.accounts.create"])
     sync_tenant_admin_role(db_session, tenant_id=tenant.id)
     assert _role_permission_names(db_session, role.id) == (
-        {"mail.accounts.create"} | TENANT_ADMIN_BASE
+        {"mail.accounts.read", "mail.accounts.create"} | TENANT_ADMIN_BASE
     )
 
 

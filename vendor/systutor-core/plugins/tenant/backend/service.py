@@ -46,13 +46,12 @@ def _get_or_create_tenant_admin_role(db: Session, tenant_id: str) -> Role:
     if role is not None:
         return role
 
-    role = Role(
-        tenant_id=tenant_id,
-        name=TENANT_ADMIN_ROLE,
-        description="Tenant administrator",
+    sync_tenant_admin_role(db, tenant_id=tenant_id)
+    role = db.scalar(
+        select(Role).where(Role.tenant_id == tenant_id, Role.name == TENANT_ADMIN_ROLE)
     )
-    db.add(role)
-    db.flush()
+    if role is None:  # pragma: no cover - defensive invariant
+        raise RuntimeError("tenant_admin role initialization failed")
     return role
 
 
@@ -205,8 +204,8 @@ def create_tenant(db: Session, *, name: str, slug: str, domain: str | None = Non
     db.add(TenantSiteSettings(tenant_id=tenant.id, site_suffix=suffix))
     db.flush()
     # A.SPEC 0012: the tenant plugin is no longer the source of truth for
-    # tenant_admin. The core sync grants exactly what installed plugins
-    # declare for tenant administrators. An empty declaration is valid.
+    # tenant_admin. The core sync initializes what installed plugins declare
+    # for tenant administrators. Existing roles are never rewritten on boot.
     sync_tenant_admin_role(db, tenant_id=tenant.id)
     return tenant
 
@@ -230,7 +229,6 @@ def create_user_for_tenant(
     db.flush()
 
     role = _get_or_create_tenant_admin_role(db, tenant_id)
-    sync_tenant_admin_role(db, tenant_id=tenant_id)
     assign_role_to_user(db, user=user, role=role)
 
     return user
@@ -586,4 +584,3 @@ def release_domain_for_tenant(
             code="tenant_domain_not_found",
         )
     remove_managed_domain(db, tenant=tenant, domain=domain, app=app)
-

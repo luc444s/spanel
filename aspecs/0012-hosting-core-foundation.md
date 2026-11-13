@@ -83,7 +83,7 @@ The logic has to move into the plugin namespace. The scripts stay as thin, teste
 ## WHAT
 
 **The foundation of `hosting` is true: no database secret appears in any argv, a tenant's admin
-role receives exactly the permissions its plugins declare for tenants, and the proven Docker and
+role receives the permissions its plugins declare for tenants, and the proven Docker and
 WordPress logic lives in `plugins/hosting/backend/` with the scripts delegating to it.**
 
 Falsifiable today, and today **fails** on all three:
@@ -122,10 +122,10 @@ Falsifiable today, and today **fails** on all three:
    - persist the declared subset so the tenant-creation path can read it without re-parsing files;
    - keep the existing `permissions_json` semantics unchanged.
 3. One core function syncs a tenant's `tenant_admin` role from the installed plugins:
-   - grants exactly the union of `tenant_admin_permissions` plus the kernel base
+   - grants the union of `tenant_admin_permissions` plus the kernel base
      `core.plugin.runtime.read`, without which the shell never loads plugin navigation;
-   - is idempotent and safe to call on every boot;
-   - never grants a permission that is not declared by a plugin.
+   - is additive and idempotent when explicitly invoked;
+   - never revokes permissions configured manually through RBAC.
 4. `vendor/systutor-core/plugins/tenant/backend/service.py`:
    - `MAIL_PERMISSIONS` stops being the source of truth for `tenant_admin`;
    - tenant creation and tenant-user creation call the core sync function;
@@ -210,7 +210,9 @@ Falsifiable today, and today **fails** on all three:
 - It does not receive `tenant.tenants.manage` unless the tenant plugin explicitly declares it,
   which it does not.
 - The seed tenant's `admin` role still receives every declared plugin permission.
-- An existing tenant receives new declared permissions on the next boot, idempotently.
+- Existing RBAC customizations survive restarts because boot does not rewrite
+  existing `tenant_admin` roles. Explicit synchronization can add new required
+  grants but never deletes role-permission rows.
 - A manifest whose `tenant_admin_permissions` is not a subset of `permissions` fails validation
   with a message naming the offending permission.
 

@@ -324,9 +324,8 @@ def sync_tenant_admin_role(
     own `core.plugin.runtime.read`, without which the frontend never loads the
     plugin navigation.
 
-    It is idempotent: the role's permissions are replaced, not appended, so
-    calling it on every boot neither duplicates rows nor keeps a permission a
-    plugin stopped declaring.
+    It is additive and idempotent: boot synchronisation grants newly required
+    permissions without deleting operator-managed RBAC changes.
     """
     if permissions is None:
         # Local import: persistent.py imports this module for ensure_permission.
@@ -362,5 +361,13 @@ def sync_tenant_admin_role(
         )
         for permission_name in granted
     ]
-    replace_role_permissions(db, role=role, permissions=resolved)
+    existing_permission_ids = set(
+        db.scalars(
+            select(RolePermission.permission_id).where(RolePermission.role_id == role.id)
+        )
+    )
+    for permission in resolved:
+        if permission.id not in existing_permission_ids:
+            db.add(RolePermission(role_id=role.id, permission_id=permission.id))
+    db.flush()
     return granted

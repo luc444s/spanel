@@ -192,13 +192,12 @@ def sync_tenant_admin_roles(
 ) -> list[str]:
     """Backfill every existing `tenant_admin` role from the installed plugins.
 
-    A.SPEC 0012: a tenant created before a plugin declared a new
-    `tenant_admin_permissions` entry must receive it on the next boot. Only
-    tenants that already have a `tenant_admin` role are touched; this never
-    invents a tenant administrator for the seed tenant.
+    This is an explicit maintenance operation, not part of application boot.
+    Only tenants that already have a `tenant_admin` role are touched; this
+    never invents a tenant administrator for the seed tenant.
 
-    Idempotent: the core sync replaces the role's permissions with the exact
-    union, so booting twice neither duplicates nor removes what is declared.
+    Idempotent and additive: the core sync grants the required union without
+    deleting permissions configured by an operator through RBAC.
     """
     declared: set[str] = set()
     for plugin in plugins:
@@ -232,7 +231,7 @@ def ensure_seed(
     settings: Settings,
     plugins: Sequence[LoadedPlugin],
 ) -> dict[str, str]:
-    """Idempotent boot path: seed on first boot, sync permissions on every boot.
+    """Idempotent boot path: seed once and sync the platform role thereafter.
 
     Before this, entrypoint.sh decided between the two branches in shell. The
     decision now lives here, where it is testable.
@@ -247,7 +246,6 @@ def ensure_seed(
                 code="seed_orphan_admin",
             )
         granted = sync_permissions(db, tenant, plugins)
-        sync_tenant_admin_roles(db, plugins)
         # A.SPEC 0045: the plugin-permission runtime sync must also run on
         # existing deployments, not only on the first-boot demo seeding —
         # new manifest permissions reach the catalog and platform roles
@@ -277,7 +275,6 @@ def seed_demo_data(
     tenant = _get_or_create_tenant(db, settings)
     branch = _get_or_create_branch(db, tenant, settings)
     sync_permissions(db, tenant, plugins)
-    sync_tenant_admin_roles(db, plugins)
     admin_role = _get_or_create_role(
         db,
         tenant,
