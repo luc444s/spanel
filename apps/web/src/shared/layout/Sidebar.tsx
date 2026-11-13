@@ -49,7 +49,7 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="flex h-screen flex-col border-r border-border bg-sidebar p-4">
+    <aside className="flex h-full min-h-0 flex-col border-r border-border bg-sidebar p-4">
       <div className="mb-8 flex items-center justify-between">
         <div className="space-y-1">
           <h1 className="text-lg font-semibold text-sidebar-foreground">{APP_NAME}</h1>

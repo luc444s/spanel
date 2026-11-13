@@ -92,7 +92,7 @@ export default function AppsPage() {
     </div>
     <GithubConnectionCard canConnect={canConnect} statusQuery={githubStatus} />
 
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
       {pagedApps.map((application) => {
         const owned = isOwnedByTenant(application.tenant_id, currentTenant?.id);
         const appRoutes = routes.filter((route) =>

@@ -68,7 +68,7 @@ export function LoginPage() {
         : null;
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-4 py-8">
+    <main className="flex min-h-dvh items-center justify-center px-4 py-8">
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>{APP_NAME}</CardTitle>

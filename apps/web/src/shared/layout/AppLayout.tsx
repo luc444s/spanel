@@ -59,21 +59,21 @@ export function AppLayout() {
 
   if (token && bootstrap.isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">
+      <div className="flex min-h-dvh items-center justify-center text-sm text-muted-foreground">
         {t("Loading tenant context...")}
       </div>
     );
   }
 
   return (
-    <div className="flex h-screen overflow-hidden" onTouchStart={handleSidebarTouchStart} onTouchMove={handleSidebarTouchMove}>
-      <div className="hidden h-screen w-60 shrink-0 lg:block">
+    <div className="flex h-dvh min-h-0 overflow-hidden" onTouchStart={handleSidebarTouchStart} onTouchMove={handleSidebarTouchMove}>
+      <div className="hidden h-full w-60 shrink-0 lg:block">
         <Sidebar />
       </div>
 
       <MobileSidebar open={isNavOpen} onClose={() => setIsNavOpen(false)} />
 
-      <div className="flex h-screen min-w-0 flex-1 flex-col overflow-y-auto">
+      <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
         <main className="flex-1 px-4 py-6 lg:px-6">
           <Outlet />
         </main>

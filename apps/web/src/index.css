@@ -15,13 +15,13 @@
      Única fuente editable de tema: tokens.ts (sin editar este CSS). */
 
   body {
-    @apply m-0 min-w-[320px] min-h-screen font-sans;
+    @apply m-0 min-w-[320px] min-h-screen min-h-dvh font-sans;
     color: hsl(var(--foreground));
     background: hsl(var(--background));
   }
 
   #root {
-    @apply min-h-screen;
+    @apply min-h-screen min-h-dvh;
   }
 
   * {
