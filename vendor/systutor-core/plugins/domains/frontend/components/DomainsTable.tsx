@@ -90,7 +90,7 @@ export function DomainsTable({ items, zones, cloudflareZones, dnsError, platform
       ? children.map((item) => ({ item, child: true, childCount: 0 })) : []),
   ]);
 
-  return <div className="flex min-h-[22rem] flex-col gap-4 md:min-h-[26rem]">
+  return <div className="flex min-h-[28rem] flex-col gap-4 md:min-h-[32rem]">
     <div className="flex-1">
     <div className="overflow-x-auto rounded-lg border border-border bg-card">
     <table className="w-full min-w-[760px] table-fixed border-collapse text-sm">

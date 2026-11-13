@@ -95,7 +95,7 @@ export default function AppsPage() {
     {apps.length === 0 ? (
       <p className="rounded border border-border p-4 text-sm text-muted-foreground">{t("No applications.")}</p>
     ) : (
-      <div className="flex min-h-[22rem] flex-col gap-4 md:min-h-[26rem]">
+      <div className="flex min-h-[32rem] flex-col gap-4 md:min-h-[36rem]">
         <div className="flex-1">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
             {pagedApps.map((application) => {

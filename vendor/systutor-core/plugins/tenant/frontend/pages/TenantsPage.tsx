@@ -210,7 +210,7 @@ export default function TenantsPage() {
         </form>
       </Dialog>
 
-      <div className="flex min-h-[22rem] flex-col gap-4 md:min-h-[26rem]">
+      <div className="flex min-h-[28rem] flex-col gap-4 md:min-h-[32rem]">
         <div className="flex-1 overflow-x-auto">
           <table className="w-full text-sm">
             <thead>

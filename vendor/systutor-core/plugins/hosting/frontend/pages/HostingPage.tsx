@@ -243,7 +243,7 @@ export default function HostingPage() {
           {t("No sites are assigned to this tenant.")}
         </p>
       ) : (
-        <div className="flex min-h-[22rem] flex-col gap-4 md:min-h-[26rem]">
+        <div className="flex min-h-[32rem] flex-col gap-4 md:min-h-[36rem]">
           <div className="flex-1">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
               {pagedSites.map((site) => (
