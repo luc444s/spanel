@@ -18,7 +18,7 @@ export function Toaster() {
           error: "group-[.toast]:!border-border/60 group-[.toast]:!bg-card/95",
         },
       }}
-      closeButton={false}
+      closeButton
       richColors={false}
     />
   );
