@@ -519,6 +519,41 @@ sudo python3 scripts/migrate_legacy_sni.py --apply \
   --hostname mail.algisac.com --hostname mail.algima.pe
 ```
 
+CLI:
+
+```text
+usage: migrate_legacy_sni.py [-h] [--config CONFIG]
+                             [--config-root CONFIG_ROOT]
+                             [--legacy-map LEGACY_MAP] [--hostname HOSTNAME]
+                             [--apply] [--skip-http-check] [--skip-verify]
+                             [--clean-legacy]
+                             [--traefik-config-dir TRAEFIK_CONFIG_DIR]
+                             [--acme-router-file ACME_ROUTER_FILE]
+                             [--skip-acme-routing] [--json]
+
+  --config CONFIG       agent TOML (default: /etc/spanel/cert-agent.toml)
+  --config-root CONFIG_ROOT
+                        host directory mounted at /tmp/docker-mailserver
+                        (default: /opt/stacks/mail/config)
+  --legacy-map LEGACY_MAP
+                        explicit legacy SNI map path (default: auto-detect
+                        sni-legalattorney or first sni-* except sni-spanel)
+  --hostname HOSTNAME   only migrate this hostname (repeatable)
+  --apply               perform changes (plan only without this flag)
+  --skip-http-check     do not probe HTTP-01 before issuing
+  --skip-verify         skip the post-install TLS probes
+  --clean-legacy        remove migrated hostnames from the legacy SNI map
+                        (backup, postmap -F, postfix reload)
+  --traefik-config-dir TRAEFIK_CONFIG_DIR
+                        Traefik file-provider directory for HTTP-01 routers
+                        (default: /opt/stacks/traefik/config)
+  --acme-router-file ACME_ROUTER_FILE
+                        managed YAML filename written inside the Traefik
+                        config dir (default: spanel-acme-mail-challenge.yml)
+  --skip-acme-routing   do not create/update the Traefik HTTP-01 router
+  --json                print the plan as JSON
+```
+
 ### `spanel_cert_agent/`
 
 **Privileged write depending on the subcommand.** Certificate agent

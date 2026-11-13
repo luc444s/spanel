@@ -520,6 +520,42 @@ sudo python3 scripts/migrate_legacy_sni.py --apply \
   --hostname mail.algisac.com --hostname mail.algima.pe
 ```
 
+CLI:
+
+```text
+usage: migrate_legacy_sni.py [-h] [--config CONFIG]
+                             [--config-root CONFIG_ROOT]
+                             [--legacy-map LEGACY_MAP] [--hostname HOSTNAME]
+                             [--apply] [--skip-http-check] [--skip-verify]
+                             [--clean-legacy]
+                             [--traefik-config-dir TRAEFIK_CONFIG_DIR]
+                             [--acme-router-file ACME_ROUTER_FILE]
+                             [--skip-acme-routing] [--json]
+
+  --config CONFIG       TOML del agente (por defecto: /etc/spanel/cert-agent.toml)
+  --config-root CONFIG_ROOT
+                        directorio del host montado en /tmp/docker-mailserver
+                        (por defecto: /opt/stacks/mail/config)
+  --legacy-map LEGACY_MAP
+                        ruta explícita del mapa SNI legacy (por defecto:
+                        autodetecta sni-legalattorney o el primer sni-* excepto
+                        sni-spanel)
+  --hostname HOSTNAME   migrar solo este hostname (repetible)
+  --apply               realizar cambios (sin esto es solo plan)
+  --skip-http-check     no probar HTTP-01 antes de emitir
+  --skip-verify         omitir las sondas TLS post-instalación
+  --clean-legacy        eliminar del mapa legacy los hostnames migrados
+                        (backup, postmap -F, postfix reload)
+  --traefik-config-dir TRAEFIK_CONFIG_DIR
+                        directorio file-provider de Traefik para routers
+                        HTTP-01 (por defecto: /opt/stacks/traefik/config)
+  --acme-router-file ACME_ROUTER_FILE
+                        nombre del YAML gestionado dentro del directorio de
+                        Traefik (por defecto: spanel-acme-mail-challenge.yml)
+  --skip-acme-routing   no crear/actualizar el router HTTP-01 de Traefik
+  --json                imprimir el plan en JSON
+```
+
 ### `spanel_cert_agent/`
 
 **Escritura privilegiada según el subcomando.** Paquete del agente de
