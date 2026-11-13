@@ -6,6 +6,7 @@ import { catpuccin_mocha } from "./catpuccin_mocha";
 import { nord } from "./nord";
 import { nord_dark } from "./nord_dark";
 import { tutora } from "./tutora";
+import { tutora_catpuccin_mocha } from "./tutora_catpuccin_mocha";
 
 export type { ThemeName, ThemeTokens } from "./types";
 
@@ -17,6 +18,16 @@ export const themes: Record<ThemeName, ThemeTokens> = {
   nord,
   nord_dark,
   tutora,
+  tutora_catpuccin_mocha,
 };
 
-export const THEME_NAMES: ThemeName[] = ["dark", "light", "retro", "catpuccin_mocha", "nord", "nord_dark", "tutora"];
+export const THEME_NAMES: ThemeName[] = [
+  "dark",
+  "light",
+  "retro",
+  "catpuccin_mocha",
+  "nord",
+  "nord_dark",
+  "tutora",
+  "tutora_catpuccin_mocha",
+];

@@ -1,5 +1,7 @@
 import { NO_OVERRIDE, type ThemeTokens } from "./types";
 
+const FLAT_BACKGROUND = "220 20% 5%";
+
 /**
  * Tutora Business theme.
  * Brand orange sampled from the logo: #F27A31 (hsl(23 88% 57%)).
@@ -7,17 +9,17 @@ import { NO_OVERRIDE, type ThemeTokens } from "./types";
  */
 export const tutora: ThemeTokens = {
   colorScheme: "dark",
-  background: "220 20% 5%",
+  background: FLAT_BACKGROUND,
   foreground: "210 20% 93%",
-  card: "220 16% 8%",
+  card: FLAT_BACKGROUND,
   cardForeground: "210 20% 93%",
-  popover: "220 16% 8%",
+  popover: FLAT_BACKGROUND,
   popoverForeground: "210 20% 93%",
   primary: "23 88% 57%",
   primaryForeground: "220 25% 7%",
-  secondary: "220 14% 11%",
+  secondary: FLAT_BACKGROUND,
   secondaryForeground: "210 20% 93%",
-  muted: "220 14% 11%",
+  muted: FLAT_BACKGROUND,
   mutedForeground: "215 14% 62%",
   accent: "23 88% 57%",
   accentForeground: "220 25% 7%",
@@ -34,9 +36,12 @@ export const tutora: ThemeTokens = {
   chrome: "220 20% 5%",
   chromeForeground: "210 20% 93%",
   chromeMuted: "215 14% 62%",
-  surface: "220 16% 8%",
-  surfaceAlt: "220 14% 11%",
-  radius: "3px",
-  cardShadow: "0 24px 48px -24px rgb(0 0 0 / 0.65)",
+  surface: FLAT_BACKGROUND,
+  surfaceAlt: FLAT_BACKGROUND,
+  radius: "0",
+  cardShadow: "0 0 0 0 transparent",
   ...NO_OVERRIDE,
+  enforceRadius: "none",
+  enforceShadow: "none",
+  tableBackground: "transparent",
 };

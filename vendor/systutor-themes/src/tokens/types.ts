@@ -1,4 +1,12 @@
-export type ThemeName = "light" | "dark" | "retro" | "catpuccin_mocha" | "nord" | "nord_dark" | "tutora";
+export type ThemeName =
+  | "light"
+  | "dark"
+  | "retro"
+  | "catpuccin_mocha"
+  | "nord"
+  | "nord_dark"
+  | "tutora"
+  | "tutora_catpuccin_mocha";
 
 export type ThemeTokens = {
   // ----- Palette (26 vars) -----
@@ -71,6 +79,7 @@ export type ThemeTokens = {
   tableBorderCollapse: "collapse" | "separate";
   tableHeaderBg: "primary" | "themed" | "none";
   tableZebra: "surface-alt" | "none";
+  tableBackground: "transparent" | "themed";
 
   // ----- Header bar -----
   headerStyle: "primary" | "themed";
@@ -105,6 +114,7 @@ export const NO_OVERRIDE = {
   tableBorderCollapse: "separate" as const,
   tableHeaderBg: "none" as const,
   tableZebra: "none" as const,
+  tableBackground: "themed" as const,
   headerStyle: "themed" as const,
   sidebarActiveStyle: "themed" as const,
 };

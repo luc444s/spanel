@@ -58,6 +58,7 @@ export const retro: ThemeTokens = {
   tableBorderCollapse: "collapse",
   tableHeaderBg: "primary",
   tableZebra: "surface-alt",
+  tableBackground: "themed",
   headerStyle: "primary",
   sidebarActiveStyle: "primary",
 };

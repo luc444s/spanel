@@ -144,6 +144,11 @@ function overrideRules(name: ThemeName, t: ThemeTokens): string {
       `${s} tbody tr:nth-child(even) { background: hsl(var(--surface-alt)) !important; }`,
     );
   }
+  if (t.tableBackground === "transparent") {
+    rules.push(
+      `${s} [class~="bg-card"]:has(table), ${s} table, ${s} table thead, ${s} table tbody, ${s} table tr, ${s} table th, ${s} table td { background-color: transparent !important; }`,
+    );
+  }
 
   if (t.headerStyle === "primary") {
     rules.push(

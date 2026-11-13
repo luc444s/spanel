@@ -13,6 +13,7 @@ const messages: Record<string, string> = {
   "Retro (SAP)": "Retro (SAP)",
   "Bodega Express": "Bodega Express",
   "Catppuccin Mocha": "Catppuccin Mocha",
+  "Tutora Catppuccin Mocha": "Tutora Catppuccin Mocha",
   "Nord": "Nord",
   "Nord Dark": "Nord Oscuro",
   "Select product": "Seleccionar producto",

@@ -3,6 +3,7 @@ import type { KeyboardEvent } from "react";
 import { useT } from "@/i18n/use-i18n";
 
 import type { ServiceDetail } from "../types";
+import { StatusIndicator } from "./StatusIndicator";
 
 export function ServiceCard({ service, domainCount, onOpen }: {
   service: ServiceDetail;
@@ -20,7 +21,7 @@ export function ServiceCard({ service, domainCount, onOpen }: {
     className="cursor-pointer rounded border border-border p-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
     onDoubleClick={onOpen} onKeyDown={keyDown}>
     <div className="flex items-center justify-between gap-2">
-      <strong>{service.name}</strong><span className="text-xs text-muted-foreground">● {service.status}</span>
+      <strong>{service.name}</strong><StatusIndicator status={service.status} className="text-xs text-muted-foreground" />
     </div>
     <p className="mt-1 truncate text-xs text-muted-foreground" title={service.image ?? undefined}>{service.image ?? t("Image not registered")}</p>
     <p className="mt-2">{service.health === "unknown" ? t("Health unknown") : service.health}</p>

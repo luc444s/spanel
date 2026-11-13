@@ -22,6 +22,7 @@ import { ServiceCard } from "./ServiceCard";
 import { ServiceDialog } from "./ServiceDialog";
 import { ServiceOperations } from "./ServiceOperations";
 import { SourceDialog } from "./SourceDialog";
+import { StatusIndicator } from "./StatusIndicator";
 
 type Tab = "overview" | "audit" | "deployments" | "operations";
 const ACTIONS: Array<[AppAction, string]> = [
@@ -125,7 +126,7 @@ export function ApplicationDetail({ application, canCreate, canManage, canManage
       label: t("Overview"),
       content: <div className="space-y-4">
         <dl className="grid gap-3 text-sm sm:grid-cols-2">
-          <div><dt className="text-muted-foreground">{t("Status")}</dt><dd>● {current.status}</dd></div>
+          <div><dt className="text-muted-foreground">{t("Status")}</dt><dd><StatusIndicator status={current.status} /></dd></div>
           <div><dt className="text-muted-foreground">{t("Source")}</dt><dd>GitHub · {sourceConnected ? t("connected") : t("requires reconnection")}</dd></div>
           <div><dt className="text-muted-foreground">{t("Compose")}</dt><dd>{current.compose_file ?? report.compose ?? t("Autodetect")}</dd></div>
           <div><dt className="text-muted-foreground">{t("Active commit")}</dt><dd><code>{activeDeployment?.commit ?? "—"}</code></dd></div>
