@@ -230,7 +230,13 @@ export default function TenantsPage() {
                 <td className="py-2 pr-4 text-foreground">{tenant.domain ?? "—"}</td>
                 <td className="py-2 pr-4 font-mono text-xs text-muted-foreground">{tenant.site_suffix ?? "—"}</td>
                 <td className="py-2 pr-4">
-                  <span className={`inline-block rounded px-1.5 py-0.5 text-xs ${tenant.is_active ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
+                  <span
+                    className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${
+                      tenant.is_active
+                        ? "border-success/40 bg-success/10 text-success"
+                        : "border-border bg-muted text-muted-foreground"
+                    }`}
+                  >
                     {tenant.is_active ? t("Active") : t("Inactive")}
                   </span>
                 </td>
