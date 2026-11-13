@@ -56,6 +56,7 @@ python3 scripts/<script>.py --help
 | Refrescar/adoptar el inventario observado | [`domains_sync.py`](#domains_syncpy) / [`domains_adopt.py`](#domains_adoptpy) |
 | Diagnosticar/reparar rutas y TLS | [`spanel-repair.py`](#spanel-repairpy) |
 | Administrar certificados de correo | [`install_cert_agent.py`](#install_cert_agentpy), [`configure_cert_agent_dms.py`](#configure_cert_agent_dmspy) y [`spanel_cert_agent/`](#spanel_cert_agent) |
+| Migrar certificados SNI legacy | [`migrate_legacy_sni.py`](#migrate_legacy_snip) |
 
 ## Despliegue
 
@@ -498,6 +499,24 @@ que ningún hostname se pierda. Los respaldos quedan como
 ```bash
 sudo python3 scripts/configure_cert_agent_dms.py --json
 sudo python3 scripts/configure_cert_agent_dms.py --apply
+```
+
+### `migrate_legacy_sni.py`
+
+**Plan por defecto; solo escribe con `--apply`.** Audita un mapa SNI legacy de
+Postfix (normalmente `sni-legalattorney`) contra el allowlist del agente, los
+lineages de Certbot y los pares instalados. Con `--apply` añade los hostnames
+al allowlist, valida HTTP-01 con el webroot configurado, emite un lineage por
+hostname, lo instala con `spanel_cert_agent install`, verifica TLS y, si se
+pide `--clean-legacy`, elimina del mapa legacy las líneas migradas. En modo
+plan no ejecuta Certbot.
+
+```bash
+sudo python3 scripts/migrate_legacy_sni.py
+sudo python3 scripts/migrate_legacy_sni.py --apply
+sudo python3 scripts/migrate_legacy_sni.py --apply --clean-legacy
+sudo python3 scripts/migrate_legacy_sni.py --apply \
+  --hostname mail.algisac.com --hostname mail.algima.pe
 ```
 
 ### `spanel_cert_agent/`
