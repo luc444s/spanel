@@ -39,9 +39,21 @@ from systutor.core.errors import AppError
 from systutor.kernel.auth.dependencies import require_permission
 from systutor.kernel.auth.models import User
 from systutor.kernel.auth.service import get_user_by_id
+from systutor.kernel.permissions.service import list_user_role_names
 from systutor.kernel.tenants.models import Tenant
 
 router = APIRouter(prefix="/tenants", tags=["tenants"])
+
+
+def _user_response(db: Session, user: User) -> TenantUserResponse:
+    return TenantUserResponse(
+        id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        is_active=user.is_active,
+        branch_id=user.branch_id,
+        roles=list_user_role_names(db, tenant_id=user.tenant_id, user_id=user.id),
+    )
 
 
 def _tenant_response(db: Session, tenant: Tenant) -> TenantResponse:
@@ -207,16 +219,7 @@ def list_tenant_users(
         raise HTTPException(status_code=404, detail="Tenant not found")
     users = list_users_for_tenant(db, tenant_id)
     return TenantUsersResponse(
-        users=[
-            TenantUserResponse(
-                id=u.id,
-                email=u.email,
-                full_name=u.full_name,
-                is_active=u.is_active,
-                branch_id=u.branch_id,
-            )
-            for u in users
-        ]
+        users=[_user_response(db, user) for user in users]
     )
 
 
@@ -238,13 +241,7 @@ def create_user_in_tenant(
         full_name=body.full_name,
     )
     db.commit()
-    return TenantUserResponse(
-        id=user.id,
-        email=user.email,
-        full_name=user.full_name,
-        is_active=user.is_active,
-        branch_id=user.branch_id,
-    )
+    return _user_response(db, user)
 
 
 @router.post("/{tenant_id}/users/assign", response_model=TenantUserResponse, status_code=201)
@@ -265,13 +262,7 @@ def assign_existing_user(
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     db.commit()
-    return TenantUserResponse(
-        id=updated.id,
-        email=updated.email,
-        full_name=updated.full_name,
-        is_active=updated.is_active,
-        branch_id=updated.branch_id,
-    )
+    return _user_response(db, updated)
 
 
 @router.put("/{tenant_id}/users/{user_id}", response_model=TenantUserResponse)
@@ -295,10 +286,4 @@ def reassign_user(
         raise HTTPException(status_code=404, detail="User not in this tenant")
     updated = remove_user_from_tenant(db, user=user, target_tenant_id=body.target_tenant_id)
     db.commit()
-    return TenantUserResponse(
-        id=updated.id,
-        email=updated.email,
-        full_name=updated.full_name,
-        is_active=updated.is_active,
-        branch_id=updated.branch_id,
-    )
+    return _user_response(db, updated)

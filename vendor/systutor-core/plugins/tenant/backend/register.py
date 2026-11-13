@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
+from plugins.tenant.backend.rbac_router import router as rbac_router
 from plugins.tenant.backend.router import router
 from plugins.tenant.backend.service import (
     claim_domain_for_tenant,
@@ -50,6 +51,7 @@ def domain_release_provider_factory(app: object | None):
 
 def register(context: PluginContext) -> None:
     context.register_router(router)
+    context.register_router(rbac_router)
     app = context.router_registry
     if app is not None:
         register_site_suffix_provider(app, "tenant", site_suffix_provider)

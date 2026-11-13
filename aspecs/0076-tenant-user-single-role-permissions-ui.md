@@ -90,6 +90,8 @@ Entra:
 - core user schema, router and service for the singular replacement endpoint;
 - core-management frontend API client;
 - Users dialog decomposition and `Roles` tab;
+- platform Tenants → Users dialog with `Profile` and `Roles` tabs, explicitly
+  scoped to the tenant selected by the platform administrator;
 - nested role permission editor;
 - English source strings and Spanish catalog entries;
 - backend and frontend regression tests.

@@ -19,11 +19,33 @@ export type TenantUserResponse = {
   full_name: string;
   is_active: boolean;
   branch_id: string | null;
+  roles: string[];
 };
 
 export type TenantUsersResponse = {
   users: TenantUserResponse[];
 };
+
+export type TenantRoleResponse = {
+  id: string;
+  tenant_id: string;
+  name: string;
+  permissions: string[];
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TenantRolesResponse = { roles: TenantRoleResponse[] };
+
+export type TenantPermissionResponse = {
+  id: string;
+  name: string;
+  description: string | null;
+  created_at: string;
+};
+
+export type TenantPermissionsResponse = { permissions: TenantPermissionResponse[] };
 
 export type TenantDomainItem = {
   domain: string;
@@ -64,6 +86,8 @@ export type ReassignUserPayload = {
 export const tenantKeys = {
   tenants: ["tenant", "tenants"] as const,
   users: (tenantId: string) => ["tenant", tenantId, "users"] as const,
+  roles: (tenantId: string) => ["tenant", tenantId, "roles"] as const,
+  permissions: (tenantId: string) => ["tenant", tenantId, "permissions"] as const,
   domains: (tenantId: string) => ["tenant", tenantId, "domains"] as const,
 };
 
@@ -87,6 +111,32 @@ export function updateTenant(tenantId: string, payload: UpdateTenantPayload) {
 
 export function listTenantUsers(tenantId: string) {
   return apiRequest<TenantUsersResponse>(`/api/v1/plugins/tenant/tenants/${tenantId}/users`);
+}
+
+export function listTenantRoles(tenantId: string) {
+  return apiRequest<TenantRolesResponse>(`/api/v1/plugins/tenant/tenants/${tenantId}/roles`);
+}
+
+export function listTenantPermissions(tenantId: string) {
+  return apiRequest<TenantPermissionsResponse>(`/api/v1/plugins/tenant/tenants/${tenantId}/permissions`);
+}
+
+export function replaceTenantUserRole(tenantId: string, userId: string, roleId: string) {
+  return apiRequest<TenantUserResponse>(
+    `/api/v1/plugins/tenant/tenants/${tenantId}/users/${userId}/role`,
+    { method: "PUT", body: JSON.stringify({ role_id: roleId }) },
+  );
+}
+
+export function updateTenantRolePermissions(
+  tenantId: string,
+  roleId: string,
+  permissionNames: string[],
+) {
+  return apiRequest<TenantRoleResponse>(
+    `/api/v1/plugins/tenant/tenants/${tenantId}/roles/${roleId}`,
+    { method: "PATCH", body: JSON.stringify({ permission_names: permissionNames }) },
+  );
 }
 
 export function listTenantDomains(tenantId: string) {

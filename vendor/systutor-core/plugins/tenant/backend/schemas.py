@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from pydantic import BaseModel
 
 
@@ -50,10 +52,44 @@ class TenantUserResponse(BaseModel):
     full_name: str
     is_active: bool
     branch_id: str | None
+    roles: list[str] = []
 
 
 class TenantUsersResponse(BaseModel):
     users: list[TenantUserResponse]
+
+
+class TenantRoleResponse(BaseModel):
+    id: str
+    tenant_id: str
+    name: str
+    permissions: list[str]
+    active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class TenantRolesResponse(BaseModel):
+    roles: list[TenantRoleResponse]
+
+
+class TenantPermissionResponse(BaseModel):
+    id: str
+    name: str
+    description: str | None
+    created_at: datetime
+
+
+class TenantPermissionsResponse(BaseModel):
+    permissions: list[TenantPermissionResponse]
+
+
+class ReplaceTenantUserRoleRequest(BaseModel):
+    role_id: str
+
+
+class UpdateTenantRoleRequest(BaseModel):
+    permission_names: list[str]
 
 
 class TenantDomainItem(BaseModel):
