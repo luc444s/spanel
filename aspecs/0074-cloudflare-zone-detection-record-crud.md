@@ -16,8 +16,9 @@ the panel.
 1. The Domains page queries the active tenant's Cloudflare zones and marks a
    matching domain or subdomain as **Cloudflare**. Local PowerDNS ownership
    remains **Managed** and takes precedence.
-2. Opening a Cloudflare-backed domain opens a provider-specific modal rather
-   than the local PowerDNS modal.
+2. One unified DNS modal is used for both providers. Its shell, layout,
+   filters and add/edit/delete UX are the existing PowerDNS dialog; only the
+   provider-specific data source and write API change.
 3. The modal lists record name, type, content, TTL, proxy state and priority,
    and supports create, edit and confirmed delete.
 4. New tenant-scoped routes use the existing `domains.dns.cloudflare`

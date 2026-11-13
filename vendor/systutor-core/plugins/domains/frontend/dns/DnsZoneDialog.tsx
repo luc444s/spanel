@@ -10,10 +10,13 @@ import { createZone, dnsKeys, getZone } from "./api";
 import { safeErrorMessage } from "./logic";
 import { RecordsTab } from "./RecordsTab";
 import { ZoneTab } from "./ZoneTab";
+import { CloudflareDnsPanel } from "../cloudflare/CloudflareDnsPanel";
+import type { CloudflareZone } from "../cloudflare/types";
 
-export function DnsZoneDialog({ domain, zoneName, activationZoneName, subdomains, permissions, owned, zoneListError, retryZoneList, onClose }: {
+export function DnsZoneDialog({ domain, zoneName, cloudflareZone, activationZoneName, subdomains, permissions, owned, zoneListError, retryZoneList, onClose }: {
   domain: string | null;
   zoneName: string | null;
+  cloudflareZone: CloudflareZone | null;
   activationZoneName: string | null;
   subdomains: string[];
   permissions: string[];
@@ -30,7 +33,7 @@ export function DnsZoneDialog({ domain, zoneName, activationZoneName, subdomains
   const query = useQuery({
     queryKey: dnsKeys.zone(zoneName ?? ""),
     queryFn: () => getZone(zoneName!),
-    enabled: Boolean(domain && zoneName),
+    enabled: Boolean(!cloudflareZone && domain && zoneName),
     retry: false,
   });
   const activation = useMutation({
@@ -59,11 +62,18 @@ export function DnsZoneDialog({ domain, zoneName, activationZoneName, subdomains
     close();
   };
 
+  const description = cloudflareZone
+    ? t("Cloudflare · {zone}", { zone: cloudflareZone.name })
+    : zoneName && query.data
+      ? t("zone {zone} · version {version}", { zone: query.data.name, version: query.data.version ?? "—" })
+      : t("DNS · zone not managed by PanelTutor");
+
   return <>
-    <Dialog open={Boolean(domain)} title={domain ?? ""}
-      description={zoneName && query.data ? t("zone {zone} · version {version}", { zone: query.data.name, version: query.data.version ?? "—" }) : t("DNS · zone not managed by PanelTutor")}
+    <Dialog open={Boolean(domain || cloudflareZone)} title={cloudflareZone?.name ?? domain ?? ""}
+      description={description}
       onClose={close} maxWidthClassName="max-w-[800px]">
-      {zoneListError ? <Alert title={t("Could not load DNS zones")}><Button size="sm" variant="secondary" onClick={retryZoneList}>{t("Retry")}</Button></Alert>
+      {cloudflareZone ? <CloudflareDnsPanel zone={cloudflareZone} />
+        : zoneListError ? <Alert title={t("Could not load DNS zones")}><Button size="sm" variant="secondary" onClick={retryZoneList}>{t("Retry")}</Button></Alert>
         : blocked ? <Alert title={t("Public nameservers are not configured.")}>{t("A platform administrator must configure ns1 and ns2 before the first zone can be activated.")}</Alert>
         : !zoneName ? <div className="space-y-4">
           <p className="text-sm text-muted-foreground">{t("This domain is not authoritative here. Its records are managed by an external DNS provider, for example Cloudflare.")}</p>

@@ -99,6 +99,7 @@ const messages: Record<string, string> = {
   "Edit": "Editar",
   "Delete": "Eliminar",
   "Cloudflare DNS": "DNS de Cloudflare",
+  "Cloudflare · {zone}": "Cloudflare · {zone}",
   "Records are changed directly in the connected Cloudflare account.":
     "Los registros se modifican directamente en la cuenta de Cloudflare conectada.",
   "Add record": "Agregar registro",
@@ -108,6 +109,8 @@ const messages: Record<string, string> = {
   "Priority": "Prioridad",
   "Proxy through Cloudflare": "Proxy mediante Cloudflare",
   "No DNS records": "No hay registros DNS",
+  "{count} records": "{count} registros",
+  "Showing {count} of {total} records": "Mostrando {count} de {total} registros",
   "Loading DNS records...": "Cargando registros DNS...",
   "Could not load DNS records": "No se pudieron cargar los registros DNS",
   "DNS record created": "Registro DNS creado",

@@ -18,7 +18,6 @@ import { toast } from "@systutor/shell/ui/toast";
 import { t } from "@/i18n";
 import { DomainsTable } from "../components/DomainsTable";
 import { CloudflareConnectButton } from "../cloudflare/CloudflareConnectButton";
-import { CloudflareDnsDialog } from "../cloudflare/CloudflareDnsDialog";
 import {
   cloudflareKeys,
   getCloudflareStatus,
@@ -361,6 +360,7 @@ export default function DomainsPage() {
 
       <DnsZoneDialog
         domain={dnsDomain?.domain ?? null}
+        cloudflareZone={cloudflareZone}
         zoneName={dnsDomain ? longestOwnedZone(dnsDomain.domain, zonesQuery.data?.items ?? [])?.name ?? null : null}
         activationZoneName={dnsDomain
           ? activationZoneDomain(
@@ -375,9 +375,11 @@ export default function DomainsPage() {
         owned={Boolean(dnsDomain && (!dnsDomain.tenant_id || dnsDomain.tenant_id === currentTenant?.id))}
         zoneListError={zonesQuery.isError}
         retryZoneList={() => void zonesQuery.refetch()}
-        onClose={() => setDnsDomain(null)}
+        onClose={() => {
+          setDnsDomain(null);
+          setCloudflareZone(null);
+        }}
       />
-      <CloudflareDnsDialog zone={cloudflareZone} onClose={() => setCloudflareZone(null)} />
       <NameserversDialog open={nameserversOpen} onClose={() => setNameserversOpen(false)}
         permissions={permissions} zones={zonesQuery.data?.items ?? []} />
     </section>
