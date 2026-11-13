@@ -21,10 +21,11 @@ role row. One role per user is a system rule, not merely a visual restriction.
 
 ### Users dialog
 
-- Editing an existing user shows two tabs: `Profile` and `Permissions`.
-- Creating a user shows `Profile`; role assignment happens after creation.
-- `Permissions` contains:
-  - heading `Permissions`;
+- The user dialog shows two tabs: `Profile` and `Roles`.
+- While creating a user, `Roles` remains visible but disabled until the profile
+  has been saved.
+- `Roles` contains:
+  - heading `Roles`;
   - subtitle `Access management`;
   - `RBAC` badge;
   - a tenant-user dropdown;
@@ -68,9 +69,11 @@ but accept at most one item. An empty list resolves to the tenant's zero-access
 `unassigned` role. The CLI and legacy assignment endpoints use the same
 replacement service and can no longer create multiple assignments.
 
-### Migration
+### Core runtime migration
 
-- Add a unique constraint on `user_roles.user_id`.
+- `plugins/tenant/migrations/003_single_user_role.py` is loaded and versioned by
+  `systutor.kernel.plugins.migrations`; Alembic is not used.
+- The runtime step adds a unique index on `user_roles.user_id`.
 - A historical user with multiple roles is migrated to one generated composite
   role containing the union of the old roles' permissions. Effective access is
   preserved instead of selecting or discarding a role silently.
@@ -86,10 +89,11 @@ Entra:
 - `aspecs/0076-tenant-user-single-role-permissions-ui.md`
 - core user schema, router and service for the singular replacement endpoint;
 - core-management frontend API client;
-- Users dialog decomposition and `Permissions` tab;
+- Users dialog decomposition and `Roles` tab;
 - nested role permission editor;
 - English source strings and Spanish catalog entries;
 - backend and frontend regression tests.
+- tenant plugin runtime migration and its loader-level regression test;
 
 No entra:
 
@@ -98,6 +102,7 @@ No entra:
 - deleting roles;
 - invoking the CLI as a subprocess from HTTP;
 - changing platform-wide RBAC semantics.
+- any Alembic revision or Alembic command.
 
 ## CONTRACT
 
@@ -131,8 +136,8 @@ No entra:
 
 ## VALIDATION
 
-- Migration tests for multi-role permission union, roleless users and the
-  unique constraint.
+- Core runtime migration tests for multi-role permission union, roleless users
+  and the unique constraint.
 - Focused core API tests for replacement, inactive role, tenant isolation,
   audit and event emission.
 - Frontend logic tests for exclusive selection and legacy multi-role handling.

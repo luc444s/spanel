@@ -46,7 +46,7 @@ export function UserPermissionsPanel({
     <form className="space-y-4" onSubmit={submit}>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="font-semibold text-foreground">{t("Permissions")}</h3>
+          <h3 className="font-semibold text-foreground">{t("Roles")}</h3>
           <p className="text-sm text-muted-foreground">{t("Access management")}</p>
         </div>
         <Badge>RBAC</Badge>

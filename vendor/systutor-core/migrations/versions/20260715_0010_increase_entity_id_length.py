@@ -15,16 +15,16 @@ depends_on = None
 
 
 def upgrade() -> None:
-    for table_name in ("audit_logs", "event_logs", "core_document_versions"):
-        with op.batch_alter_table(table_name) as batch_op:
-            batch_op.alter_column(
-                "entity_id", type_=sa.String(255), existing_type=sa.String(100)
-            )
+    op.alter_column("audit_logs", "entity_id", type_=sa.String(255), existing_type=sa.String(100))
+    op.alter_column("event_logs", "entity_id", type_=sa.String(255), existing_type=sa.String(100))
+    op.alter_column(
+        "core_document_versions", "entity_id", type_=sa.String(255), existing_type=sa.String(100)
+    )
 
 
 def downgrade() -> None:
-    for table_name in ("core_document_versions", "event_logs", "audit_logs"):
-        with op.batch_alter_table(table_name) as batch_op:
-            batch_op.alter_column(
-                "entity_id", type_=sa.String(100), existing_type=sa.String(255)
-            )
+    op.alter_column(
+        "core_document_versions", "entity_id", type_=sa.String(100), existing_type=sa.String(255)
+    )
+    op.alter_column("event_logs", "entity_id", type_=sa.String(100), existing_type=sa.String(255))
+    op.alter_column("audit_logs", "entity_id", type_=sa.String(100), existing_type=sa.String(255))

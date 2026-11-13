@@ -143,13 +143,23 @@ export function UserEditorDialog({
       maxWidthClassName="max-w-2xl"
       onClose={onClose}
     >
-      {formState.id && canManageRoles ? (
+      {canManageRoles ? (
         <Tabs
           value={tab}
           onChange={setTab}
           tabs={[
-            { value: "profile", label: t("Profile"), content: profile, disabled: !canUpdate },
-            { value: "permissions", label: t("Permissions"), content: permissionPanel },
+            {
+              value: "profile",
+              label: t("Profile"),
+              content: profile,
+              disabled: Boolean(formState.id) && !canUpdate,
+            },
+            {
+              value: "permissions",
+              label: t("Roles"),
+              content: permissionPanel,
+              disabled: !formState.id,
+            },
           ]}
         />
       ) : profile}

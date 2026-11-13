@@ -24,7 +24,10 @@ from sqlalchemy.orm import Session
 from systutor.api.seed import sync_permissions, sync_tenant_admin_roles
 from systutor.contracts.plugins import PluginManifestContract
 from systutor.kernel.permissions.models import Permission, Role, RolePermission
-from systutor.kernel.permissions.service import sync_tenant_admin_role
+from systutor.kernel.permissions.service import (
+    TENANT_ADMIN_BASE_PERMISSIONS,
+    sync_tenant_admin_role,
+)
 from systutor.kernel.plugins.manifest import PluginManifest
 from systutor.kernel.plugins.persistent import (
     list_tenant_admin_permissions,
@@ -43,9 +46,9 @@ MAIL_TENANT_ADMIN = [
     "mail.accounts.create",
     "mail.account.password",
 ]
-# The shell cannot load the plugin runtime without it, so the kernel adds it
-# even though no plugin manifest declares it.
-TENANT_ADMIN_BASE = {"core.plugin.runtime.read"}
+# Kernel capabilities needed by a tenant administrator, independent of plugin
+# declarations.
+TENANT_ADMIN_BASE = set(TENANT_ADMIN_BASE_PERMISSIONS)
 
 
 def _manifest(**overrides: object) -> dict[str, object]:
@@ -175,6 +178,7 @@ def test_tenant_admin_recibe_solo_los_declarados(
 
     granted = _role_permission_names(db_session, role.id)
     assert granted == set(MAIL_TENANT_ADMIN) | TENANT_ADMIN_BASE
+    assert {"core.users.read", "core.roles.manage"} <= granted
     assert "mail.accounts.all" not in granted, "el permiso cross-domain llego al tenant"
     assert "tenant.tenants.manage" not in granted, "el tenant recibio poder cross-tenant"
     assert user.tenant_id == tenant.id
@@ -237,7 +241,9 @@ def test_backfill_es_idempotente(app, db_session: Session, seeded_demo: dict[str
     rows = db_session.scalars(
         select(RolePermission).where(RolePermission.role_id == role.id)
     ).all()
-    assert len(rows) == 3, "el backfill duplico filas de role_permissions"
+    assert len(rows) == len({"mail.accounts.read", "mail.accounts.create"} | TENANT_ADMIN_BASE), (
+        "el backfill duplico filas de role_permissions"
+    )
 
     # A permission a plugin stops declaring is no longer granted.
     register_tenant_admin_permissions("mail", ["mail.accounts.create"])
