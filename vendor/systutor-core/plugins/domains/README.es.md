@@ -175,12 +175,14 @@ aprobado explícito. El conjunto vacío queda reservado al bootstrap inicial.
 La delegación del registrador, DNSSEC y Cloudflare no son modificados por esta
 interfaz local de nameservers.
 
-## Cloudflare OAuth y gestión DNS (A.SPEC 0071/0074)
+## Cloudflare OAuth y gestión DNS (A.SPEC 0071/0074/0075)
 
 El backend y el panel pueden conectar un tenant con Cloudflare mediante
 Authorization Code con PKCE S256. Los usuarios autorizados pueden descubrir
-zonas y listar, crear, editar o eliminar sus registros DNS. Crear zonas,
-cambiar nameservers y administrar la cuenta quedan fuera de esta integración.
+zonas y listar, crear, editar o eliminar sus registros DNS. La CLI de operador y
+el backend también pueden aprovisionar una zona con registros de origen DNS-only
+en el apex y, opcionalmente, `www`. Cambiar nameservers en el registrador y
+administrar la cuenta quedan fuera de esta integración.
 La A.SPEC 0072 añade una tarjeta de conexión de Cloudflare, con alcance de
 tenant, en la página de Dominios para usuarios con `domains.dns.cloudflare`.
 
@@ -216,6 +218,8 @@ python3 scripts/spanel_dns.py cloudflare status --tenant TENANT
 python3 scripts/spanel_dns.py cloudflare disconnect --tenant TENANT [--apply]
 python3 scripts/spanel_dns.py cloudflare zones list --tenant TENANT
 python3 scripts/spanel_dns.py cloudflare records list ZONA --tenant TENANT
+python3 scripts/spanel_dns.py cloudflare provision plan DOMINIO --tenant TENANT --ipv4 DIRECCION [--www] [--replace]
+python3 scripts/spanel_dns.py cloudflare provision apply DOMINIO --tenant TENANT --ipv4 DIRECCION [--www] [--replace] --apply
 ```
 
 `oauth register` es dry-run salvo `--apply`; el bootstrap token debe ser
@@ -224,7 +228,10 @@ está fuera de alcance. `connect` imprime la URL de autorización y espera el
 callback del backend sin recibir nunca el token OAuth; `--wait-seconds 0`
 retorna de inmediato. `disconnect` es dry-run salvo `--apply`; revoca
 best-effort y elimina credenciales locales de forma idempotente. Todos aceptan
-`--json`; el contenido de registros siempre se redacta.
+`--json`; el contenido de registros de descubrimiento siempre se redacta. Los
+planes de aprovisionamiento solo muestran el contenido solicitado y conflictos
+en los owners gestionados. Apply recalcula el plan, exige `--replace` para
+eliminar A/AAAA/CNAME conflictivos y nunca cambia la delegación del registrador.
 
 ### Panel
 
@@ -257,6 +264,8 @@ disponible como vía de operador.
 | POST | `/api/v1/plugins/domains/dns/cloudflare/disconnect` | `domains.dns.cloudflare` |
 | GET | `/api/v1/plugins/domains/dns/cloudflare/zones` | `domains.dns.cloudflare` |
 | GET | `/api/v1/plugins/domains/dns/cloudflare/zones/{zone_id}/records` | `domains.dns.cloudflare` |
+| POST | `/api/v1/plugins/domains/dns/cloudflare/provision/plan` | `domains.dns.cloudflare` |
+| POST | `/api/v1/plugins/domains/dns/cloudflare/provision/apply` | `domains.dns.cloudflare` |
 
 El callback valida un state aleatorio, hasheado, con expiración y de un solo
 uso, más la redirect URI y la transacción PKCE guardadas. Nunca acepta tenant

@@ -171,12 +171,13 @@ Configuration requires both `domains.dns.nameservers` and
 sends an explicit approved set. An empty set is reserved for first-settings
 bootstrap. Registrar delegation, DNSSEC and Cloudflare remain outside the UI.
 
-## Cloudflare OAuth and DNS management (A.SPEC 0071/0074)
+## Cloudflare OAuth and DNS management (A.SPEC 0071/0074/0075)
 
 The backend and panel can connect one tenant to Cloudflare through the
 Authorization Code flow with S256 PKCE. Authorized users can discover zones
-and list, create, edit or delete their DNS records. Zone creation, nameserver
-changes and account settings remain outside this integration.
+and list, create, edit or delete their DNS records. The operator CLI and backend
+can also provision a zone with DNS-only apex and optional `www` origin records.
+Registrar nameserver changes and account settings remain outside this integration.
 A.SPEC 0072 adds a tenant-scoped Cloudflare connection card to the Domains page
 for users with `domains.dns.cloudflare`.
 
@@ -212,6 +213,8 @@ python3 scripts/spanel_dns.py cloudflare status --tenant TENANT
 python3 scripts/spanel_dns.py cloudflare disconnect --tenant TENANT [--apply]
 python3 scripts/spanel_dns.py cloudflare zones list --tenant TENANT
 python3 scripts/spanel_dns.py cloudflare records list ZONE --tenant TENANT
+python3 scripts/spanel_dns.py cloudflare provision plan DOMAIN --tenant TENANT --ipv4 ADDRESS [--www] [--replace]
+python3 scripts/spanel_dns.py cloudflare provision apply DOMAIN --tenant TENANT --ipv4 ADDRESS [--www] [--replace] --apply
 ```
 
 `oauth register` is a dry-run unless `--apply` is present; the bootstrap token
@@ -220,7 +223,10 @@ rotation is out of scope. `connect` prints the Cloudflare authorization URL,
 then waits for the backend callback without ever receiving the OAuth token;
 `--wait-seconds 0` returns immediately. `disconnect` is a dry-run unless
 `--apply`; it revokes best-effort and removes local credentials idempotently.
-All commands accept `--json`; record content is always redacted.
+All commands accept `--json`; discovery record content is always redacted.
+Provision plans return only the requested record content and conflicts at the
+managed owners. Apply recomputes the plan, requires `--replace` to remove
+conflicting A/AAAA/CNAME records, and never changes registrar delegation.
 
 ### Panel
 
@@ -252,6 +258,8 @@ The CLI `cloudflare oauth register` remains available as the operator path.
 | POST | `/api/v1/plugins/domains/dns/cloudflare/disconnect` | `domains.dns.cloudflare` |
 | GET | `/api/v1/plugins/domains/dns/cloudflare/zones` | `domains.dns.cloudflare` |
 | GET | `/api/v1/plugins/domains/dns/cloudflare/zones/{zone_id}/records` | `domains.dns.cloudflare` |
+| POST | `/api/v1/plugins/domains/dns/cloudflare/provision/plan` | `domains.dns.cloudflare` |
+| POST | `/api/v1/plugins/domains/dns/cloudflare/provision/apply` | `domains.dns.cloudflare` |
 
 The callback validates a random, hashed, expiring, single-use state and the
 stored redirect URI/PKCE transaction. It never accepts a tenant from query
