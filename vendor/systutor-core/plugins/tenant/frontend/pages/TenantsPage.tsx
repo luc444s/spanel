@@ -210,63 +210,65 @@ export default function TenantsPage() {
         </form>
       </Dialog>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border text-left text-muted-foreground">
-              <th className="pb-2 pr-4">{t("Name")}</th>
-              <th className="pb-2 pr-4">{t("Slug")}</th>
-              <th className="pb-2 pr-4">{t("Domain")}</th>
-              <th className="pb-2 pr-4">{t("Site suffix")}</th>
-              <th className="pb-2 pr-4">{t("Status")}</th>
-              <th className="pb-2">{t("Actions")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {pagedTenants.map((tenant) => (
-              <tr key={tenant.id} className="border-b border-border/50">
-                <td className="py-2 pr-4 text-foreground">{tenant.name}</td>
-                <td className="py-2 pr-4 font-mono text-xs text-muted-foreground">{tenant.slug}</td>
-                <td className="py-2 pr-4 text-foreground">{tenant.domain ?? "—"}</td>
-                <td className="py-2 pr-4 font-mono text-xs text-muted-foreground">{tenant.site_suffix ?? "—"}</td>
-                <td className="py-2 pr-4">
-                  <span
-                    className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${
-                      tenant.is_active
-                        ? "border-success/40 bg-success/10 text-success"
-                        : "border-border bg-muted text-muted-foreground"
-                    }`}
-                  >
-                    {tenant.is_active ? t("Active") : t("Inactive")}
-                  </span>
-                </td>
-                <td className="py-2">
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => { setSelectedTenant(tenant); setEditDomain(tenant.domain ?? ""); setEditSiteSuffix(tenant.site_suffix ?? ""); setEditError(null); setNewManagedDomain(""); setDomainError(null); }}
-                    >
-                      {t("Domains")}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => setShowUsers(tenant)}
-                    >
-                      {t("Users")}
-                    </Button>
-                  </div>
-                </td>
+      <div className="flex min-h-[22rem] flex-col gap-4 md:min-h-[26rem]">
+        <div className="flex-1 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-muted-foreground">
+                <th className="pb-2 pr-4">{t("Name")}</th>
+                <th className="pb-2 pr-4">{t("Slug")}</th>
+                <th className="pb-2 pr-4">{t("Domain")}</th>
+                <th className="pb-2 pr-4">{t("Site suffix")}</th>
+                <th className="pb-2 pr-4">{t("Status")}</th>
+                <th className="pb-2">{t("Actions")}</th>
               </tr>
-            ))}
-            {tenants.length === 0 && (
-              <tr><td colSpan={6} className="py-4 text-center text-muted-foreground">{t("No tenants")}</td></tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {pagedTenants.map((tenant) => (
+                <tr key={tenant.id} className="border-b border-border/50">
+                  <td className="py-2 pr-4 text-foreground">{tenant.name}</td>
+                  <td className="py-2 pr-4 font-mono text-xs text-muted-foreground">{tenant.slug}</td>
+                  <td className="py-2 pr-4 text-foreground">{tenant.domain ?? "—"}</td>
+                  <td className="py-2 pr-4 font-mono text-xs text-muted-foreground">{tenant.site_suffix ?? "—"}</td>
+                  <td className="py-2 pr-4">
+                    <span
+                      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${
+                        tenant.is_active
+                          ? "border-success/40 bg-success/10 text-success"
+                          : "border-border bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {tenant.is_active ? t("Active") : t("Inactive")}
+                    </span>
+                  </td>
+                  <td className="py-2">
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => { setSelectedTenant(tenant); setEditDomain(tenant.domain ?? ""); setEditSiteSuffix(tenant.site_suffix ?? ""); setEditError(null); setNewManagedDomain(""); setDomainError(null); }}
+                      >
+                        {t("Domains")}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => setShowUsers(tenant)}
+                      >
+                        {t("Users")}
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {tenants.length === 0 && (
+                <tr><td colSpan={6} className="py-4 text-center text-muted-foreground">{t("No tenants")}</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <Pagination page={currentPage} totalPages={totalPages} onChange={setPage} />
       </div>
-      <Pagination page={currentPage} totalPages={totalPages} onChange={setPage} />
 
       <Dialog open={Boolean(selectedTenant)} title={t("Domain and suffix")} description={selectedTenant?.name} onClose={() => setSelectedTenant(null)}>
         <div className="space-y-4">

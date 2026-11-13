@@ -92,34 +92,41 @@ export default function AppsPage() {
     </div>
     <GithubConnectionCard canConnect={canConnect} statusQuery={githubStatus} />
 
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-      {pagedApps.map((application) => {
-        const owned = isOwnedByTenant(application.tenant_id, currentTenant?.id);
-        const appRoutes = routes.filter((route) =>
-          route.site_id.startsWith(`${application.id}:`));
-        const domainLabel = !canReadDomains
-          ? application.domain ?? t("No domain")
-          : routesQuery.isLoading
-            ? t("Loading domains...")
-            : appRoutes.length === 0
-              ? application.domain ?? t("No domains")
-              : appRoutes.length === 1
-                ? `${appRoutes[0].domain}${appRoutes[0].path === "/" ? "" : appRoutes[0].path}`
-                : t("{count} domains", { count: appRoutes.length });
-        return <button key={application.id} type="button"
-          aria-disabled={!owned}
-          className={`rounded-md border border-border bg-card p-4 text-left ${owned ? "hover:bg-muted" : "cursor-default"}`}
-          onClick={() => { if (owned) setSelected(application); }}>
-          <div className="flex items-center justify-between gap-2"><strong>{application.name}</strong><span className="rounded bg-muted px-2 py-0.5 text-xs">{application.status}</span></div>
-          <p className="mt-2 text-sm text-muted-foreground">{application.repository} · {application.branch}</p>
-          <p className="mt-1 text-xs text-muted-foreground">{domainLabel}</p>
-          {application.tenant_name ? <p className="mt-1 text-xs text-muted-foreground">{t("Tenant")}: {application.tenant_name}</p> : null}
-          {!owned ? <p className="mt-2 text-xs font-medium text-muted-foreground">{t("Read only")}</p> : null}
-        </button>;
-      })}
-    </div>
-    <Pagination page={currentPage} totalPages={totalPages} onChange={setPage} />
-    {apps.length === 0 ? <p className="rounded border border-border p-4 text-sm text-muted-foreground">{t("No applications.")}</p> : null}
+    {apps.length === 0 ? (
+      <p className="rounded border border-border p-4 text-sm text-muted-foreground">{t("No applications.")}</p>
+    ) : (
+      <div className="flex min-h-[22rem] flex-col gap-4 md:min-h-[26rem]">
+        <div className="flex-1">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+            {pagedApps.map((application) => {
+              const owned = isOwnedByTenant(application.tenant_id, currentTenant?.id);
+              const appRoutes = routes.filter((route) =>
+                route.site_id.startsWith(`${application.id}:`));
+              const domainLabel = !canReadDomains
+                ? application.domain ?? t("No domain")
+                : routesQuery.isLoading
+                  ? t("Loading domains...")
+                  : appRoutes.length === 0
+                    ? application.domain ?? t("No domains")
+                    : appRoutes.length === 1
+                      ? `${appRoutes[0].domain}${appRoutes[0].path === "/" ? "" : appRoutes[0].path}`
+                      : t("{count} domains", { count: appRoutes.length });
+              return <button key={application.id} type="button"
+                aria-disabled={!owned}
+                className={`rounded-md border border-border bg-card p-4 text-left ${owned ? "hover:bg-muted" : "cursor-default"}`}
+                onClick={() => { if (owned) setSelected(application); }}>
+                <div className="flex items-center justify-between gap-2"><strong>{application.name}</strong><span className="rounded bg-muted px-2 py-0.5 text-xs">{application.status}</span></div>
+                <p className="mt-2 text-sm text-muted-foreground">{application.repository} · {application.branch}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{domainLabel}</p>
+                {application.tenant_name ? <p className="mt-1 text-xs text-muted-foreground">{t("Tenant")}: {application.tenant_name}</p> : null}
+                {!owned ? <p className="mt-2 text-xs font-medium text-muted-foreground">{t("Read only")}</p> : null}
+              </button>;
+            })}
+          </div>
+        </div>
+        <Pagination page={currentPage} totalPages={totalPages} onChange={setPage} />
+      </div>
+    )}
 
     <CreateApplicationDialog open={createOpen} platform={platform} onClose={() => setCreateOpen(false)} onAccepted={accepted} />
     <ApplicationDetail key={selected?.id ?? "no-application"} application={selected} canCreate={canCreate} canManage={canManage}
