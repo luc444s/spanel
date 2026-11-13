@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import {
@@ -13,10 +13,11 @@ import {
   type TenantResponse,
 } from "../api";
 import { TenantUsersDialog } from "../components/TenantUsersDialog";
+import { Alert } from "@systutor/shell/ui/alert";
 import { Button } from "@systutor/shell/ui/button";
 import { Dialog } from "@systutor/shell/ui/dialog";
 import { Input, newCredentialProps, noAutofillProps } from "@systutor/shell/ui/input";
-import { Alert } from "@systutor/shell/ui/alert";
+import { Pagination } from "@systutor/shell/ui/pagination";
 import { useT } from "@/i18n/use-i18n";
 
 export default function TenantsPage() {
@@ -40,6 +41,8 @@ export default function TenantsPage() {
   const [domainError, setDomainError] = useState<string | null>(null);
 
   const [showUsers, setShowUsers] = useState<TenantResponse | null>(null);
+  const [page, setPage] = useState(1);
+  const TENANTS_PAGE_SIZE = 10;
 
   const tenantsQuery = useQuery({ queryKey: tenantKeys.tenants, queryFn: listTenants });
 
@@ -154,6 +157,16 @@ export default function TenantsPage() {
   }
 
   const tenants = tenantsQuery.data?.tenants ?? [];
+  const totalPages = Math.max(1, Math.ceil(tenants.length / TENANTS_PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pagedTenants = tenants.slice(
+    (currentPage - 1) * TENANTS_PAGE_SIZE,
+    currentPage * TENANTS_PAGE_SIZE,
+  );
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
 
   return (
     <section className="space-y-4">
@@ -214,7 +227,7 @@ export default function TenantsPage() {
             </tr>
           </thead>
           <tbody>
-            {tenants.map((tenant) => (
+            {pagedTenants.map((tenant) => (
               <tr key={tenant.id} className="border-b border-border/50">
                 <td className="py-2 pr-4 text-foreground">{tenant.name}</td>
                 <td className="py-2 pr-4 font-mono text-xs text-muted-foreground">{tenant.slug}</td>
@@ -251,6 +264,7 @@ export default function TenantsPage() {
           </tbody>
         </table>
       </div>
+      <Pagination page={currentPage} totalPages={totalPages} onChange={setPage} />
 
       <Dialog open={Boolean(selectedTenant)} title={t("Domain and suffix")} description={selectedTenant?.name} onClose={() => setSelectedTenant(null)}>
         <div className="space-y-4">

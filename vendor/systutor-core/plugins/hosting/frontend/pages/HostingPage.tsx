@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
@@ -18,8 +18,9 @@ import {
 import { Alert } from "@systutor/shell/ui/alert";
 import { Button } from "@systutor/shell/ui/button";
 import { Dialog } from "@systutor/shell/ui/dialog";
-import { toast } from "@systutor/shell/ui/toast";
 import { Input } from "@systutor/shell/ui/input";
+import { Pagination } from "@systutor/shell/ui/pagination";
+import { toast } from "@systutor/shell/ui/toast";
 import { useAuthStore } from "../../../../../../apps/web/src/features/auth/store";
 import { useT } from "@/i18n/use-i18n";
 import { SiteCard, kindLabel, stateLabel } from "../components/SiteCard";
@@ -86,6 +87,8 @@ export default function HostingPage() {
   const [resetTarget, setResetTarget] = useState<WordPressUser | null>(null);
   const [generated, setGenerated] = useState<GeneratedPassword | null>(null);
   const [createdUrl, setCreatedUrl] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const HOSTING_PAGE_SIZE = 9;
 
   // The create dialog owns its own form; the page only shows the result.
   function handleCreated(result: {
@@ -204,6 +207,16 @@ export default function HostingPage() {
   }
 
   const sites = sitesQuery.data?.sites ?? [];
+  const totalPages = Math.max(1, Math.ceil(sites.length / HOSTING_PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pagedSites = sites.slice(
+    (currentPage - 1) * HOSTING_PAGE_SIZE,
+    currentPage * HOSTING_PAGE_SIZE,
+  );
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
   // The list is the source of truth: after an action we refetch it, and the
   // open dialog must show the new status without closing and reopening.
   const detail = detailSite ? sites.find((site) => site.id === detailSite.id) ?? detailSite : null;
@@ -233,16 +246,19 @@ export default function HostingPage() {
           {t("No sites are assigned to this tenant.")}
         </p>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {sites.map((site) => (
-            <SiteCard
-              key={site.id}
-              site={site}
-              readOnly={Boolean(site.tenant_id && site.tenant_id !== currentTenant?.id)}
-              onOpen={setDetailSite}
-            />
-          ))}
-        </div>
+        <>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {pagedSites.map((site) => (
+              <SiteCard
+                key={site.id}
+                site={site}
+                readOnly={Boolean(site.tenant_id && site.tenant_id !== currentTenant?.id)}
+                onOpen={setDetailSite}
+              />
+            ))}
+          </div>
+          <Pagination page={currentPage} totalPages={totalPages} onChange={setPage} />
+        </>
       )}
 
       <Dialog

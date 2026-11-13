@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 
 import { Alert } from "@systutor/shell/ui/alert";
 import { Button } from "@systutor/shell/ui/button";
+import { Pagination } from "@systutor/shell/ui/pagination";
 import { toast } from "@systutor/shell/ui/toast";
 import { useAuthStore } from "../../../../../../apps/web/src/features/auth/store";
 import { useT } from "@/i18n/use-i18n";
@@ -32,6 +33,8 @@ export default function AppsPage() {
   const canDelete = canPlatformMutate(permissions, "apps.applications.delete");
   const [createOpen, setCreateOpen] = useState(false);
   const [selected, setSelected] = useState<Application | null>(null);
+  const [page, setPage] = useState(1);
+  const APPS_PAGE_SIZE = 9;
   const applications = useQuery({
     queryKey: [...appsKeys.applications, platform ? "all" : "tenant"],
     queryFn: () => listApplications(platform),
@@ -71,6 +74,18 @@ export default function AppsPage() {
     }
   }
 
+  const apps = applications.data ?? [];
+  const totalPages = Math.max(1, Math.ceil(apps.length / APPS_PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pagedApps = apps.slice(
+    (currentPage - 1) * APPS_PAGE_SIZE,
+    currentPage * APPS_PAGE_SIZE,
+  );
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
   if (applications.isLoading) return <div className="flex min-h-48 items-center justify-center text-sm text-muted-foreground">{t("Loading Apps…")}</div>;
   if (applications.error) return <Alert title={t("Error")}>{t("Could not load applications.")}</Alert>;
 
@@ -82,7 +97,7 @@ export default function AppsPage() {
     <GithubConnectionCard canConnect={canConnect} statusQuery={githubStatus} />
 
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-      {applications.data?.map((application) => {
+      {pagedApps.map((application) => {
         const owned = isOwnedByTenant(application.tenant_id, currentTenant?.id);
         const appRoutes = routes.filter((route) =>
           route.site_id.startsWith(`${application.id}:`));
@@ -107,7 +122,8 @@ export default function AppsPage() {
         </button>;
       })}
     </div>
-    {applications.data?.length === 0 ? <p className="rounded border border-border p-4 text-sm text-muted-foreground">{t("No applications.")}</p> : null}
+    <Pagination page={currentPage} totalPages={totalPages} onChange={setPage} />
+    {apps.length === 0 ? <p className="rounded border border-border p-4 text-sm text-muted-foreground">{t("No applications.")}</p> : null}
 
     <CreateApplicationDialog open={createOpen} platform={platform} onClose={() => setCreateOpen(false)} onAccepted={accepted} />
     <ApplicationDetail key={selected?.id ?? "no-application"} application={selected} canCreate={canCreate} canManage={canManage}

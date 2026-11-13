@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { t } from "@/i18n";
 import { Button } from "@systutor/shell/ui/button";
+import { Pagination } from "@systutor/shell/ui/pagination";
 
 import {
   domainsKeys,
@@ -73,13 +74,28 @@ export function DomainsTable({ items, zones, cloudflareZones, dnsError, platform
   onRemove: (item: DomainItem) => void;
 }) {
   const [expandedDomains, setExpandedDomains] = useState<Set<string>>(new Set());
-  const rows = groupRegisteredDomains(items).flatMap(({ parent, children }) => [
+  const [page, setPage] = useState(1);
+  const DOMAINS_PAGE_SIZE = 10;
+  const groups = groupRegisteredDomains(items);
+  const totalPages = Math.max(1, Math.ceil(groups.length / DOMAINS_PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
+  const pagedGroups = groups.slice(
+    (currentPage - 1) * DOMAINS_PAGE_SIZE,
+    currentPage * DOMAINS_PAGE_SIZE,
+  );
+  const rows = pagedGroups.flatMap(({ parent, children }) => [
     { item: parent, child: false, childCount: children.length },
     ...(expandedDomains.has(`${parent.tenant_id ?? ""}:${parent.domain}`)
       ? children.map((item) => ({ item, child: true, childCount: 0 })) : []),
   ]);
 
-  return <div className="overflow-x-auto rounded-lg border border-border bg-card">
+  return <div className="space-y-3">
+    <div className="overflow-x-auto rounded-lg border border-border bg-card">
     <table className="w-full min-w-[760px] table-fixed border-collapse text-sm">
       <colgroup><col className="w-[29%]" />{platform && <col className="w-[15%]" />}
         <col className="w-[10%]" /><col className="w-[12%]" /><col className="w-[18%]" />
@@ -164,5 +180,7 @@ export function DomainsTable({ items, zones, cloudflareZones, dnsError, platform
         </tr>;
       })}</tbody>
     </table>
+    </div>
+    <Pagination page={currentPage} totalPages={totalPages} onChange={setPage} />
   </div>;
 }
