@@ -231,7 +231,7 @@ Mailserver existente sin sobrescribir entradas hechas a mano:
 ```bash
 sudo python3 scripts/configure_cert_agent_dms.py            # plan de solo lectura
 sudo python3 scripts/configure_cert_agent_dms.py --json
-sudo python3 scripts/configure_cert_agent_dms.py --apply    # escribe y reinicia
+sudo python3 scripts/configure_cert_agent_dms.py --apply    # escribe y recrea
 ```
 
 Inspecciona el contenedor para ubicar el mount `/tmp/docker-mailserver`, lee la
@@ -247,9 +247,13 @@ allowlist de `/etc/spanel/cert-agent.toml` y separa el estado SNI actual:
   agente usando `docker exec <contenedor> ...`.
 
 `--apply` respalda cada archivo que toca como `.spanel-dms-<marca>.bak`, ejecuta
-`postmap`, reinicia el contenedor, verifica que todos los hostnames sigan
-presentes en `postconf`/`doveconf` y revierte los archivos si la validación
-falla. Sin `--apply` solo imprime el plan. Es idempotente: una segunda ejecución
+`postmap` y luego **recrea** el servicio con
+`docker compose up -d --force-recreate` (detectado desde las labels del
+contenedor). Un reinicio simple no basta: Docker Mailserver genera
+`/etc/postfix/main.cf` solo al crear el contenedor, así que ignora el nuevo
+`tls_server_sni_maps`. Después verifica que todos los hostnames sigan presentes
+en `postconf`/`doveconf` y, si la validación falla, revierte los archivos
+(incluido el `.db` generado). Sin `--apply` solo imprime el plan. Es idempotente: una segunda ejecución
 informa «no changes required».
 
 ### Comprobación manual

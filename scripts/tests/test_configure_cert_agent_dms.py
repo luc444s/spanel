@@ -84,3 +84,14 @@ def test_toml_section_update_does_not_duplicate() -> None:
     assert updated.count("[postfix]") == 1
     assert 'sni_map_path = "/new"' in updated
     assert "[dovecot]" in updated
+
+
+def test_compose_argv_recreates_only_the_service() -> None:
+    argv = configure._compose_argv(
+        "mail", "mailserver", ["/opt/stacks/mail/docker-compose.yml"]
+    )
+
+    assert argv[:3] == ["docker", "compose", "--project-name"]
+    assert "--file" in argv
+    assert "--force-recreate" in argv
+    assert argv[-1] == "mailserver"

@@ -231,7 +231,7 @@ Mailserver without overwriting hand-made entries:
 ```bash
 sudo python3 scripts/configure_cert_agent_dms.py            # read-only plan
 sudo python3 scripts/configure_cert_agent_dms.py --json
-sudo python3 scripts/configure_cert_agent_dms.py --apply    # write + restart
+sudo python3 scripts/configure_cert_agent_dms.py --apply    # write + recreate
 ```
 
 It inspects the container to find the `/tmp/docker-mailserver` mount, reads the
@@ -247,9 +247,13 @@ allowlist from `/etc/spanel/cert-agent.toml` and splits the current SNI state:
   using `docker exec <container> ...`.
 
 `--apply` backs up every file it touches with a `.spanel-dms-<timestamp>.bak`
-suffix, runs `postmap`, restarts the container, verifies that every hostname is
-still present in `postconf`/`doveconf`, and rolls the files back if validation
-fails. Without `--apply` the script only prints the plan. It is idempotent: a
+suffix, runs `postmap`, then recreates the service with
+`docker compose up -d --force-recreate` (detected from the container labels). A
+plain restart is not enough: Docker Mailserver generates
+`/etc/postfix/main.cf` only when the container is created, so the new
+`tls_server_sni_maps` is ignored otherwise. It then verifies that every
+hostname is still present in `postconf`/`doveconf`, and rolls the files back
+(including the generated `.db`) if validation fails. Without `--apply` the script only prints the plan. It is idempotent: a
 second run reports "no changes required".
 
 ### Manual check

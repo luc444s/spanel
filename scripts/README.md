@@ -486,11 +486,12 @@ The full architecture is in
 
 ### `configure_cert_agent_dms.py`
 
-**Plan by default; writes and restarts only with `--apply`.** Adapts the agent
+**Plan by default; writes and recreates only with `--apply`.** Adapts the agent
 to an existing Docker Mailserver: finds the `/tmp/docker-mailserver` mount,
 splits managed hostnames (`sni-spanel`, `spanel-local_name.conf`) from legacy
-ones, updates `postfix-main.cf`, `dovecot.cf` and the agent config, and verifies
-that no hostname is lost. Backups are left as `.spanel-dms-<stamp>.bak` and the
+ones, updates `postfix-main.cf`, `dovecot.cf` and the agent config, recreates
+the service with `docker compose up -d --force-recreate` and verifies that no
+hostname is lost. Backups are left as `.spanel-dms-<stamp>.bak` and the
 operation is idempotent.
 
 ```bash

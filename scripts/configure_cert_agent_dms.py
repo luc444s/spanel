@@ -2,7 +2,8 @@
 """Configure the certificate agent for an existing Docker Mailserver safely.
 
 The default mode is a read-only plan. Use ``--apply`` to split managed SNI
-entries from legacy entries, update the agent TOML, restart Docker Mailserver,
+entries from legacy entries, update the agent TOML, recreate Docker Mailserver
+with Compose (a plain restart does not regenerate ``/etc/postfix/main.cf``),
 and validate that every pre-existing hostname remains available.
 """
 
@@ -295,7 +296,7 @@ def _atomic_write(path: Path, content: str) -> None:
 
 
 def _wait_for_container(container: str) -> None:
-    for _ in range(30):
+    for _ in range(60):
         result = _run(
             ["docker", "inspect", "-f", "{{.State.Running}}", container], check=False
         )
@@ -305,9 +306,53 @@ def _wait_for_container(container: str) -> None:
     raise ConfigureError(f"{container} did not return to running state")
 
 
+def _compose_labels(container: str) -> tuple[str, str, list[str]]:
+    """Return (project, service, config files) from the Compose labels."""
+    template = (
+        '{{index .Config.Labels "com.docker.compose.project"}}\\n'
+        '{{index .Config.Labels "com.docker.compose.service"}}\\n'
+        '{{index .Config.Labels "com.docker.compose.project.config_files"}}\\n'
+        '{{index .Config.Labels "com.docker.compose.project.working_dir"}}'
+    )
+    result = _run(["docker", "inspect", "-f", template, container], check=False)
+    lines = (result.stdout.splitlines() + [""] * 4)[:4]
+    project, service, files, working_dir = lines
+    if result.returncode != 0 or not project.strip() or not service.strip():
+        raise ConfigureError(
+            f"{container} is not managed by Docker Compose; recreate it manually "
+            "so Docker Mailserver regenerates /etc/postfix/main.cf"
+        )
+    config_files = [item for item in files.split(",") if item.strip()]
+    if not config_files and working_dir.strip():
+        config_files = [str(Path(working_dir.strip()) / "docker-compose.yml")]
+    if not config_files:
+        raise ConfigureError(f"no Compose file found for {container}")
+    return project.strip(), service.strip(), config_files
+
+
+def _compose_argv(project: str, service: str, config_files: list[str]) -> list[str]:
+    argv = ["docker", "compose", "--project-name", project]
+    for item in config_files:
+        argv.extend(["--file", item])
+    argv.extend(["up", "--detach", "--force-recreate", service])
+    return argv
+
+
+def recreate_container(container: str) -> None:
+    """Recreate the container so Docker Mailserver reapplies postfix-main.cf.
+
+    A plain ``docker restart`` keeps the generated ``/etc/postfix/main.cf`` from
+    the first boot, so ``tls_server_sni_maps`` never picks up the second map.
+    """
+    project, service, config_files = _compose_labels(container)
+    _run(_compose_argv(project, service, config_files))
+    _wait_for_container(container)
+
+
 def apply_plan(plan: ConfigurationPlan) -> None:
     stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     originals: dict[Path, bytes | None] = {}
+    database_files: dict[Path, bytes | None] = {}
     changed = {
         path: content
         for path, content in plan.writes.items()
@@ -319,6 +364,10 @@ def apply_plan(plan: ConfigurationPlan) -> None:
     try:
         for path, content in changed.items():
             originals[path] = path.read_bytes() if path.exists() else None
+            database = path.with_name(f"{path.name}.db")
+            database_files[database] = (
+                database.read_bytes() if database.exists() else None
+            )
             if path.exists():
                 backup = path.with_name(f"{path.name}.spanel-dms-{stamp}.bak")
                 backup.write_bytes(originals[path] or b"")
@@ -329,8 +378,7 @@ def apply_plan(plan: ConfigurationPlan) -> None:
         _run(
             ["docker", "exec", plan.container, "postmap", plan.legacy_postfix_internal]
         )
-        _run(["docker", "restart", plan.container])
-        _wait_for_container(plan.container)
+        recreate_container(plan.container)
         postfix = _run(
             ["docker", "exec", plan.container, "postconf", "-h", "tls_server_sni_maps"]
         )
@@ -338,7 +386,10 @@ def apply_plan(plan: ConfigurationPlan) -> None:
             managed_internal not in postfix.stdout
             or plan.legacy_postfix_internal not in postfix.stdout
         ):
-            raise ConfigureError("Postfix did not load both SNI maps")
+            raise ConfigureError(
+                "Postfix did not load both SNI maps after recreating the container. "
+                f"Current value: {postfix.stdout.strip() or '<empty>'}"
+            )
         dovecot = _run(["docker", "exec", plan.container, "doveconf", "-n"])
         missing = [
             name
@@ -355,7 +406,15 @@ def apply_plan(plan: ConfigurationPlan) -> None:
                 path.unlink(missing_ok=True)
             else:
                 path.write_bytes(original)
-        _run(["docker", "restart", plan.container], check=False)
+        for database, content in database_files.items():
+            if content is None:
+                database.unlink(missing_ok=True)
+            else:
+                database.write_bytes(content)
+        try:
+            _run(_compose_argv(*_compose_labels(plan.container)), check=False)
+        except ConfigureError:
+            pass
         raise
 
 
