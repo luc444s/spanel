@@ -55,7 +55,7 @@ python3 scripts/<script>.py --help
 | Publicar o retirar un dominio en Traefik | [`proxy_domain.py`](#proxy_domainpy) |
 | Refrescar/adoptar el inventario observado | [`domains_sync.py`](#domains_syncpy) / [`domains_adopt.py`](#domains_adoptpy) |
 | Diagnosticar/reparar rutas y TLS | [`spanel-repair.py`](#spanel-repairpy) |
-| Administrar certificados de correo | [`install_cert_agent.py`](#install_cert_agentpy) y [`spanel_cert_agent/`](#spanel_cert_agent) |
+| Administrar certificados de correo | [`install_cert_agent.py`](#install_cert_agentpy), [`configure_cert_agent_dms.py`](#configure_cert_agent_dmspy) y [`spanel_cert_agent/`](#spanel_cert_agent) |
 
 ## Despliegue
 
@@ -484,6 +484,20 @@ sudo python3 scripts/install_cert_agent.py --check --json
 
 La arquitectura completa está en
 [`../docs/certificate-manager.es.md`](../docs/certificate-manager.es.md).
+
+### `configure_cert_agent_dms.py`
+
+**Plan por defecto; escritura y reinicio solo con `--apply`.** Adapta el agente
+a un Docker Mailserver existente: detecta el mount `/tmp/docker-mailserver`,
+separa los hostnames administrados (`sni-spanel`, `spanel-local_name.conf`) de
+los legacy, actualiza `postfix-main.cf`, `dovecot.cf` y la configuración del
+agente, y valida que ningún hostname se pierda. Los respaldos quedan como
+`.spanel-dms-<marca>.bak` y la operación es idempotente.
+
+```bash
+sudo python3 scripts/configure_cert_agent_dms.py --json
+sudo python3 scripts/configure_cert_agent_dms.py --apply
+```
 
 ### `spanel_cert_agent/`
 

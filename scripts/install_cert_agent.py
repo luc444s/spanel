@@ -484,6 +484,22 @@ def _check(repo_root: Path, args: argparse.Namespace) -> int:
                 config_ok,
                 f"{args.config} with {len(allowlist)} hostname(s)",
             )
+            postfix = raw.get("postfix") if isinstance(raw.get("postfix"), dict) else {}
+            dovecot = raw.get("dovecot") if isinstance(raw.get("dovecot"), dict) else {}
+            reload_ok = all(
+                (
+                    postfix.get("sni_map_path"),
+                    postfix.get("postmap_command"),
+                    postfix.get("reload_command"),
+                    dovecot.get("local_name_path"),
+                    dovecot.get("reload_command"),
+                )
+            )
+            add(
+                "mail-reload-config",
+                reload_ok,
+                "Postfix/Dovecot configured" if reload_ok else "missing Postfix/Dovecot sections",
+            )
 
     add(
         "certbot",

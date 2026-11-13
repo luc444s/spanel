@@ -223,6 +223,35 @@ reload is done with `docker exec` and the SNI map paths must be the ones the
 container already mounts (`/tmp/docker-mailserver/...`). If the SNI map or the
 `local_name` is not configured, the agent fails closed and does not issue.
 
+### Docker Mailserver adapter
+
+`scripts/configure_cert_agent_dms.py` wires the agent to an existing Docker
+Mailserver without overwriting hand-made entries:
+
+```bash
+sudo python3 scripts/configure_cert_agent_dms.py            # read-only plan
+sudo python3 scripts/configure_cert_agent_dms.py --json
+sudo python3 scripts/configure_cert_agent_dms.py --apply    # write + restart
+```
+
+It inspects the container to find the `/tmp/docker-mailserver` mount, reads the
+allowlist from `/etc/spanel/cert-agent.toml` and splits the current SNI state:
+
+- hostnames in the allowlist move to `postfix/sni-spanel` and
+  `spanel-local_name.conf`, both owned by the agent from then on;
+- the remaining hostnames stay in the original `tls_server_sni_maps` file and
+  `dovecot.cf`, which keep working untouched;
+- `postfix-main.cf` is updated to load both maps, and `dovecot.cf` gets an
+  `!include_try` for the managed block;
+- the `[postfix]` and `[dovecot]` sections are written into the agent config
+  using `docker exec <container> ...`.
+
+`--apply` backs up every file it touches with a `.spanel-dms-<timestamp>.bak`
+suffix, runs `postmap`, restarts the container, verifies that every hostname is
+still present in `postconf`/`doveconf`, and rolls the files back if validation
+fails. Without `--apply` the script only prints the plan. It is idempotent: a
+second run reports "no changes required".
+
 ### Manual check
 
 ```bash
