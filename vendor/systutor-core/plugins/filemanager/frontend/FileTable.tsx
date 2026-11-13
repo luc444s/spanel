@@ -54,7 +54,10 @@ export function FileTable({
   }
 
   const checkboxClass =
-    "h-4 w-4 shrink-0 cursor-pointer appearance-none rounded-[3px] border border-border bg-transparent align-middle checked:border-primary checked:bg-primary/15 indeterminate:border-primary indeterminate:bg-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0";
+    "h-4 w-4 shrink-0 cursor-pointer appearance-none rounded-md border border-foreground/40 bg-transparent bg-center bg-no-repeat align-middle " +
+    "checked:border-primary checked:bg-primary checked:bg-[url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M3.5 8.5l2.5 2.5 6-6' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")] checked:bg-[length:12px_12px] " +
+    "indeterminate:border-primary indeterminate:bg-primary indeterminate:bg-[url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M4 8h8' stroke='white' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E\")] indeterminate:bg-[length:12px_12px] " +
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0";
   const allSelected = entries.length > 0 && entries.every((entry) => selected.has(entry.name));
   const someSelected = entries.some((entry) => selected.has(entry.name)) && !allSelected;
 
@@ -62,31 +65,23 @@ export function FileTable({
     <table className="w-full table-fixed text-left text-sm">
       <thead className="sticky top-0 z-10 bg-muted text-xs uppercase tracking-wide text-muted-foreground">
         <tr>
-          <th className="w-10 p-2 align-middle" aria-label={t("Select")} />
+          <th className="w-10 p-2 align-middle">
+            <div className="flex items-center justify-center">
+              <input
+                type="checkbox"
+                aria-label={t("Select all")}
+                className={checkboxClass}
+                checked={allSelected}
+                ref={(el) => {
+                  if (el) el.indeterminate = someSelected;
+                }}
+                onChange={(event) => onToggleAll(event.target.checked)}
+              />
+            </div>
+          </th>
           {COLUMNS.map((column) => (
             <th key={column.label || "actions"} className={`p-2 font-medium ${column.className}`}>
-              {column.key === "name" ? (
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    aria-label={t("Select all")}
-                    className={checkboxClass}
-                    checked={allSelected}
-                    ref={(el) => {
-                      if (el) el.indeterminate = someSelected;
-                    }}
-                    onChange={(event) => onToggleAll(event.target.checked)}
-                  />
-                  <button
-                    type="button"
-                    className="flex items-center gap-1 hover:text-foreground"
-                    onClick={() => onSort(column.key as SortKey)}
-                  >
-                    {t(column.label)}
-                    {sort.key === column.key ? (sort.direction === "asc" ? "▲" : "▼") : ""}
-                  </button>
-                </div>
-              ) : column.key ? (
+              {column.key ? (
                 <button
                   type="button"
                   className="flex items-center gap-1 hover:text-foreground"
