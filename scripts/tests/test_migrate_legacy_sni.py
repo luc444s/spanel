@@ -139,7 +139,8 @@ def test_render_acme_router_contains_all_hosts_and_marker() -> None:
     text = migrate.render_acme_router(["mail.b.test", "mail.a.test", "mail.a.test"])
 
     assert text.startswith(migrate.ACME_ROUTER_MARKER)
-    assert "service: acme-challenge@file" in text
+    assert f"service: {migrate.ACME_SERVICE_NAME}" in text
+    assert migrate.ACME_BACKEND_URL in text
     assert "Host(`mail.a.test`)" in text
     assert "Host(`mail.b.test`)" in text
     assert migrate.parse_acme_router_hosts(text) == ["mail.a.test", "mail.b.test"]

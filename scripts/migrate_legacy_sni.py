@@ -57,6 +57,8 @@ DEFAULT_ACME_ROUTER_FILE = "spanel-acme-mail-challenge.yml"
 CONTAINER_CONFIG_ROOT = "/tmp/docker-mailserver"
 MANAGED_MAP_NAME = "sni-spanel"
 ACME_ROUTER_NAME = "spanel-acme-mail-http"
+ACME_SERVICE_NAME = "spanel-acme-mail-challenge"
+ACME_BACKEND_URL = "http://acme-webroot:80"
 ACME_ROUTER_MARKER = "# managed-by: spanel-migrate-legacy-sni"
 
 EXIT_OK = 0
@@ -495,8 +497,13 @@ def render_acme_router(hostnames: list[str]) -> str:
         f'      rule: "PathPrefix(`/.well-known/acme-challenge/`) && ({host_rule})"\n'
         "      entryPoints:\n"
         "        - web\n"
-        "      service: acme-challenge@file\n"
+        f"      service: {ACME_SERVICE_NAME}\n"
         "      priority: 10000\n"
+        "  services:\n"
+        f"    {ACME_SERVICE_NAME}:\n"
+        "      loadBalancer:\n"
+        "        servers:\n"
+        f'          - url: "{ACME_BACKEND_URL}"\n'
     )
 
 
