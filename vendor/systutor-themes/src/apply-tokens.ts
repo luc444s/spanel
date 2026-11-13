@@ -146,7 +146,7 @@ function overrideRules(name: ThemeName, t: ThemeTokens): string {
   }
   if (t.tableBackground === "transparent") {
     rules.push(
-      `${s} [class~="bg-card"]:has(table), ${s} table, ${s} table thead, ${s} table tbody, ${s} table tr, ${s} table th, ${s} table td { background-color: transparent !important; }`,
+      `${s} table, ${s} table thead, ${s} table tbody, ${s} table tr, ${s} table th, ${s} table td { background-color: transparent !important; }`,
     );
   }
 

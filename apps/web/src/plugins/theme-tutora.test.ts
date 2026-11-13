@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { themes } from "@systutor/themes";
+import { buildThemeStylesheet } from "../../../../vendor/systutor-themes/src/apply-tokens";
 
 describe("Tutora theme", () => {
   it("keeps every elevated surface flat and square", () => {
@@ -22,6 +23,15 @@ describe("Tutora theme", () => {
     ]) {
       expect(surface).toBe(tutora.background);
     }
+  });
+
+  it("never makes a card or modal transparent because it contains a table", () => {
+    const stylesheet = buildThemeStylesheet();
+
+    expect(stylesheet).not.toContain(":has(table)");
+    expect(stylesheet).toContain(
+      ".tutora table, .tutora table thead, .tutora table tbody",
+    );
   });
 
   it("shifts the complete Catppuccin Mocha hierarchy into orange", () => {
