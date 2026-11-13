@@ -356,6 +356,26 @@ def recreate_container(container: str) -> None:
     project, service, config_files = _compose_labels(container)
     _run(_compose_argv(project, service, config_files))
     _wait_for_container(container)
+    _wait_for_postfix(container)
+
+
+def _wait_for_postfix(container: str, attempts: int = 60) -> None:
+    """Wait until Docker Mailserver finished its setup and Postfix is running."""
+    last = ""
+    for _ in range(attempts):
+        status = _run(["docker", "exec", container, "postfix", "status"], check=False)
+        current = _run(
+            ["docker", "exec", container, "postconf", "-h", "tls_server_sni_maps"],
+            check=False,
+        )
+        last = current.stdout.strip()
+        if status.returncode == 0 and last:
+            return
+        time.sleep(2)
+    raise ConfigureError(
+        "Postfix did not become ready after recreating the container "
+        f"(tls_server_sni_maps={last or '<empty>'})"
+    )
 
 
 def apply_plan(plan: ConfigurationPlan) -> None:

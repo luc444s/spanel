@@ -101,11 +101,10 @@ def test_compose_argv_recreates_only_the_service() -> None:
 
 
 class _Result:
-    returncode = 0
-    stderr = ""
-
-    def __init__(self, stdout: str) -> None:
+    def __init__(self, stdout: str = "", returncode: int = 0, stderr: str = "") -> None:
         self.stdout = stdout
+        self.returncode = returncode
+        self.stderr = stderr
 
 
 def test_compose_labels_reads_container_json(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -164,3 +163,20 @@ def test_compose_labels_rejects_plain_docker(monkeypatch: pytest.MonkeyPatch) ->
 
     with pytest.raises(configure.ConfigureError):
         configure._compose_labels("mailserver")
+
+
+def test_wait_for_postfix_retries_until_ready(monkeypatch: pytest.MonkeyPatch) -> None:
+    answers = iter(
+        [
+            _Result(returncode=1),
+            _Result(""),
+            _Result(returncode=1),
+            _Result(""),
+            _Result(returncode=0),
+            _Result("hash:/tmp/docker-mailserver/postfix/sni-spanel"),
+        ]
+    )
+    monkeypatch.setattr(configure, "_run", lambda *args, **kwargs: next(answers))
+    monkeypatch.setattr(configure.time, "sleep", lambda _seconds: None)
+
+    configure._wait_for_postfix("mailserver")
