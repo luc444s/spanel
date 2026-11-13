@@ -133,3 +133,37 @@ def test_select_entries_reports_hostnames_absent_from_the_map() -> None:
         assert "mail.missing.test" in str(exc)
     else:  # pragma: no cover - the branch must fail loudly
         raise AssertionError("missing hostname was accepted")
+
+
+def test_render_acme_router_contains_all_hosts_and_marker() -> None:
+    text = migrate.render_acme_router(["mail.b.test", "mail.a.test", "mail.a.test"])
+
+    assert text.startswith(migrate.ACME_ROUTER_MARKER)
+    assert "service: acme-challenge@file" in text
+    assert "Host(`mail.a.test`)" in text
+    assert "Host(`mail.b.test`)" in text
+    assert migrate.parse_acme_router_hosts(text) == ["mail.a.test", "mail.b.test"]
+
+
+def test_ensure_acme_routing_merges_with_existing_managed_file(tmp_path: Path) -> None:
+    path = tmp_path / "spanel-acme-mail-challenge.yml"
+    path.write_text(migrate.render_acme_router(["mail.a.test"]), encoding="utf-8")
+
+    migrate.ensure_acme_routing(tmp_path, path.name, ["mail.b.test"], reload_delay=0)
+
+    text = path.read_text(encoding="utf-8")
+    assert migrate.parse_acme_router_hosts(text) == ["mail.a.test", "mail.b.test"]
+
+
+def test_ensure_acme_routing_is_idempotent(tmp_path: Path) -> None:
+    first, changed = migrate.ensure_acme_routing(
+        tmp_path, "spanel-acme-mail-challenge.yml", ["mail.a.test"], reload_delay=0
+    )
+    second, changed_again = migrate.ensure_acme_routing(
+        tmp_path, "spanel-acme-mail-challenge.yml", ["mail.a.test"], reload_delay=0
+    )
+
+    assert changed is True
+    assert changed_again is False
+    assert first == second
+    assert first.read_text(encoding="utf-8").count(migrate.ACME_ROUTER_MARKER) == 1

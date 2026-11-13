@@ -505,11 +505,12 @@ sudo python3 scripts/configure_cert_agent_dms.py --apply
 
 **Plan por defecto; solo escribe con `--apply`.** Audita un mapa SNI legacy de
 Postfix (normalmente `sni-legalattorney`) contra el allowlist del agente, los
-lineages de Certbot y los pares instalados. Con `--apply` añade los hostnames
-al allowlist, valida HTTP-01 con el webroot configurado, emite un lineage por
-hostname, lo instala con `spanel_cert_agent install`, verifica TLS y, si se
-pide `--clean-legacy`, elimina del mapa legacy las líneas migradas. En modo
-plan no ejecuta Certbot.
+lineages de Certbot y los pares instalados. Con `--apply` asegura un router
+HTTP-01 de Traefik en el file-provider, añade los hostnames al allowlist,
+valida HTTP-01 con el webroot configurado, emite un lineage por hostname, lo
+instala con `spanel_cert_agent install`, verifica TLS y, si se pide
+`--clean-legacy`, elimina del mapa legacy las líneas migradas. En modo plan no
+ejecuta Certbot.
 
 ```bash
 sudo python3 scripts/migrate_legacy_sni.py

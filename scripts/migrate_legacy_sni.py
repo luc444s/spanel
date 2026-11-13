@@ -9,12 +9,13 @@ The legacy hostnames work until the certificate expires, then clients fail.
 The script is read-only by default. It prints what would change. With
 ``--apply`` it can:
 
-1. add the detected hostnames to the agent allowlist,
-2. verify HTTP-01 with the configured webroot,
-3. issue one Certbot lineage per hostname,
-4. install the pair through ``spanel_cert_agent install``,
-5. verify the served certificate,
-6. optionally remove the migrated lines from the legacy SNI map.
+1. ensure a Traefik HTTP-01 router for the hostnames (file provider),
+2. add the detected hostnames to the agent allowlist,
+3. verify HTTP-01 with the configured webroot,
+4. issue one Certbot lineage per hostname,
+5. install the pair through ``spanel_cert_agent install``,
+6. verify the served certificate,
+7. optionally remove the migrated lines from the legacy SNI map.
 
 Usage:
 
@@ -37,6 +38,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
@@ -50,8 +52,12 @@ DEFAULT_CONTAINER = "mailserver"
 DEFAULT_CONFIG_ROOT = Path("/opt/stacks/mail/config")
 DEFAULT_INSTALL_ROOT = Path("/etc/ssl/spanel/mail")
 DEFAULT_LINEAGE_ROOT = Path("/etc/letsencrypt/live")
+DEFAULT_TRAEFIK_CONFIG_DIR = Path("/opt/stacks/traefik/config")
+DEFAULT_ACME_ROUTER_FILE = "spanel-acme-mail-challenge.yml"
 CONTAINER_CONFIG_ROOT = "/tmp/docker-mailserver"
 MANAGED_MAP_NAME = "sni-spanel"
+ACME_ROUTER_NAME = "spanel-acme-mail-http"
+ACME_ROUTER_MARKER = "# managed-by: spanel-migrate-legacy-sni"
 
 EXIT_OK = 0
 EXIT_FAILURE = 1
@@ -472,6 +478,60 @@ def postmap_legacy(settings: AgentSettings, config_root: Path, legacy_path: Path
 
 
 # ---------------------------------------------------------------------------
+# Traefik HTTP-01 routing
+# ---------------------------------------------------------------------------
+
+
+def render_acme_router(hostnames: list[str]) -> str:
+    hosts = sorted({normalize_hostname(h) for h in hostnames if h.strip()})
+    if not hosts:
+        raise MigrationError("no hostnames provided for ACME routing")
+    host_rule = " || ".join(f"Host(`{host}`)" for host in hosts)
+    return (
+        f"{ACME_ROUTER_MARKER}\n"
+        "http:\n"
+        "  routers:\n"
+        f"    {ACME_ROUTER_NAME}:\n"
+        f'      rule: "PathPrefix(`/.well-known/acme-challenge/`) && ({host_rule})"\n'
+        "      entryPoints:\n"
+        "        - web\n"
+        "      service: acme-challenge@file\n"
+        "      priority: 10000\n"
+    )
+
+
+def parse_acme_router_hosts(text: str) -> list[str]:
+    return sorted({normalize_hostname(item) for item in re.findall(r"Host\(`([^`]+)`\)", text)})
+
+
+def ensure_acme_routing(
+    config_dir: Path,
+    router_file: str,
+    hostnames: list[str],
+    *,
+    reload_delay: float = 2.0,
+) -> tuple[Path, bool]:
+    path = config_dir / router_file
+    desired = sorted({normalize_hostname(h) for h in hostnames if h.strip()})
+    existing_hosts: list[str] = []
+    if path.is_file():
+        text = path.read_text(encoding="utf-8")
+        if ACME_ROUTER_MARKER in text:
+            existing_hosts = parse_acme_router_hosts(text)
+    merged = sorted(set(desired) | set(existing_hosts))
+    content = render_acme_router(merged)
+    if path.is_file() and path.read_text(encoding="utf-8") == content:
+        print(f"  + ACME routing up to date: {path}")
+        return path, False
+    _atomic_write(path, content)
+    print(f"  + ACME routing written: {path} ({len(merged)} hostnames)")
+    # Traefik watches /config; give it a moment to reload before probes/certbot.
+    if reload_delay > 0:
+        time.sleep(reload_delay)
+    return path, True
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -511,6 +571,26 @@ def _apply(args: argparse.Namespace, settings: AgentSettings, legacy_path: Path,
     if not pending:
         print("Everything is already managed; nothing to do.")
         return EXIT_OK
+
+    if not args.skip_acme_routing:
+        traefik_dir = Path(args.traefik_config_dir)
+        if traefik_dir.is_dir():
+            try:
+                ensure_acme_routing(
+                    traefik_dir,
+                    args.acme_router_file,
+                    [item.hostname for item in pending],
+                )
+            except (OSError, MigrationError) as exc:
+                print(f"migrate-legacy-sni: could not configure ACME routing: {exc}", file=sys.stderr)
+                return EXIT_FAILURE
+        else:
+            print(
+                f"migrate-legacy-sni: Traefik config dir not found: {traefik_dir} "
+                "(use --skip-acme-routing or --traefik-config-dir)",
+                file=sys.stderr,
+            )
+            return EXIT_CONFIG
 
     new_hosts = [item.hostname for item in pending if not item.in_allowlist]
     if new_hosts:
@@ -598,6 +678,21 @@ def build_parser() -> argparse.ArgumentParser:
         "--clean-legacy",
         action="store_true",
         help="remove migrated hostnames from the legacy SNI map",
+    )
+    parser.add_argument(
+        "--traefik-config-dir",
+        default=str(DEFAULT_TRAEFIK_CONFIG_DIR),
+        help="Traefik file-provider directory for HTTP-01 routers",
+    )
+    parser.add_argument(
+        "--acme-router-file",
+        default=DEFAULT_ACME_ROUTER_FILE,
+        help="managed YAML filename written inside the Traefik config dir",
+    )
+    parser.add_argument(
+        "--skip-acme-routing",
+        action="store_true",
+        help="do not create/update the Traefik HTTP-01 router",
     )
     parser.add_argument("--json", action="store_true", dest="as_json", help="print the plan as JSON")
     return parser
