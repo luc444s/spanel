@@ -143,6 +143,31 @@ export function buildShellSidebarSections({
     sections.unshift(logistics);
   }
 
+  const sectionOrder = [
+    t("LOGISTICS"),
+    t("Administration"),
+    t("Mail"),
+  ];
+  const tailOrder = [t("System"), t("Settings"), t("Session")];
+
+  sections.sort((a, b) => {
+    const aHead = sectionOrder.indexOf(a.title);
+    const bHead = sectionOrder.indexOf(b.title);
+    if (aHead !== -1 || bHead !== -1) {
+      if (aHead === -1) return 1;
+      if (bHead === -1) return -1;
+      return aHead - bHead;
+    }
+    const aTail = tailOrder.indexOf(a.title);
+    const bTail = tailOrder.indexOf(b.title);
+    if (aTail !== -1 || bTail !== -1) {
+      if (aTail === -1) return -1;
+      if (bTail === -1) return 1;
+      return aTail - bTail;
+    }
+    return 0;
+  });
+
   return sections;
 }
 

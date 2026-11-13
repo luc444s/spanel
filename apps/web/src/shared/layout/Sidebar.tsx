@@ -27,7 +27,7 @@ function ChevronDown({ open }: { open: boolean }) {
 export function Sidebar() {
   const logout = useLogoutAction();
   // Re-render the navigation when the locale changes; labels come from t().
-  useT();
+  const t = useT();
   const permissions = useAuthStore((state) => state.permissions);
   const pluginRuntime = usePluginFrontendRuntime();
   const sections = buildShellSidebarSections({
@@ -36,7 +36,7 @@ export function Sidebar() {
   });
 
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
-    () => new Set(),
+    () => new Set([t("System"), t("Settings"), "System", "Settings"]),
   );
 
   function toggleSection(key: string) {
