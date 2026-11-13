@@ -398,6 +398,36 @@ def test_record_create_update_delete_contract(tmp_path: Path) -> None:
     assert transport.calls[2]["body"] == ""
 
 
+def test_zone_create_delete_contract(tmp_path: Path) -> None:
+    zone = {
+        "id": "z1",
+        "name": "example.com",
+        "status": "pending",
+        "account": {"id": "acct1", "name": "Lab"},
+        "name_servers": ["ada.ns.cloudflare.com"],
+    }
+    transport = Transport(
+        lambda method, url, body: (
+            200,
+            envelope(zone if method == "POST" else {"id": "z1"}),
+        )
+    )
+    client = CloudflareClient(config(tmp_path), transport=transport)
+    credentials = CloudflareCredentials("access-1")
+    created = client.create_zone(
+        credentials, account_id="acct1", name="example.com"
+    )
+    client.delete_zone(credentials, created.id)
+    assert created.status == "pending"
+    assert json.loads(transport.calls[0]["body"]) == {
+        "account": {"id": "acct1"},
+        "name": "example.com",
+        "type": "full",
+    }
+    assert transport.calls[1]["method"] == "DELETE"
+    assert transport.calls[1]["url"].endswith("/zones/z1")
+
+
 def test_refresh_once_on_401_then_permission(tmp_path: Path) -> None:
     calls = {"count": 0}
 

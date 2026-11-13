@@ -120,3 +120,38 @@ class CloudflareRecordDeleteResponse(BaseModel):
     zone_id: str
     record_id: str
     deleted: bool
+
+
+class CloudflareProvisionRequest(_Strict):
+    domain: str = Field(min_length=1, max_length=254)
+    ipv4: str = Field(min_length=1, max_length=45)
+    www: bool = False
+    replace: bool = False
+
+
+class CloudflareProvisionRecord(BaseModel):
+    id: str | None = None
+    name: str
+    type: str
+    content: str
+    ttl: int
+    proxied: bool
+
+
+class CloudflareProvisionPlanResponse(BaseModel):
+    domain: str
+    ipv4: str
+    www: bool
+    replace: bool
+    zone_action: str
+    zone: CloudflareZoneItem | None = None
+    nameservers: list[str] = Field(default_factory=list)
+    desired_records: list[CloudflareProvisionRecord] = Field(default_factory=list)
+    conflicts: list[CloudflareProvisionRecord] = Field(default_factory=list)
+    actions: list[dict[str, object]] = Field(default_factory=list)
+    drift: bool
+
+
+class CloudflareProvisionApplyResponse(CloudflareProvisionPlanResponse):
+    applied: bool
+    records: list[CloudflareProvisionRecord] = Field(default_factory=list)

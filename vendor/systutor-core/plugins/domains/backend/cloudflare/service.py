@@ -404,9 +404,13 @@ class CloudflareService:
                 "scopes": list(REQUIRED_SCOPE_NAMES),
             }
         scope_ids = _oauth_scope_ids(row.scopes_json)
+        scope_names = set(_oauth_scope_names(row.scopes_json))
         return {
             "registered": bool(scope_ids),
-            "needs_repair": OFFLINE_ACCESS_SCOPE not in scope_ids,
+            "needs_repair": (
+                OFFLINE_ACCESS_SCOPE not in scope_ids
+                or not set(REQUIRED_SCOPE_NAMES).issubset(scope_names)
+            ),
             "account_id": row.account_id,
             "client_id": row.client_id,
             "redirect_uri": row.redirect_uri,
@@ -427,6 +431,15 @@ class CloudflareService:
     # -- authorization flow -------------------------------------------------
     def start_flow_for_tenant(self, tenant_id: str) -> dict[str, object]:
         client_row, _secret = self._client_secrets()
+        scope_ids = _oauth_scope_ids(client_row.scopes_json)
+        scope_names = set(_oauth_scope_names(client_row.scopes_json))
+        if (
+            OFFLINE_ACCESS_SCOPE not in scope_ids
+            or not set(REQUIRED_SCOPE_NAMES).issubset(scope_names)
+        ):
+            raise CloudflareValidation(
+                "the Cloudflare OAuth client must be repaired before authorization"
+            )
         now = self._clock()
         state = generate_state()
         verifier, challenge = generate_pkce()
@@ -451,9 +464,6 @@ class CloudflareService:
         flow.verifier_nonce = encrypted.nonce
         flow.key_version = encrypted.key_version
         self._db.commit()
-        scope_ids = _oauth_scope_ids(client_row.scopes_json)
-        if OFFLINE_ACCESS_SCOPE not in scope_ids:
-            scope_ids.append(OFFLINE_ACCESS_SCOPE)
         url = self._client.authorization_url(
             client_id=client_row.client_id,
             redirect_uri=client_row.redirect_uri,
@@ -634,6 +644,9 @@ class CloudflareService:
         tokens: OAuthTokens,
     ) -> CloudflareConnection:
         existing = get_connection(self._db, tenant_id, for_update=True)
+        # The callback can only originate from our fixed, repaired OAuth client;
+        # Cloudflare's token `scope` uses opaque IDs, so persist the consented
+        # display-name contract rather than guessing from that string.
         scopes = list(REQUIRED_SCOPE_NAMES)
         access = self._cipher().encrypt(PURPOSE_ACCESS, tenant_id, tokens.access_token)
         refresh_value = tokens.refresh_token
@@ -755,6 +768,8 @@ class CloudflareService:
     # -- tenant-scoped discovery and DNS management ------------------------
     def _active_credentials(self, tenant_id: str) -> CloudflareCredentials:
         row = self._connection(tenant_id)
+        if row.status != "active":
+            raise CloudflarePermission("Cloudflare authorization must be renewed")
         credentials = self._credentials(row)
         expires_at = credentials.expires_at
         if expires_at is not None and expires_at <= self._clock():
@@ -762,6 +777,58 @@ class CloudflareService:
                 return self._refresh_locked(tenant_id, credentials.access_token)
             raise CloudflarePermission("Cloudflare authorization must be renewed")
         return credentials
+
+    def provisioning_access(
+        self, tenant_id: str
+    ) -> tuple[
+        CloudflareCredentials,
+        Callable[[], CloudflareCredentials],
+        str,
+    ]:
+        """Return the narrow tenant credential bundle used by the provisioner."""
+        row = self._connection(tenant_id)
+        if row.status != "active" or "Zone Write" not in set(row.scopes_json or []):
+            raise CloudflarePermission(
+                "Cloudflare authorization must be renewed with Zone Write"
+            )
+        credentials = self._active_credentials(tenant_id)
+
+        def refresh() -> CloudflareCredentials:
+            return self._refresh_locked(tenant_id, credentials.access_token)
+
+        return credentials, refresh, row.cloudflare_account_id
+
+    def record_provisioning(
+        self,
+        *,
+        tenant_id: str,
+        domain: str,
+        zone_id: str,
+        www: bool,
+        replaced: bool,
+        context: TenantContext | None = None,
+    ) -> None:
+        """Commit a secret/content-free audit then publish the provision event."""
+        details: dict[str, object] = {
+            "domain": domain,
+            "zone_id": zone_id,
+            "managed_owners": [domain, f"www.{domain}"] if www else [domain],
+            "replace": replaced,
+        }
+        self._audit(
+            "domains.dns.cloudflare_provisioned",
+            tenant_id=tenant_id,
+            entity_id=zone_id,
+            details=details,
+            context=context,
+        )
+        self._db.commit()
+        self._publish(
+            "domains.dns.cloudflare_provisioned",
+            {"domain": domain, "zone_id": zone_id, "www": www},
+            tenant_id,
+            zone_id,
+        )
 
     def _zones(self, tenant_id: str) -> list[CloudflareZone]:
         credentials = self._active_credentials(tenant_id)

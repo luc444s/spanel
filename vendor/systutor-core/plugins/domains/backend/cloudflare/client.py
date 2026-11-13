@@ -526,7 +526,7 @@ class CloudflareClient:
         )
         return f"{AUTHORIZATION_URL}?{query}"
 
-    # -- read-only discovery ----------------------------------------------
+    # -- tenant API --------------------------------------------------------
     def _with_refresh(
         self,
         credentials: CloudflareCredentials,
@@ -639,6 +639,40 @@ class CloudflareClient:
         if not isinstance(result, dict):
             raise CloudflareUpstream("Cloudflare returned an invalid zone")
         return self._zone(result)
+
+    def create_zone(
+        self,
+        credentials: CloudflareCredentials,
+        *,
+        account_id: str,
+        name: str,
+        refresh: RefreshCallback | None = None,
+    ) -> CloudflareZone:
+        def call(token: str) -> Any:
+            return self._api_write(
+                "POST",
+                "/zones",
+                token,
+                {"account": {"id": account_id}, "name": name, "type": "full"},
+            )
+
+        result = self._with_refresh(credentials, refresh, call)
+        if not isinstance(result, dict):
+            raise CloudflareUpstream("Cloudflare returned an invalid zone")
+        return self._zone(result)
+
+    def delete_zone(
+        self,
+        credentials: CloudflareCredentials,
+        zone_id: str,
+        refresh: RefreshCallback | None = None,
+    ) -> None:
+        def call(token: str) -> Any:
+            return self._api_write(
+                "DELETE", f"/zones/{quote(zone_id, safe='')}", token
+            )
+
+        self._with_refresh(credentials, refresh, call)
 
     def list_records(
         self,

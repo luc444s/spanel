@@ -15,6 +15,7 @@ from plugins.domains.backend.cloudflare.client import (
     CloudflareNotFound,
     CloudflareRecord,
     CloudflareUnavailable,
+    CloudflareValidation,
     CloudflareZone,
     OAuthTokens,
 )
@@ -59,7 +60,9 @@ class FakeCloudflare:
         self.refresh_calls = 0
         self.revoked: list[str] = []
         self.revoke_error: Exception | None = None
-        self.tokens = OAuthTokens(ACCESS, REFRESH, 3600, "Zone Read DNS Read DNS Write")
+        self.tokens = OAuthTokens(
+            ACCESS, REFRESH, 3600, "Zone Read Zone Write DNS Read DNS Write"
+        )
         self.accounts = [{"id": "acct1", "name": "Lab"}]
         self.zones = [
             CloudflareZone("z1", "example.com", "active", "acct1", "Lab", ("ns1",), None, None),
@@ -84,8 +87,9 @@ class FakeCloudflare:
         assert bootstrap_token == BOOTSTRAP
         return [
             {"id": "1", "name": "Zone Read"},
-            {"id": "2", "name": "DNS Read"},
-            {"id": "3", "name": "DNS Write"},
+            {"id": "2", "name": "Zone Write"},
+            {"id": "3", "name": "DNS Read"},
+            {"id": "4", "name": "DNS Write"},
         ]
 
     def register_client(self, **kwargs):
@@ -186,7 +190,7 @@ def seed_connection(
         refresh_ciphertext=refresh_value.ciphertext,
         refresh_nonce=refresh_value.nonce,
         key_version=access_value.key_version,
-        scopes_json=["Zone Read", "DNS Read", "DNS Write"],
+        scopes_json=["Zone Read", "Zone Write", "DNS Read", "DNS Write"],
         expires_at=datetime.now(UTC),
         status="active",
     )
@@ -263,8 +267,9 @@ def test_register_repairs_legacy_scope_names_without_rotating_client(tmp_path: P
         assert fake.register_calls == 1
         assert row.scopes_json == [
             {"id": "1", "name": "Zone Read"},
-            {"id": "2", "name": "DNS Read"},
-            {"id": "3", "name": "DNS Write"},
+            {"id": "2", "name": "Zone Write"},
+            {"id": "3", "name": "DNS Read"},
+            {"id": "4", "name": "DNS Write"},
             {"id": "offline_access", "name": "Offline Access"},
         ]
         assert fake.update_calls == 1
@@ -278,7 +283,7 @@ def test_start_flow_persists_only_hashed_state_and_encrypted_verifier(tmp_path: 
     try:
         register(service, service.config)
         payload = service.start_flow_for_tenant("t1")
-        assert fake.authorization_scopes == ["1", "2", "3", "offline_access"]
+        assert fake.authorization_scopes == ["1", "2", "3", "4", "offline_access"]
         flow = db.scalar(select(CloudflareOAuthFlow))
         assert flow is not None
         state = parse_qs(urlsplit(payload["authorization_url"]).query)["state"][0]
@@ -292,6 +297,29 @@ def test_start_flow_persists_only_hashed_state_and_encrypted_verifier(tmp_path: 
         assert verifier
         assert flow.expires_at > datetime.now(UTC).replace(tzinfo=None)
         assert service.flow_status(flow.id)["status"] == "pending"
+    finally:
+        db.close()
+        engine.dispose()
+
+
+def test_start_flow_rejects_client_missing_zone_write(tmp_path: Path) -> None:
+    db, fake, _cipher, service, _events, engine = build(tmp_path)
+    try:
+        register(service, service.config)
+        row = db.scalar(select(CloudflareOAuthClient))
+        assert row is not None
+        row.scopes_json = [
+            {"id": "1", "name": "Zone Read"},
+            {"id": "3", "name": "DNS Read"},
+            {"id": "4", "name": "DNS Write"},
+            {"id": "offline_access", "name": "Offline Access"},
+        ]
+        db.commit()
+
+        assert service.client_status()["needs_repair"] is True
+        with pytest.raises(CloudflareValidation, match="must be repaired"):
+            service.start_flow_for_tenant("t1")
+        assert fake.authorization_scopes == []
     finally:
         db.close()
         engine.dispose()
@@ -409,7 +437,9 @@ def test_callback_persists_encrypted_tokens_and_status(tmp_path: Path) -> None:
         status = service.status_for_tenant("t1")
         assert status["connected"] is True
         assert status["account_name"] == "Lab"
-        assert status["scopes"] == ["Zone Read", "DNS Read", "DNS Write"]
+        assert status["scopes"] == [
+            "Zone Read", "Zone Write", "DNS Read", "DNS Write"
+        ]
         assert fake.exchange_calls == 1
     finally:
         db.close()

@@ -84,11 +84,13 @@ class FakeCloudflare:
 
     def create_record(self, credentials, zone_id, payload, refresh=None):
         self.mutations.append(("create", zone_id, None, payload))
-        return CloudflareRecord(
+        created = CloudflareRecord(
             "r2", str(payload["name"]), str(payload["type"]),
             str(payload["content"]), int(payload["ttl"]),
             bool(payload.get("proxied", False)), payload.get("priority"), None, None,
         )
+        self.records.append(created)
+        return created
 
     def update_record(self, credentials, zone_id, record_id, payload, refresh=None):
         self.mutations.append(("update", zone_id, record_id, payload))
@@ -100,6 +102,7 @@ class FakeCloudflare:
 
     def delete_record(self, credentials, zone_id, record_id, refresh=None):
         self.mutations.append(("delete", zone_id, record_id, None))
+        self.records = [record for record in self.records if record.id != record_id]
 
     def revoke(self, **kwargs):
         self.revoked.append(kwargs["token"])
@@ -110,6 +113,7 @@ class FakeCloudflare:
     def list_scopes(self, token):
         return [
             {"id": "scope-zone-read", "name": "Zone Read"},
+            {"id": "scope-zone-write", "name": "Zone Write"},
             {"id": "scope-dns-read", "name": "DNS Read"},
             {"id": "scope-dns-write", "name": "DNS Write"},
         ]
@@ -188,6 +192,7 @@ def build_app(tmp_path: Path, monkeypatch):
             redirect_uri=config.redirect_uri,
             scopes_json=[
                 {"id": "scope-zone-read", "name": "Zone Read"},
+                {"id": "scope-zone-write", "name": "Zone Write"},
                 {"id": "scope-dns-read", "name": "DNS Read"},
                 {"id": "scope-dns-write", "name": "DNS Write"},
             ],
@@ -205,7 +210,7 @@ def build_app(tmp_path: Path, monkeypatch):
             refresh_ciphertext=refresh.ciphertext,
             refresh_nonce=refresh.nonce,
             key_version=access.key_version,
-            scopes_json=["Zone Read", "DNS Read", "DNS Write"],
+            scopes_json=["Zone Read", "Zone Write", "DNS Read", "DNS Write"],
             expires_at=datetime.now(UTC),
             status="active",
         )
@@ -254,6 +259,13 @@ def test_status_requires_cloudflare_permission_and_tenant_scope(
 def test_start_and_disconnect_are_tenant_scoped(tmp_path: Path, monkeypatch) -> None:
     app, fake, db, holder, _cipher, engine = build_app(tmp_path, monkeypatch)
     try:
+        oauth_client = db.get(CloudflareOAuthClient, 1)
+        assert oauth_client is not None
+        oauth_client.scopes_json = [
+            *oauth_client.scopes_json,
+            {"id": "offline_access", "name": "Offline Access"},
+        ]
+        db.commit()
         with TestClient(app) as client:
             holder["context"] = context("t1", "domains.dns.read")
             assert (
@@ -332,6 +344,53 @@ def test_zones_records_content_and_error_mapping(tmp_path: Path, monkeypatch) ->
             fake.zone_error = CloudflareUnavailable("down")
             unavailable = client.get("/api/v1/plugins/domains/dns/cloudflare/zones")
             assert unavailable.status_code == 503
+    finally:
+        db.close()
+        engine.dispose()
+
+
+def test_provision_routes_are_tenant_scoped_and_force_dns_only(
+    tmp_path: Path, monkeypatch
+) -> None:
+    app, fake, db, holder, _cipher, engine = build_app(tmp_path, monkeypatch)
+    path = "/api/v1/plugins/domains/dns/cloudflare/provision"
+    body = {"domain": "example.com", "ipv4": "192.0.2.90", "www": True}
+    try:
+        with TestClient(app) as client:
+            holder["context"] = context("t1", "domains.dns.read")
+            assert client.post(f"{path}/plan", json=body).status_code == 403
+
+            holder["context"] = context("t1", "domains.dns.cloudflare")
+            invalid = client.post(f"{path}/plan", json={**body, "tenant_id": "t2"})
+            assert invalid.status_code == 422
+            planned = client.post(f"{path}/plan", json=body)
+            assert planned.status_code == 200
+            assert planned.json()["zone"]["id"] == "z1"
+            assert all(
+                record["proxied"] is False
+                for record in planned.json()["desired_records"]
+            )
+
+            applied = client.post(f"{path}/apply", json=body)
+            assert applied.status_code == 200
+            assert applied.json()["applied"] is True
+            assert {record["type"] for record in applied.json()["records"]} == {
+                "A",
+                "CNAME",
+            }
+            assert db.query(AuditLog).filter(
+                AuditLog.action == "domains.dns.cloudflare_provisioned"
+            ).count() == 1
+            assert "192.0.2.90" not in str(
+                db.query(AuditLog)
+                .filter(AuditLog.action == "domains.dns.cloudflare_provisioned")
+                .one()
+                .details
+            )
+        assert all(
+            mutation[3] is None or mutation[3].get("proxied") is False
+            for mutation in fake.mutations
+        )
     finally:
         db.close()
         engine.dispose()

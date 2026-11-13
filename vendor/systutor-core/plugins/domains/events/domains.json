@@ -31,6 +31,10 @@
     {
       "name": "domains.dns.cloudflare_disconnected",
       "description": "A tenant's Cloudflare authorization was removed"
+    },
+    {
+      "name": "domains.dns.cloudflare_provisioned",
+      "description": "A tenant's Cloudflare zone and DNS-only origin records were provisioned"
     }
   ]
 }

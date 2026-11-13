@@ -24,7 +24,7 @@ TOKEN_URL = "https://dash.cloudflare.com/oauth2/token"
 REVOKE_URL = "https://dash.cloudflare.com/oauth2/revoke"
 
 CALLBACK_PATH = "/api/v1/plugins/domains/dns/cloudflare/oauth/callback"
-REQUIRED_SCOPE_NAMES = ("Zone Read", "DNS Read", "DNS Write")
+REQUIRED_SCOPE_NAMES = ("Zone Read", "Zone Write", "DNS Read", "DNS Write")
 # Cloudflare adds this protocol scope automatically when the client allows the
 # `refresh_token` grant. It must be requested during authorization so the token
 # response includes a refresh token instead of expiring after one hour.

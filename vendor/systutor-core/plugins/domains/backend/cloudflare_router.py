@@ -14,8 +14,12 @@ from plugins.domains.backend.cloudflare.client import (
     CloudflareError,
 )
 from plugins.domains.backend.cloudflare.config import CloudflareConfig, CloudflareConfigError
+from plugins.domains.backend.cloudflare.provisioning import CloudflareProvisioningService
 from plugins.domains.backend.cloudflare.service import CloudflareService
 from plugins.domains.backend.cloudflare_schemas import (
+    CloudflareProvisionApplyResponse,
+    CloudflareProvisionPlanResponse,
+    CloudflareProvisionRequest,
     CloudflareRecordDeleteResponse,
     CloudflareRecordItem,
     CloudflareRecordListResponse,
@@ -81,6 +85,46 @@ def _service(request: Request, db: Session) -> CloudflareService:
 
 def _translate(exc: CloudflareError) -> AppError:
     return AppError(str(exc), status_code=exc.status_code, code=exc.code)
+
+
+@router.post(
+    "/dns/cloudflare/provision/plan",
+    response_model=CloudflareProvisionPlanResponse,
+)
+def provision_plan(
+    body: CloudflareProvisionRequest,
+    request: Request,
+    tenant_context: TenantContext = Depends(get_current_tenant_context),
+    _current_user: User = Depends(require_permission(CLOUDFLARE)),
+    db: Session = Depends(get_db_session),
+) -> CloudflareProvisionPlanResponse:
+    try:
+        payload = CloudflareProvisioningService(_service(request, db)).plan(
+            tenant_context, **body.model_dump()
+        )
+    except CloudflareError as exc:
+        raise _translate(exc) from exc
+    return CloudflareProvisionPlanResponse.model_validate(payload)
+
+
+@router.post(
+    "/dns/cloudflare/provision/apply",
+    response_model=CloudflareProvisionApplyResponse,
+)
+def provision_apply(
+    body: CloudflareProvisionRequest,
+    request: Request,
+    tenant_context: TenantContext = Depends(get_current_tenant_context),
+    _current_user: User = Depends(require_permission(CLOUDFLARE)),
+    db: Session = Depends(get_db_session),
+) -> CloudflareProvisionApplyResponse:
+    try:
+        payload = CloudflareProvisioningService(_service(request, db)).apply(
+            tenant_context, **body.model_dump()
+        )
+    except CloudflareError as exc:
+        raise _translate(exc) from exc
+    return CloudflareProvisionApplyResponse.model_validate(payload)
 
 
 @router.post("/dns/cloudflare/oauth/start", response_model=OAuthStartResponse)
