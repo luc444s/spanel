@@ -20,7 +20,7 @@ describe("Sidebar landing and ordering", () => {
     expect(resolveLandingPath([], [], buildShellSidebarSections)).toBe("/app/dashboard");
   });
 
-  it("keeps plugin navigation order as provided", () => {
+  it("prioritizes Domains and DNS first in Administration", () => {
     const sections = buildShellSidebarSections({
       permissions: [],
       pluginNavigation: [
@@ -33,8 +33,8 @@ describe("Sidebar landing and ordering", () => {
     const group = administration?.items[0];
     expect(group?.kind).toBe("group");
     if (group?.kind === "group") {
-      expect(group.items[0]).toMatchObject({ to: "/app/apps", label: "Apps" });
-      expect(firstSelectableSidebarPath(sections)).toBe("/app/apps");
+      expect(group.items[0]).toMatchObject({ to: "/app/domains", label: "Domains and DNS" });
+      expect(firstSelectableSidebarPath(sections)).toBe("/app/domains");
     }
   });
 });

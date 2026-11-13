@@ -82,6 +82,16 @@ export function buildShellSidebarSections({
     }
 
     for (const [, group] of grouped) {
+      const sortedChildren = [...group.children].sort((a, b) => {
+        const adminGroup = a.group === "Administration" || b.group === "Administration";
+        if (adminGroup) {
+          const aDomains = a.to === "/app/domains" ? 0 : 1;
+          const bDomains = b.to === "/app/domains" ? 0 : 1;
+          if (aDomains !== bDomains) return aDomains - bDomains;
+        }
+        return 0;
+      });
+
       if (group.parent && group.children.length > 0) {
         sections.push({
           title: t(group.parent.label),
@@ -91,7 +101,7 @@ export function buildShellSidebarSections({
               kind: "group",
               label: group.parent.label,
               to: group.parent.to,
-              items: group.children.map((child) => ({
+              items: sortedChildren.map((child) => ({
                 kind: "link" as const,
                 label: t(child.label),
                 to: child.to,
@@ -106,7 +116,7 @@ export function buildShellSidebarSections({
             kind: "group",
             label: t(group.children[0].group!),
             to: "",
-            items: group.children.map((child) => ({
+            items: sortedChildren.map((child) => ({
               kind: "link" as const,
               label: t(child.label),
               to: child.to,
