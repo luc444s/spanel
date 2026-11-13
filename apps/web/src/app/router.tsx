@@ -12,7 +12,8 @@ import { BranchesPage } from "../features/settings/BranchesPage";
 import { PermissionBoundary } from "../features/shell/PermissionBoundary";
 import { AppLayout } from "@/shared/layout/AppLayout";
 import { useAuthStore } from "../features/auth/store";
-import { defaultLandingPath } from "../features/auth/landing";
+import { resolveLandingPath } from "../features/auth/landing";
+import { buildShellSidebarSections } from "../features/shell/navigation";
 
 function RootRedirect() {
   const token = useAuthStore((state) => state.token);
@@ -22,7 +23,12 @@ function RootRedirect() {
 function AppIndexRedirect() {
   const permissions = useAuthStore((state) => state.permissions);
   const pluginRuntime = usePluginFrontendRuntime();
-  return <Navigate replace to={defaultLandingPath(permissions, pluginRuntime.navigation)} />;
+  return (
+    <Navigate
+      replace
+      to={resolveLandingPath(permissions, pluginRuntime.navigation, buildShellSidebarSections)}
+    />
+  );
 }
 
 const pluginRoutes = listFrontendPluginRegistrations().flatMap((registration) =>

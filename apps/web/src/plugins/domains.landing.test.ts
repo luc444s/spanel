@@ -1,22 +1,23 @@
 import { describe, expect, it } from "vitest";
 
-import { defaultLandingPath } from "../features/auth/landing";
+import { resolveLandingPath } from "../features/auth/landing";
 import { buildShellSidebarSections, firstSelectableSidebarPath } from "../features/shell/navigation";
 
 describe("Sidebar landing and ordering", () => {
   it("lands on the first selectable sidebar option", () => {
     expect(
-      defaultLandingPath(["domains.domains.read"], [
-        { to: "/app/domains", label: "Domains and DNS", group: "Administration" },
-        { to: "/app/apps", label: "Apps", group: "Administration" },
-      ]),
+      resolveLandingPath(
+        ["domains.domains.read"],
+        [
+          { to: "/app/domains", label: "Domains and DNS", group: "Administration" },
+          { to: "/app/apps", label: "Apps", group: "Administration" },
+        ],
+        buildShellSidebarSections,
+      ),
     ).toBe("/app/domains");
 
-    expect(
-      defaultLandingPath(["core.plugin.manage"], []),
-    ).toBe("/app/dashboard");
-
-    expect(defaultLandingPath([], [])).toBe("/app/dashboard");
+    expect(resolveLandingPath(["core.plugin.manage"], [], buildShellSidebarSections)).toBe("/app/dashboard");
+    expect(resolveLandingPath([], [], buildShellSidebarSections)).toBe("/app/dashboard");
   });
 
   it("keeps plugin navigation order as provided", () => {
