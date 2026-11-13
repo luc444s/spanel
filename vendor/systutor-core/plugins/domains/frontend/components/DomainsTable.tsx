@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { t } from "@/i18n";
 import { Button } from "@systutor/shell/ui/button";
@@ -79,10 +79,6 @@ export function DomainsTable({ items, zones, cloudflareZones, dnsError, platform
   const groups = groupRegisteredDomains(items);
   const totalPages = Math.max(1, Math.ceil(groups.length / DOMAINS_PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
-
-  useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [page, totalPages]);
 
   const pagedGroups = groups.slice(
     (currentPage - 1) * DOMAINS_PAGE_SIZE,

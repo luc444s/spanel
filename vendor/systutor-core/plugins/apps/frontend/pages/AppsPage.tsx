@@ -82,10 +82,6 @@ export default function AppsPage() {
     currentPage * APPS_PAGE_SIZE,
   );
 
-  useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [page, totalPages]);
-
   if (applications.isLoading) return <div className="flex min-h-48 items-center justify-center text-sm text-muted-foreground">{t("Loading Apps…")}</div>;
   if (applications.error) return <Alert title={t("Error")}>{t("Could not load applications.")}</Alert>;
 

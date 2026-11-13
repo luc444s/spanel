@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useState } from "react";
 import { toast } from "sonner";
 
 import {
@@ -163,10 +163,6 @@ export default function TenantsPage() {
     (currentPage - 1) * TENANTS_PAGE_SIZE,
     currentPage * TENANTS_PAGE_SIZE,
   );
-
-  useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [page, totalPages]);
 
   return (
     <section className="space-y-4">

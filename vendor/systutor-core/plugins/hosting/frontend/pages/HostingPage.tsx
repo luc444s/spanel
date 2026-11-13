@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
@@ -214,9 +214,6 @@ export default function HostingPage() {
     currentPage * HOSTING_PAGE_SIZE,
   );
 
-  useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [page, totalPages]);
   // The list is the source of truth: after an action we refetch it, and the
   // open dialog must show the new status without closing and reopening.
   const detail = detailSite ? sites.find((site) => site.id === detailSite.id) ?? detailSite : null;
