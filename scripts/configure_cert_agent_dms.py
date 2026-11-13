@@ -279,7 +279,7 @@ def build_plan(
         agent_text,
         "postfix",
         f'sni_map_path = "{managed_postfix_path}"\n'
-        f'postmap_command = ["docker", "exec", "{container}", "postmap", "{managed_internal}"]\n'
+        f'postmap_command = ["docker", "exec", "{container}", "postmap", "-F", "{managed_internal}"]\n'
         f'reload_command = ["docker", "exec", "{container}", "postfix", "reload"]',
     )
     key_gid = _postfix_gid(container)
@@ -451,9 +451,16 @@ def apply_plan(plan: ConfigurationPlan) -> None:
             _atomic_write(path, content)
 
         managed_internal = str(CONTAINER_CONFIG_ROOT / MANAGED_POSTFIX_RELATIVE)
-        _run(["docker", "exec", plan.container, "postmap", managed_internal])
+        _run(["docker", "exec", plan.container, "postmap", "-F", managed_internal])
         _run(
-            ["docker", "exec", plan.container, "postmap", plan.legacy_postfix_internal]
+            [
+                "docker",
+                "exec",
+                plan.container,
+                "postmap",
+                "-F",
+                plan.legacy_postfix_internal,
+            ]
         )
         recreate_container(plan.container)
         postfix = _run(

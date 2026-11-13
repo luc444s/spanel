@@ -53,6 +53,7 @@ def test_plan_separates_managed_and_preserves_legacy(tmp_path: Path) -> None:
     assert "mail.managed.test" in plan.writes[root / "spanel-local_name.conf"]
     assert "[postfix]" in plan.writes[agent]
     assert "[dovecot]" in plan.writes[agent]
+    assert '"postmap", "-F"' in plan.writes[agent]
 
 
 def test_plan_is_idempotent_after_writes(tmp_path: Path) -> None:
@@ -183,9 +184,7 @@ def test_wait_for_postfix_retries_until_ready(monkeypatch: pytest.MonkeyPatch) -
 
 
 def test_root_keys_are_written_before_sections() -> None:
-    original = (
-        'allowlist = ["mail.example.test"]\n\n[postfix]\nsni_map_path = "/x"\n'
-    )
+    original = 'allowlist = ["mail.example.test"]\n\n[postfix]\nsni_map_path = "/x"\n'
 
     updated = configure._upsert_root_keys(
         original, {"key_mode": '"640"', "key_group": "107"}

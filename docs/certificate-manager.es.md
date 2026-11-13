@@ -77,7 +77,7 @@ lineage_root = "/etc/letsencrypt/live"
 
 [postfix]
 sni_map_path = "/etc/postfix/sni_map"
-postmap_command = ["postmap", "/etc/postfix/sni_map"]
+postmap_command = ["postmap", "-F", "/etc/postfix/sni_map"]
 reload_command = ["postfix", "reload"]
 
 [dovecot]
@@ -247,6 +247,9 @@ allowlist de `/etc/spanel/cert-agent.toml` y separa el estado SNI actual:
   agente usando `docker exec <contenedor> ...`;
 - se añaden `key_mode = "640"` y `key_group = <gid de postfix>` en la raíz para
   que el usuario de Postfix pueda leer cada clave privada renovada.
+
+Los mapas SNI de Postfix usan valores base64, así que ambos se indexan con
+`postmap -F` (un `postmap` normal genera errores `malformed BASE64 value`).
 
 `--apply` respalda cada archivo que toca como `.spanel-dms-<marca>.bak`, ejecuta
 `postmap` y luego **recrea** el servicio con
