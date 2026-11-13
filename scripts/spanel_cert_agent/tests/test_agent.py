@@ -370,9 +370,12 @@ def test_state_is_metadata_only_and_cf_mail_is_global_default(tmp_path):
 # ---- runner -------------------------------------------------------------
 
 
-def test_run_once_rejects_hostname_outside_allowlist_without_certbot(tmp_path):
-    config = base_config(tmp_path)
-    commands = FakeCommands()
+def test_run_once_auto_provisions_hostname_outside_allowlist(tmp_path):
+    config_path = tmp_path / "cert-agent.toml"
+    config_path.write_text('allowlist = ["mail.systutor.com"]\n', encoding="utf-8")
+    config = base_config(tmp_path, source=str(config_path))
+    make_lineage(config, "mail.other.com")
+    commands = FakeCommands(san="mail.other.com")
     request = write_request(
         config,
         {"hostname": "mail.other.com", "action": "ensure", "requested_by": "u1"},
@@ -380,15 +383,14 @@ def test_run_once_rejects_hostname_outside_allowlist_without_certbot(tmp_path):
     )
     agent = CertAgent(config, runner=commands)
 
-    assert agent.process_request(request) is False
+    assert agent.process_request(request) is True
 
-    assert commands.certbot_calls() == []
+    assert commands.certbot_calls() != []
     job = read_job(config, "11111111-1111-4111-8111-111111111111")
-    assert job is not None
-    assert job["state"] == "failed"
-    assert "allowlist" in job["error"]
+    assert job is not None and job["state"] == "succeeded"
+    assert "mail.other.com" in agent.config.allowlist
+    assert "mail.other.com" in config_path.read_text(encoding="utf-8")
     assert not request.exists()
-    assert not config.state_path.exists()
 
 
 def test_run_once_rejects_extra_flags_without_certbot(tmp_path):

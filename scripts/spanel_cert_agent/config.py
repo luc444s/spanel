@@ -24,6 +24,8 @@ DEFAULT_GENERATIONS_ROOT = "/var/lib/spanel/cert-manager/generations"
 DEFAULT_BACKUP_ROOT = "/var/lib/spanel/cert-manager/backups"
 DEFAULT_LOCKS_DIR = "/var/lib/spanel/cert-manager/locks"
 DEFAULT_INSTALL_ROOT = "/etc/ssl/spanel/mail"
+DEFAULT_TRAEFIK_CONFIG_DIR = "/opt/stacks/traefik/config"
+DEFAULT_TRAEFIK_ACME_ROUTER_FILE = "spanel-acme-mail-challenge.yml"
 DEFAULT_DEFAULT_NAME = "cf-mail"
 DEFAULT_PROBE_PORTS = (993, 465, 587)
 
@@ -142,6 +144,8 @@ class AgentConfig:
     dovecot: DovecotConfig = field(default_factory=DovecotConfig)
     verification: VerificationConfig = field(default_factory=VerificationConfig)
     alerts: AlertConfig = field(default_factory=AlertConfig)
+    traefik_config_dir: Path | None = Path(DEFAULT_TRAEFIK_CONFIG_DIR)
+    traefik_acme_router_file: str = DEFAULT_TRAEFIK_ACME_ROUTER_FILE
     source: str = DEFAULT_CONFIG_PATH
 
     def require_hostname(self, hostname: str) -> None:
@@ -201,6 +205,7 @@ def load_config(
     dovecot_raw = raw.get("dovecot") if isinstance(raw.get("dovecot"), dict) else {}
     verify_raw = raw.get("verification") if isinstance(raw.get("verification"), dict) else {}
     alerts_raw = raw.get("alerts") if isinstance(raw.get("alerts"), dict) else {}
+    traefik_raw = raw.get("traefik") if isinstance(raw.get("traefik"), dict) else {}
 
     def pick(section: dict, key: str, env_name: str, fallback=None):
         return _env(environment, env_name) or section.get(key, fallback)
@@ -319,6 +324,24 @@ def load_config(
         ),
     )
 
+    traefik_config_dir_value = pick(
+        traefik_raw, "config_dir", "SPANEL_TRAEFIK_CONFIG_DIR", DEFAULT_TRAEFIK_CONFIG_DIR
+    )
+    traefik_config_dir = (
+        None
+        if str(traefik_config_dir_value).strip() in ("", "none", "false", "off")
+        else _as_path(traefik_config_dir_value)
+    )
+    traefik_acme_router_file = str(
+        pick(
+            traefik_raw,
+            "acme_router_file",
+            "SPANEL_TRAEFIK_ACME_ROUTER_FILE",
+            DEFAULT_TRAEFIK_ACME_ROUTER_FILE,
+        )
+        or DEFAULT_TRAEFIK_ACME_ROUTER_FILE
+    ).strip() or DEFAULT_TRAEFIK_ACME_ROUTER_FILE
+
     return AgentConfig(
         allowlist=frozenset(str(item).strip().lower() for item in allowlist if str(item).strip()),
         default_name=str(
@@ -364,5 +387,7 @@ def load_config(
         dovecot=dovecot,
         verification=verification,
         alerts=alerts,
+        traefik_config_dir=traefik_config_dir,
+        traefik_acme_router_file=traefik_acme_router_file,
         source=str(config_path),
     )

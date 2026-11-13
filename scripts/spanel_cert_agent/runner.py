@@ -16,6 +16,7 @@ from .certbot import CertbotError, build_argv, lineage_dir
 from .config import AgentConfig, AgentConfigError
 from .installer import InstallError, install_pair, install_paths
 from .operations import install_current, rollback_current, run_audit, sync_hostname
+from .provisioning import provision_hostname
 from .sni import SniError, apply_sni
 from .state import (
     StateError,
@@ -148,6 +149,8 @@ class CertAgent:
             ),
         )
         try:
+            if hostname not in self.config.allowlist:
+                self.config = provision_hostname(self.config, hostname)
             self.config.require_hostname(hostname)
             # Antes de emitir: si falta SNI o recarga, se falla cerrado.
             self.config.require_reload_config()
