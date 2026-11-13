@@ -118,10 +118,6 @@ export default function DomainsPage() {
   const ownSites = sites.filter(
     (site) => !site.tenant_id || site.tenant_id === currentTenant?.id
   );
-  const selectedSite = addDestinationSites.find((site) => site.site_id === siteId)
-    ?? ownSites.find((site) => site.site_id === siteId);
-  const linkTarget
-    = linkDestinationSites.find((site) => site.site_id === linkSiteId) ?? linkDestinationSites[0];
   const dnsZones = zonesQuery.data?.items ?? [];
   const cloudflareZones = cloudflareZonesQuery.data?.items ?? [];
   const activeZone = dnsDomain ? longestOwnedZone(dnsDomain.domain, dnsZones) : null;
@@ -133,12 +129,6 @@ export default function DomainsPage() {
     .sort() : [];
 
   const normalizedAddDomain = useMemo(() => normalizeDomainInput(domain), [domain]);
-  const cfEligible = canUseCloudflare && isCloudflareConnected(cloudflareStatusQuery.data ?? null);
-  const cfProvisionable = canProvisionCloudflare(cloudflareStatusQuery.data ?? null)
-    && !needsClientRegistration(cloudflareClientQuery.data ?? null);
-  const cfNeedsZoneWrite = cfEligible && !hasZoneWriteScope(cloudflareStatusQuery.data ?? null);
-  const cfNeedsRepair = needsClientRegistration(cloudflareClientQuery.data ?? null);
-
   const existingDomainItem = useMemo(
     () => items.find((item) => normalizeDnsName(item.domain) === normalizedAddDomain),
     [items, normalizedAddDomain]
@@ -151,6 +141,16 @@ export default function DomainsPage() {
     () => ownSites.filter((site) => !linking?.site_id || linking.site_id !== site.site_id),
     [ownSites, linking]
   );
+  const selectedSite = addDestinationSites.find((site) => site.site_id === siteId)
+    ?? ownSites.find((site) => site.site_id === siteId);
+  const linkTarget
+    = linkDestinationSites.find((site) => site.site_id === linkSiteId) ?? linkDestinationSites[0];
+
+  const cfEligible = canUseCloudflare && isCloudflareConnected(cloudflareStatusQuery.data ?? null);
+  const cfProvisionable = canProvisionCloudflare(cloudflareStatusQuery.data ?? null)
+    && !needsClientRegistration(cloudflareClientQuery.data ?? null);
+  const cfNeedsZoneWrite = cfEligible && !hasZoneWriteScope(cloudflareStatusQuery.data ?? null);
+  const cfNeedsRepair = needsClientRegistration(cloudflareClientQuery.data ?? null);
 
   function resetCloudflareState() {
     setCfOpen(false);
