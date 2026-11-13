@@ -66,7 +66,7 @@ export function FileTable({
       <thead className="sticky top-0 z-10 bg-muted text-xs uppercase tracking-wide text-muted-foreground">
         <tr>
           <th className="w-10 p-2 align-middle">
-            <div className="flex items-center justify-center">
+            <div className="flex h-full items-center justify-center">
               <input
                 type="checkbox"
                 aria-label={t("Select all")}
