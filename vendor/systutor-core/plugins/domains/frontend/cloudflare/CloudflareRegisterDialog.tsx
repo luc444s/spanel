@@ -56,6 +56,9 @@ export function CloudflareRegisterDialog({ open, redirectUri, onClose, onRegiste
       onRegistered();
       onClose();
     } catch (failure) {
+      const status = typeof failure === "object" && failure !== null
+        ? (failure as { status?: unknown }).status
+        : null;
       if (
         typeof failure === "object"
         && failure !== null
@@ -64,7 +67,9 @@ export function CloudflareRegisterDialog({ open, redirectUri, onClose, onRegiste
       ) {
         setShowAccount(true);
       }
-      setError(t(errorMessageFrom(failure)));
+      setError(status === 403
+        ? t("The API token cannot manage OAuth clients. Confirm Account → OAuth Clients → Edit and the correct Account ID.")
+        : t(errorMessageFrom(failure)));
     } finally {
       setSaving(false);
     }
@@ -107,6 +112,8 @@ export function CloudflareRegisterDialog({ open, redirectUri, onClose, onRegiste
 
         <p className="text-xs text-muted-foreground">
           {t("Needs Account → OAuth Clients → Edit. It is used once and never stored.")}
+          {" "}
+          {t("If the token cannot list accounts, enter the Account ID below.")}
         </p>
 
         {showAccount ? (

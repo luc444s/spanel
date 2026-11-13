@@ -276,13 +276,34 @@ class CloudflareService:
             # Idempotent repair: clients created before refresh support only had
             # `authorization_code`, so their access token expired after an hour
             # and could not be renewed. PATCH keeps the existing secret.
-            self._client.update_client(
-                account_id=existing.account_id,
-                client_id=existing.client_id,
-                bootstrap_token=bootstrap_token,
-                redirect_uri=callback,
-                scope_ids=scope_ids,
-            )
+            replaced = False
+            try:
+                self._client.update_client(
+                    account_id=existing.account_id,
+                    client_id=existing.client_id,
+                    bootstrap_token=bootstrap_token,
+                    redirect_uri=callback,
+                    scope_ids=scope_ids,
+                )
+            except (CloudflareNotFound, CloudflareValidation):
+                # The remote client was deleted or cannot be edited. Create a
+                # fresh private client instead of leaving the tenant broken.
+                client_id, secret = self._client.register_client(
+                    account_id=account,
+                    bootstrap_token=bootstrap_token,
+                    redirect_uri=callback,
+                    scope_ids=scope_ids,
+                )
+                encrypted = self._cipher().encrypt(
+                    PURPOSE_CLIENT_SECRET,
+                    self._client_identity(account, client_id),
+                    secret,
+                )
+                existing.client_id = client_id
+                existing.secret_ciphertext = encrypted.ciphertext
+                existing.secret_nonce = encrypted.nonce
+                existing.key_version = encrypted.key_version
+                replaced = True
             existing.scopes_json = scope_rows
             existing.redirect_uri = callback
             self._audit(
@@ -294,6 +315,7 @@ class CloudflareService:
                     "client_id": existing.client_id,
                     "redirect_uri": callback,
                     "repaired": True,
+                    "replaced": replaced,
                 },
             )
             self._db.commit()
