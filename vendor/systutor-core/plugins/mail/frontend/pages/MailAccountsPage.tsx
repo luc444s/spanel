@@ -357,7 +357,7 @@ export default function MailAccountsPage() {
                       key={email}
                       type="button"
                       onClick={() => { setSelected(email); setNewPass(""); setConfirmPass(""); setError(null); }}
-                      className="block w-full truncate rounded px-2 py-1 text-left text-sm text-primary hover:bg-accent hover:underline"
+                      className="block w-full truncate rounded border border-transparent px-2 py-1 text-left text-sm text-primary transition-colors hover:border-primary/60 hover:bg-accent/40 hover:no-underline"
                       title={email}
                     >
                       {email}
