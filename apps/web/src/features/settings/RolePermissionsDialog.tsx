@@ -57,11 +57,13 @@ export function RolePermissionsDialog({
       onClose={onClose}
     >
       <form className="space-y-4" onSubmit={submit}>
-        <Alert title={t("Shared role")}>
-          {memberCount === 1
-            ? t("Changes will affect 1 user assigned to this role.")
-            : t("Changes will affect {count} users assigned to this role.", { count: memberCount })}
-        </Alert>
+        {memberCount > 0 ? (
+          <Alert title={t("Shared role")}>
+            {memberCount === 1
+              ? t("Changes will affect 1 user assigned to this role.")
+              : t("Changes will affect {count} users assigned to this role.", { count: memberCount })}
+          </Alert>
+        ) : null}
         <Select
           value={module}
           onChange={setModule}
