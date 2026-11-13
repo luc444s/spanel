@@ -82,6 +82,11 @@ export function buildShellSidebarSections({
     }
 
     for (const [, group] of grouped) {
+      group.children.sort((left, right) => {
+        if (left.to === "/app/domains") return -1;
+        if (right.to === "/app/domains") return 1;
+        return 0;
+      });
       if (group.parent && group.children.length > 0) {
         sections.push({
           title: t(group.parent.label),

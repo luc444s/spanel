@@ -5,7 +5,7 @@
  */
 const PLUGIN_NAMES: Record<string, string> = {
   apps: "Applications",
-  domains: "Domains",
+  domains: "Domains and DNS",
   filemanager: "File Manager",
   hosting: "WordPress Hosting",
   mail: "Mail Administration",

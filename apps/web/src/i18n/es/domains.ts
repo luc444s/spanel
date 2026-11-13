@@ -11,6 +11,7 @@ const messages: Record<string, string> = {
   "Domain linked": "Dominio vinculado",
   "Domain removed": "Dominio eliminado",
   "Domains": "Dominios",
+  "Domains and DNS": "Dominios y DNS",
   "Add domain": "Agregar dominio",
   "Could not load domains": "No se pudieron cargar los dominios",
   "The proxy is not responding": "El proxy no responde",

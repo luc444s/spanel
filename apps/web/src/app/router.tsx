@@ -12,10 +12,16 @@ import { BranchesPage } from "../features/settings/BranchesPage";
 import { PermissionBoundary } from "../features/shell/PermissionBoundary";
 import { AppLayout } from "@/shared/layout/AppLayout";
 import { useAuthStore } from "../features/auth/store";
+import { defaultLandingPath } from "../features/auth/landing";
 
 function RootRedirect() {
   const token = useAuthStore((state) => state.token);
-  return <Navigate replace to={token ? "/app/dashboard" : "/login"} />;
+  return <Navigate replace to={token ? "/app" : "/login"} />;
+}
+
+function AppIndexRedirect() {
+  const permissions = useAuthStore((state) => state.permissions);
+  return <Navigate replace to={defaultLandingPath(permissions)} />;
 }
 
 const pluginRoutes = listFrontendPluginRegistrations().flatMap((registration) =>
@@ -54,7 +60,7 @@ export const appRouter = createBrowserRouter([
         children: [
           {
             index: true,
-            element: <Navigate replace to="dashboard" />,
+            element: <AppIndexRedirect />,
           },
           {
             path: "dashboard",

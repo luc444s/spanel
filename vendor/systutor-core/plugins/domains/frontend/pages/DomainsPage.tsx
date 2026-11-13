@@ -175,7 +175,7 @@ export default function DomainsPage() {
     <section className="space-y-4 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-lg font-semibold text-foreground">{t("Domains")}</h1>
+          <h1 className="text-lg font-semibold text-foreground">{t("Domains and DNS")}</h1>
           {canReadDns && <p className="text-sm text-muted-foreground">
             {t("Double-click a domain to access its DNS zone.")}
           </p>}

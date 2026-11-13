@@ -8,7 +8,7 @@ export function registerPlugin(): PluginFrontendRegistration {
     routes: [
       {
         path: "domains",
-        title: "Domains",
+        title: "Domains and DNS",
         component: DomainsPage,
         requiredPermissions: ["domains.domains.read"],
       },
@@ -16,7 +16,7 @@ export function registerPlugin(): PluginFrontendRegistration {
     navigation: [
       {
         to: "/app/domains",
-        label: "Domains",
+        label: "Domains and DNS",
         requiredPermissions: ["domains.domains.read"],
         group: "Administration",
       },

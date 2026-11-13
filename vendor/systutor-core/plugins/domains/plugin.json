@@ -1,6 +1,6 @@
 {
   "id": "domains",
-  "name": "Domains",
+  "name": "Domains and DNS",
   "version": "0.1.0",
   "api_version": "1",
   "requires": [],
