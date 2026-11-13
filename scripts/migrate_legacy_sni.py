@@ -155,16 +155,24 @@ def parse_sni_map(text: str) -> list[SniEntry]:
         if not stripped or stripped.startswith("#"):
             continue
         parts = stripped.split()
-        if len(parts) < 3:
+        if len(parts) < 2:
             continue
         hostname = normalize_hostname(parts[0])
         if not hostname:
             continue
+        # Postfix SNI maps may be `hostname key cert` (smtp_tls_chain_files) or a
+        # legacy `hostname combined.pem`; accept both so hostnames are never missed.
+        if len(parts) == 2:
+            key_path = parts[1]
+            cert_path = parts[1]
+        else:
+            key_path = parts[1]
+            cert_path = parts[2]
         entries.append(
             SniEntry(
                 hostname=hostname,
-                key_path=parts[1],
-                cert_path=parts[2],
+                key_path=key_path,
+                cert_path=cert_path,
                 raw=raw,
             )
         )

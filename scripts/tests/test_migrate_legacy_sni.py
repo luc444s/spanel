@@ -52,6 +52,16 @@ def test_parse_sni_map_ignores_comments_and_incomplete_lines() -> None:
     assert entries[1].cert_path == "/c/b"
 
 
+def test_parse_sni_map_accepts_legacy_combined_file_format() -> None:
+    text = "mail.a.test  /etc/ssl/spanel-mail/legacy-sni.pem\n"
+
+    entries = migrate.parse_sni_map(text)
+
+    assert [entry.hostname for entry in entries] == ["mail.a.test"]
+    assert entries[0].key_path == "/etc/ssl/spanel-mail/legacy-sni.pem"
+    assert entries[0].cert_path == "/etc/ssl/spanel-mail/legacy-sni.pem"
+
+
 def test_upsert_allowlist_replaces_single_line_and_preserves_sections() -> None:
     text = 'allowlist = ["mail.a.test"]\n\n[verification]\nports = [993]\n'
 
