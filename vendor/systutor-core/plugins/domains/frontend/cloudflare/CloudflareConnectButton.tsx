@@ -65,6 +65,9 @@ export function CloudflareConnectButton({ permissions, onConnected }: Props) {
     retry: false,
   });
   const connected = isCloudflareConnected(statusQuery.data ?? null);
+  const clientAction = canRegister && needsClientRegistration(clientQuery.data)
+    ? clientQuery.data?.registered === false ? "register" : "repair"
+    : null;
 
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: cloudflareKeys.status });
@@ -171,10 +174,10 @@ export function CloudflareConnectButton({ permissions, onConnected }: Props) {
         variant="secondary"
         disabled={busy || disconnectMutation.isPending}
         onClick={() => {
-          if (connected) {
-            setConfirmDisconnect(true);
-          } else if (canRegister && needsClientRegistration(clientQuery.data)) {
+          if (clientAction) {
             setRegisterOpen(true);
+          } else if (connected) {
+            setConfirmDisconnect(true);
           } else {
             startMutation.mutate();
           }
@@ -182,9 +185,13 @@ export function CloudflareConnectButton({ permissions, onConnected }: Props) {
       >
         {busy
           ? t("Authorizing Cloudflare...")
-          : connected
-            ? t("Disconnect Cloudflare")
-            : t("Connect Cloudflare")}
+          : clientAction === "register"
+            ? t("Register Cloudflare")
+            : clientAction === "repair"
+              ? t("Repair Cloudflare")
+              : connected
+                ? t("Disconnect Cloudflare")
+                : t("Connect Cloudflare")}
       </Button>
 
       <CloudflareRegisterDialog

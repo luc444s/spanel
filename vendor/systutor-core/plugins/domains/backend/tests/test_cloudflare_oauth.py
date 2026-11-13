@@ -97,6 +97,9 @@ class FakeCloudflare:
         )
         return "client-1", SECRET_CANARY
 
+    def update_client(self, **kwargs):
+        self.registered.append({"updated": True, **kwargs})
+
     def authorization_url(self, *, client_id, redirect_uri, state, code_challenge, scopes):
         return (
             "https://dash.cloudflare.com/oauth2/auth?"

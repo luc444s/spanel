@@ -45,6 +45,7 @@ class FakeCloudflare:
         self.record_error: Exception | None = None
         self.revoked: list[str] = []
         self.registered: list[dict[str, object]] = []
+        self.updated: list[dict[str, object]] = []
         self.zones = [
             CloudflareZone("z1", "example.com", "active", "acct1", "Lab", ("ns1",), None, None)
         ]
@@ -116,6 +117,9 @@ class FakeCloudflare:
     def register_client(self, **kwargs):
         self.registered.append(kwargs)
         return "client-new", "secret-new"
+
+    def update_client(self, **kwargs):
+        self.updated.append(kwargs)
 
     def refresh(self, **kwargs):
         return OAuthTokens("new", "new-refresh", 3600, "")
@@ -427,6 +431,7 @@ def test_oauth_client_registration_routes_require_dedicated_permission(
             assert status.status_code == 200
             body = status.json()
             assert body["registered"] is True
+            assert body["needs_repair"] is True
             assert body["client_id"] == "client-1"
             assert "secret-canary" not in status.text
     finally:
@@ -464,12 +469,15 @@ def test_platform_registers_client_from_pasted_token(tmp_path: Path, monkeypatch
             assert "secret-new" not in registered.text
             assert fake.registered and fake.registered[0]["account_id"] == "acct1"
 
-            conflict = client.post(
+            repaired = client.post(
                 "/api/v1/plugins/domains/dns/cloudflare/oauth/register",
                 json={"bootstrap_token": token},
             )
-            assert conflict.status_code == 409
-            assert token not in conflict.text
+            assert repaired.status_code == 200
+            assert repaired.json()["registered"] is True
+            assert repaired.json()["needs_repair"] is False
+            assert token not in repaired.text
+            assert fake.updated and fake.updated[0]["client_id"] == "client-new"
     finally:
         db.close()
         engine.dispose()

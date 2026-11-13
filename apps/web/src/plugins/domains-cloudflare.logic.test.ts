@@ -38,6 +38,7 @@ describe("Cloudflare panel policy", () => {
     expect(canManageCloudflareClient(registrar)).toBe(true);
     expect(needsClientRegistration({ registered: false })).toBe(true);
     expect(needsClientRegistration({ registered: true })).toBe(false);
+    expect(needsClientRegistration({ registered: true, needs_repair: true })).toBe(true);
     expect(needsClientRegistration(null)).toBe(false);
     expect(canRegisterClient(tenant, { registered: false })).toBe(false);
     expect(canRegisterClient(registrar, { registered: false })).toBe(true);

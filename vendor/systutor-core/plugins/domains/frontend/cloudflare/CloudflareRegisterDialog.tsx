@@ -74,7 +74,7 @@ export function CloudflareRegisterDialog({ open, redirectUri, onClose, onRegiste
     <Dialog
       open={open}
       title={t("Register Cloudflare")}
-      description={t("Create the private OAuth client with your Cloudflare API token.")}
+      description={t("Create or repair the private OAuth client with your Cloudflare API token.")}
       onClose={close}
     >
       <div className="space-y-3">

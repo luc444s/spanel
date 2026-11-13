@@ -65,12 +65,15 @@ never persisted. Registration resolves scope IDs from
 - DNS Write.
 
 It creates a **private** Cloudflare OAuth client using Authorization Code,
-`client_secret_basic`, exact redirect URI and required scopes. Dry-run prints a
-redacted plan and makes no remote or SQL mutation. `--apply` calls the Cloudflare
-API, encrypts the returned one-time client secret immediately, persists one
-platform OAuth-client configuration, and prints only client ID, redirect URI and
-scope names. Re-registration is a `409`-style CLI conflict unless an explicit
-future rotation command is specified; rotation is out of scope here.
+`client_secret_basic`, exact redirect URI and required scopes. The client allows
+both the `authorization_code` and `refresh_token` grants; authorization also
+requests the protocol scope `offline_access`, otherwise Cloudflare issues no
+refresh token and the connection dies after the one-hour access token. Dry-run
+prints a redacted plan and makes no remote or SQL mutation. `--apply` calls the
+Cloudflare API, encrypts the returned one-time client secret immediately,
+persists one platform OAuth-client configuration, and prints only client ID,
+redirect URI and scope names. Re-registration PATCHes an existing client to
+enable refresh support without rotating its secret; rotation is out of scope.
 
 Cloudflare endpoints are fixed trusted constants:
 

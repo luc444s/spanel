@@ -14,14 +14,14 @@ export function canManageCloudflareClient(permissions: readonly string[]): boole
 }
 
 export function needsClientRegistration(
-  status: { registered: boolean } | null | undefined,
+  status: { registered: boolean; needs_repair?: boolean } | null | undefined,
 ): boolean {
-  return status?.registered === false;
+  return status?.registered === false || status?.needs_repair === true;
 }
 
 export function canRegisterClient(
   permissions: readonly string[],
-  status: { registered: boolean } | null | undefined,
+  status: { registered: boolean; needs_repair?: boolean } | null | undefined,
 ): boolean {
   return canManageCloudflareClient(permissions) && needsClientRegistration(status);
 }

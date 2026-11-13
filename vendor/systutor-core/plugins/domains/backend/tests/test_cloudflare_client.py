@@ -215,11 +215,32 @@ def test_registration_resolves_scopes_and_keeps_secret_out_of_calls(tmp_path: Pa
     registered = json.loads(transport.calls[1]["body"])
     assert registered["client_type"] == "private"
     assert registered["token_endpoint_auth_method"] == "client_secret_basic"
-    assert registered["grant_types"] == ["authorization_code"]
+    assert registered["grant_types"] == ["authorization_code", "refresh_token"]
     assert registered["redirect_uris"] == [registered["redirect_uris"][0]]
     assert registered["scopes"] == ["scope-zone", "scope-dns-read", "scope-dns-write"]
     assert transport.calls[1]["url"].endswith("/accounts/acct1/oauth_clients")
     assert transport.calls[1]["timeout"] == 3
+
+
+def test_existing_client_is_patched_to_enable_refresh(tmp_path: Path) -> None:
+    transport = Transport(
+        lambda method, url, body: (200, envelope({"client_id": "client-1"}))
+    )
+    client = CloudflareClient(config(tmp_path), transport=transport)
+    client.update_client(
+        account_id="acct1",
+        client_id="client-1",
+        bootstrap_token="bootstrap-token",
+        redirect_uri="https://spanel.lab/cb",
+        scope_ids=["zone.read", "dns.read", "dns.write"],
+    )
+    call = transport.calls[0]
+    assert call["method"] == "PATCH"
+    assert call["url"].endswith("/accounts/acct1/oauth_clients/client-1")
+    body = json.loads(call["body"])
+    assert body["grant_types"] == ["authorization_code", "refresh_token"]
+    assert body["scopes"] == ["zone.read", "dns.read", "dns.write"]
+    assert call["headers"]["Authorization"] == "Bearer bootstrap-token"
 
 
 def test_code_exchange_refresh_and_revoke_use_basic_auth(tmp_path: Path) -> None:

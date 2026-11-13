@@ -28,6 +28,7 @@ from plugins.domains.backend.cloudflare.client import (
     OAuthTokens,
 )
 from plugins.domains.backend.cloudflare.config import (
+    OFFLINE_ACCESS_SCOPE,
     REQUIRED_SCOPE_NAMES,
     CloudflareConfig,
     CloudflareConfigError,
@@ -265,20 +266,36 @@ class CloudflareService:
         scope_rows = [
             {"id": scope_id, "name": name}
             for name, scope_id in zip(REQUIRED_SCOPE_NAMES, scope_ids, strict=True)
-        ]
+        ] + [{"id": OFFLINE_ACCESS_SCOPE, "name": "Offline Access"}]
         existing = get_oauth_client(self._db)
         if existing is not None:
-            # A.SPEC 0071 originally persisted display names and reused them in
-            # the authorization URL. Cloudflare requires scope IDs there. A
-            # one-shot bootstrap token repairs that legacy row without rotating
-            # or exposing the already-encrypted client secret.
-            if _oauth_scope_ids(existing.scopes_json):
-                raise CloudflareConflict("a Cloudflare OAuth client is already registered")
             if existing.account_id != account:
                 raise CloudflareConflict(
                     "a Cloudflare OAuth client is registered for another account"
                 )
+            # Idempotent repair: clients created before refresh support only had
+            # `authorization_code`, so their access token expired after an hour
+            # and could not be renewed. PATCH keeps the existing secret.
+            self._client.update_client(
+                account_id=existing.account_id,
+                client_id=existing.client_id,
+                bootstrap_token=bootstrap_token,
+                redirect_uri=callback,
+                scope_ids=scope_ids,
+            )
             existing.scopes_json = scope_rows
+            existing.redirect_uri = callback
+            self._audit(
+                "domains.dns.cloudflare_registered",
+                tenant_id=None,
+                entity_id=existing.account_id,
+                details={
+                    "account_id": existing.account_id,
+                    "client_id": existing.client_id,
+                    "redirect_uri": callback,
+                    "repaired": True,
+                },
+            )
             self._db.commit()
             return {
                 "applied": True,
@@ -364,8 +381,10 @@ class CloudflareService:
                 "redirect_uri": self._config.redirect_uri,
                 "scopes": list(REQUIRED_SCOPE_NAMES),
             }
+        scope_ids = _oauth_scope_ids(row.scopes_json)
         return {
-            "registered": bool(_oauth_scope_ids(row.scopes_json)),
+            "registered": bool(scope_ids),
+            "needs_repair": OFFLINE_ACCESS_SCOPE not in scope_ids,
             "account_id": row.account_id,
             "client_id": row.client_id,
             "redirect_uri": row.redirect_uri,
@@ -410,12 +429,15 @@ class CloudflareService:
         flow.verifier_nonce = encrypted.nonce
         flow.key_version = encrypted.key_version
         self._db.commit()
+        scope_ids = _oauth_scope_ids(client_row.scopes_json)
+        if OFFLINE_ACCESS_SCOPE not in scope_ids:
+            scope_ids.append(OFFLINE_ACCESS_SCOPE)
         url = self._client.authorization_url(
             client_id=client_row.client_id,
             redirect_uri=client_row.redirect_uri,
             state=state,
             code_challenge=challenge,
-            scopes=_oauth_scope_ids(client_row.scopes_json),
+            scopes=scope_ids,
         )
         return {
             "tenant_id": tenant_id,

@@ -363,7 +363,9 @@ class CloudflareClient:
         body = {
             "client_name": client_name,
             "client_type": "private",
-            "grant_types": ["authorization_code"],
+            # Refresh tokens are part of the Authorization Code flow and let
+            # the tenant keep working after the one-hour access token expires.
+            "grant_types": ["authorization_code", "refresh_token"],
             "response_types": ["code"],
             "redirect_uris": [redirect_uri],
             "scopes": scope_ids,
@@ -382,6 +384,36 @@ class CloudflareClient:
         if not client_id or not secret:
             raise CloudflareUpstream("Cloudflare returned an invalid client registration")
         return client_id, secret
+
+    def update_client(
+        self,
+        *,
+        account_id: str,
+        client_id: str,
+        bootstrap_token: str,
+        redirect_uri: str,
+        scope_ids: list[str],
+        client_name: str = "PanelTutor",
+    ) -> None:
+        """Upgrade an existing private client without rotating its secret."""
+        path = (
+            f"/accounts/{quote(account_id, safe='')}/oauth_clients/"
+            f"{quote(client_id, safe='')}"
+        )
+        body = {
+            "client_name": client_name,
+            "grant_types": ["authorization_code", "refresh_token"],
+            "response_types": ["code"],
+            "redirect_uris": [redirect_uri],
+            "scopes": scope_ids,
+            "token_endpoint_auth_method": "client_secret_basic",
+        }
+        self._request(
+            "PATCH",
+            f"{API_BASE}{path}",
+            headers={**self._bearer(bootstrap_token), "Content-Type": "application/json"},
+            body=json.dumps(body).encode("utf-8"),
+        )
 
     # -- authorization and tokens -----------------------------------------
     def exchange_code(

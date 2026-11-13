@@ -31,6 +31,7 @@ class FakeCloudflare:
     def __init__(self) -> None:
         self.scope_calls = 0
         self.register_calls = 0
+        self.update_calls = 0
         self.revoked: list[str] = []
         self.zones = [
             CloudflareZone("z1", "example.com", "active", "acct1", "Lab", ("ns1",), None, None)
@@ -52,6 +53,9 @@ class FakeCloudflare:
     def register_client(self, **kwargs):
         self.register_calls += 1
         return "client-1", SECRET
+
+    def update_client(self, **kwargs):
+        self.update_calls += 1
 
     def authorization_url(self, *, state, code_challenge, **_kwargs):
         return f"https://dash.cloudflare.com/oauth2/auth?state={state}"
@@ -196,9 +200,12 @@ def test_registration_dry_run_apply_and_conflict(tmp_path, capsys) -> None:
                 cloudflare_client=fake,
                 cloudflare_config=config,
             )
-            == 4
+            == 0
         )
-        assert "already registered" in capsys.readouterr().err
+        repaired_output = capsys.readouterr().out
+        assert "SUCCESS" in repaired_output
+        assert SECRET not in repaired_output
+        assert fake.update_calls == 1
     finally:
         engine.dispose()
 

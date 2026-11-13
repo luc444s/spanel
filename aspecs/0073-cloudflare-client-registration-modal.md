@@ -122,7 +122,10 @@ covered by the existing policy test file.
    Account ID otherwise.
 2. The token never appears in persistence, responses, audit, logs or the DOM
    after submission; the modal clears it on close.
-3. An already-registered client returns `409` and is never overwritten.
+3. An already-registered client is repaired idempotently with a `PATCH` that
+   enables the `refresh_token` grant without rotating its secret. The status
+   endpoint reports `needs_repair` when the stored client predates refresh
+   support.
 4. The created client is private, uses the configured exact redirect URI and
    the three required scopes, and its secret is encrypted at rest.
 5. Tenant-scoped Connect/Disconnect behavior from A.SPEC 0072 is unchanged.
@@ -134,7 +137,7 @@ invariants:
   - Registration endpoints require domains.cloudflare.register; neither core.platform.admin nor users.is_superadmin is consulted.
   - The bootstrap token is never persisted, audited, logged, echoed in validation errors or HTTP responses, and is cleared from the browser state on modal close.
   - The client secret is encrypted before persistence and never returned to the browser.
-  - Registration never overwrites an existing client; conflict returns 409.
+  - Registration never rotates or replaces an existing secret; it may PATCH the client to add the refresh_token grant.
   - Tenant identity for OAuth start/status/disconnect still comes only from TenantContext.
   - No OAuth client is created per tenant; one private platform client remains the model.
   - Callback, PKCE, encryption, refresh and read-only discovery contracts are unchanged.

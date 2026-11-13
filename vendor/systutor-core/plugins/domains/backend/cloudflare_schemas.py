@@ -20,6 +20,7 @@ class OAuthStartResponse(BaseModel):
 
 class OAuthClientStatusResponse(BaseModel):
     registered: bool
+    needs_repair: bool = False
     account_id: str | None = None
     client_id: str | None = None
     redirect_uri: str | None = None

@@ -1,5 +1,6 @@
 export type CloudflareClientStatus = {
   registered: boolean;
+  needs_repair?: boolean;
   account_id: string | null;
   client_id: string | null;
   redirect_uri: string | null;

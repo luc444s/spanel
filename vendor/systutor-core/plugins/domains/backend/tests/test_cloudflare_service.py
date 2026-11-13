@@ -53,6 +53,7 @@ class FakeCloudflare:
     def __init__(self) -> None:
         self.scope_calls = 0
         self.register_calls = 0
+        self.update_calls = 0
         self.authorization_scopes: list[str] = []
         self.exchange_calls = 0
         self.refresh_calls = 0
@@ -91,6 +92,10 @@ class FakeCloudflare:
         self.register_calls += 1
         assert kwargs["bootstrap_token"] == BOOTSTRAP
         return "client-1", CLIENT_SECRET
+
+    def update_client(self, **kwargs):
+        self.update_calls += 1
+        assert kwargs["bootstrap_token"] == BOOTSTRAP
 
     def authorization_url(self, *, state, code_challenge, scopes, **_kwargs):
         self.authorization_scopes = list(scopes)
@@ -210,7 +215,7 @@ def test_register_dry_run_makes_no_remote_or_sql_mutation(tmp_path: Path) -> Non
         engine.dispose()
 
 
-def test_register_encrypts_secret_and_conflicts_on_reregistration(tmp_path: Path) -> None:
+def test_register_encrypts_secret_and_repairs_on_reregistration(tmp_path: Path) -> None:
     db, fake, cipher, service, _events, engine = build(tmp_path)
     config = service.config
     try:
@@ -227,9 +232,13 @@ def test_register_encrypts_secret_and_conflicts_on_reregistration(tmp_path: Path
         )
         assert decrypted == CLIENT_SECRET
         assert BOOTSTRAP not in str(row.__dict__)
-        with pytest.raises(Exception, match="already registered"):
-            register(service, config)
         assert fake.register_calls == 1
+        assert fake.update_calls == 0
+
+        register(service, config)
+        assert fake.register_calls == 1
+        assert fake.update_calls == 1
+        assert service.client_status()["needs_repair"] is False
     finally:
         db.close()
         engine.dispose()
@@ -256,7 +265,9 @@ def test_register_repairs_legacy_scope_names_without_rotating_client(tmp_path: P
             {"id": "1", "name": "Zone Read"},
             {"id": "2", "name": "DNS Read"},
             {"id": "3", "name": "DNS Write"},
+            {"id": "offline_access", "name": "Offline Access"},
         ]
+        assert fake.update_calls == 1
     finally:
         db.close()
         engine.dispose()
@@ -267,7 +278,7 @@ def test_start_flow_persists_only_hashed_state_and_encrypted_verifier(tmp_path: 
     try:
         register(service, service.config)
         payload = service.start_flow_for_tenant("t1")
-        assert fake.authorization_scopes == ["1", "2", "3"]
+        assert fake.authorization_scopes == ["1", "2", "3", "offline_access"]
         flow = db.scalar(select(CloudflareOAuthFlow))
         assert flow is not None
         state = parse_qs(urlsplit(payload["authorization_url"]).query)["state"][0]
