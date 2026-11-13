@@ -30,7 +30,6 @@ export function UserEditorDialog({
   selectedPermissionUserId,
   selectedRoleId,
   roleEditor,
-  roleMemberCount,
   canManageRoles,
   canUpdate,
   formError,
@@ -58,7 +57,6 @@ export function UserEditorDialog({
   selectedPermissionUserId: string;
   selectedRoleId: string | null;
   roleEditor: CoreRole | null;
-  roleMemberCount: number;
   canManageRoles: boolean;
   canUpdate: boolean;
   formError: string | null;
@@ -167,7 +165,6 @@ export function UserEditorDialog({
     <RolePermissionsDialog
       role={roleEditor}
       permissions={permissions}
-      memberCount={roleMemberCount}
       saving={savingRole}
       error={roleError}
       onClose={onCloseRole}

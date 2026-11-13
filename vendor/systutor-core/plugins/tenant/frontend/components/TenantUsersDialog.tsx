@@ -170,12 +170,11 @@ export function TenantUsersDialog({ tenant, onClose }: {
     <div className="flex justify-end"><Button disabled={!selectedUserId || !selectedRoleId || assignmentMutation.isPending} onClick={() => assignmentMutation.mutate()}>{t("Save assignment")}</Button></div>
   </div>;
 
-  const memberCount = roleEditor ? users.filter((user) => user.roles.includes(roleEditor.name)).length : 0;
   return <>
     <Dialog open={Boolean(tenant)} title={t("Users — {name}", { name: tenant?.name ?? "" })} onClose={onClose} maxWidthClassName="max-w-2xl">
       <Tabs value={tab} onChange={setTab} tabs={[{ value: "profile", label: t("Profile"), content: profile }, { value: "roles", label: t("Roles"), content: rolePanel }]} />
     </Dialog>
-    <RolePermissionsDialog role={roleEditor} permissions={permissionsQuery.data?.permissions ?? []} memberCount={memberCount} saving={roleMutation.isPending} error={roleError} onClose={() => setRoleEditor(null)} onSave={(names) => roleMutation.mutateAsync(names)} />
+    <RolePermissionsDialog role={roleEditor} permissions={permissionsQuery.data?.permissions ?? []} saving={roleMutation.isPending} error={roleError} onClose={() => setRoleEditor(null)} onSave={(names) => roleMutation.mutateAsync(names)} />
     <Dialog open={Boolean(reassignUserId)} title={t("Reassign user")} onClose={() => setReassignUserId(null)}>
       <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); if (!targetTenantId.trim()) return setReassignError(t("Target tenant ID required")); reassignMutation.mutate(); }}>
         <label className="block space-y-1 text-sm text-foreground"><span>{t("Target Tenant ID")}</span><Input value={targetTenantId} onChange={(event) => setTargetTenantId(event.target.value)} /></label>

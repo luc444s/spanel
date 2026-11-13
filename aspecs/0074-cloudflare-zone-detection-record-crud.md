@@ -21,7 +21,10 @@ the panel.
    provider-specific data source and write API change.
 3. The modal lists record name, type, content, TTL, proxy state and priority,
    and supports create, edit and confirmed delete.
-4. New tenant-scoped routes use the existing `domains.dns.cloudflare`
+4. Expanding a record renders its editor immediately below that record. The
+   actions column uses one disclosure control instead of separate text buttons;
+   destructive delete is a red trash icon at the lower-left of the editor.
+5. New tenant-scoped routes use the existing `domains.dns.cloudflare`
    permission and active encrypted OAuth connection:
 
 ```text

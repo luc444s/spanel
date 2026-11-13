@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
+import { ChevronDown, Trash2 } from "lucide-react";
 
 import { Alert } from "@systutor/shell/ui/alert";
 import { Button } from "@systutor/shell/ui/button";
@@ -87,6 +88,8 @@ export function CloudflareDnsPanel({ zone }: { zone: CloudflareZone }) {
       deleteCloudflareRecord(zone.id, record.id),
     onSuccess: async () => {
       setDeleting(null);
+      setEditing(null);
+      setDraft(null);
       toast.success(t("DNS record deleted"));
       await refresh();
     },
@@ -146,6 +149,52 @@ export function CloudflareDnsPanel({ zone }: { zone: CloudflareZone }) {
     });
   };
 
+  const closeEditor = () => {
+    setEditing(null);
+    setDraft(null);
+  };
+
+  const editor = (record: CloudflareRecord | null) => draft && (
+    <div className="space-y-3 rounded-md border border-border bg-card p-3">
+      <h3 className="font-medium">{t(record ? "Edit record" : "Add record")}</h3>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="text-sm">{t("Type")}<select value={draft.type}
+          onChange={(event) => setDraft({ ...draft, type: event.target.value, proxied: false })}
+          className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2">
+          {RECORD_TYPES.map((recordType) => <option key={recordType}>{recordType}</option>)}</select></label>
+        <label className="text-sm">{t("Name")}<Input value={draft.name}
+          onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+          {...noAutofillProps} /></label>
+        <label className="text-sm sm:col-span-2">{t("Content")}<Input value={draft.content}
+          onChange={(event) => setDraft({ ...draft, content: event.target.value })}
+          spellCheck={false} {...noAutofillProps} /></label>
+        <label className="text-sm">TTL<Input type="number" min={1} value={draft.ttl}
+          onChange={(event) => setDraft({ ...draft, ttl: event.target.value })} /></label>
+        {(draft.type === "MX" || draft.type === "SRV") && <label className="text-sm">
+          {t("Priority")}<Input type="number" min={0} max={65535} value={draft.priority}
+            onChange={(event) => setDraft({ ...draft, priority: event.target.value })} />
+        </label>}
+        {PROXY_TYPES.has(draft.type) && <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={draft.proxied}
+            onChange={(event) => setDraft({ ...draft, proxied: event.target.checked })} />
+          {t("Proxy through Cloudflare")}
+        </label>}
+      </div>
+      <div className="flex items-end justify-between gap-2">
+        {record ? <button type="button" className="rounded p-2 text-destructive hover:bg-destructive/10"
+          aria-label={t("Delete")} title={t("Delete")} onClick={() => setDeleting(record)}>
+          <Trash2 className="h-5 w-5" aria-hidden="true" />
+        </button> : <span />}
+        <div className="flex gap-2">
+          <Button size="sm" variant="secondary" onClick={closeEditor}>{t("Cancel")}</Button>
+          <Button size="sm" disabled={saveMutation.isPending} onClick={save}>
+            {saveMutation.isPending ? t("Saving...") : t("Save")}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+
   return <>
     <div className="space-y-3">
       <div className="flex flex-wrap gap-2">
@@ -173,23 +222,32 @@ export function CloudflareDnsPanel({ zone }: { zone: CloudflareZone }) {
           {["Name", "Type", "TTL", "Content", "Proxy", "Actions"].map((label) =>
             <th className="p-2" key={label}>{t(label)}</th>)}
         </tr></thead>
-        <tbody>{filtered.map((record) =>
-          <tr className="border-t border-border" key={record.id}>
-            <td className="p-2">{relativeName(record.name)}</td>
-            <td className="p-2">{record.type}</td>
-            <td className="p-2">{record.ttl}</td>
-            <td className="max-w-60 truncate p-2" title={record.content}>{record.content}</td>
-            <td className="p-2">{record.proxied ? t("Yes") : t("No")}</td>
-            <td className="p-2"><span className="flex gap-1">
-              <Button size="sm" variant="secondary" onClick={() => {
-                setEditing(record);
-                setDraft(recordDraft(record));
-              }}>{t("Edit")}</Button>
-              <Button size="sm" variant="secondary" onClick={() => setDeleting(record)}>
-                {t("Delete")}
-              </Button>
-            </span></td>
-          </tr>)}</tbody>
+        <tbody>{filtered.map((record) => {
+          const expanded = editing !== "new" && editing?.id === record.id;
+          return <Fragment key={record.id}>
+            <tr className="border-t border-border">
+              <td className="p-2">{relativeName(record.name)}</td>
+              <td className="p-2">{record.type}</td>
+              <td className="p-2">{record.ttl}</td>
+              <td className="max-w-60 truncate p-2" title={record.content}>{record.content}</td>
+              <td className="p-2">{record.proxied ? t("Yes") : t("No")}</td>
+              <td className="p-2">
+                <button type="button" aria-expanded={expanded} aria-label={t("Edit")}
+                  className="rounded border border-border bg-secondary p-2 text-secondary-foreground hover:bg-accent"
+                  onClick={() => {
+                    if (expanded) return closeEditor();
+                    setEditing(record);
+                    setDraft(recordDraft(record));
+                  }}>
+                  <ChevronDown className={`h-4 w-4 transition-transform ${expanded ? "rotate-180" : ""}`} aria-hidden="true" />
+                </button>
+              </td>
+            </tr>
+            {expanded && <tr className="border-t border-border"><td colSpan={6} className="p-2">
+              {editor(record)}
+            </td></tr>}
+          </Fragment>;
+        })}</tbody>
       </table></div>}
       <div className="flex items-center justify-between text-xs text-muted-foreground">
         <span>{filtered.length === records.length
@@ -201,40 +259,7 @@ export function CloudflareDnsPanel({ zone }: { zone: CloudflareZone }) {
           onClick={() => void recordsQuery.refetch()}>{t("Refresh")}</Button>
       </div>
 
-      {draft && <div className="space-y-3 rounded-md border border-border p-3">
-        <h3 className="font-medium">{t(editing === "new" ? "Add record" : "Edit record")}</h3>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="text-sm">{t("Type")}<select value={draft.type}
-            onChange={(event) => setDraft({ ...draft, type: event.target.value, proxied: false })}
-            className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2">
-            {RECORD_TYPES.map((type) => <option key={type}>{type}</option>)}</select></label>
-          <label className="text-sm">{t("Name")}<Input value={draft.name}
-            onChange={(event) => setDraft({ ...draft, name: event.target.value })}
-            {...noAutofillProps} /></label>
-          <label className="text-sm sm:col-span-2">{t("Content")}<Input value={draft.content}
-            onChange={(event) => setDraft({ ...draft, content: event.target.value })}
-            spellCheck={false} {...noAutofillProps} /></label>
-          <label className="text-sm">TTL<Input type="number" min={1} value={draft.ttl}
-            onChange={(event) => setDraft({ ...draft, ttl: event.target.value })} /></label>
-          {(draft.type === "MX" || draft.type === "SRV") && <label className="text-sm">
-            {t("Priority")}<Input type="number" min={0} max={65535} value={draft.priority}
-              onChange={(event) => setDraft({ ...draft, priority: event.target.value })} />
-          </label>}
-          {PROXY_TYPES.has(draft.type) && <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={draft.proxied}
-              onChange={(event) => setDraft({ ...draft, proxied: event.target.checked })} />
-            {t("Proxy through Cloudflare")}
-          </label>}
-        </div>
-        <div className="flex justify-end gap-2">
-          <Button size="sm" variant="secondary" onClick={() => {
-            setEditing(null); setDraft(null);
-          }}>{t("Cancel")}</Button>
-          <Button size="sm" disabled={saveMutation.isPending} onClick={save}>
-            {saveMutation.isPending ? t("Saving...") : t("Save")}
-          </Button>
-        </div>
-      </div>}
+      {editing === "new" ? editor(null) : null}
     </div>
 
     <ConfirmDialog open={Boolean(deleting)} onClose={() => setDeleting(null)}

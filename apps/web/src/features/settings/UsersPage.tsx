@@ -26,7 +26,7 @@ import {
 } from "../core-management/api";
 import { useAuthStore } from "../auth/store";
 import { UserEditorDialog, type UserFormState } from "./UserEditorDialog";
-import { assignedRoleId, roleMemberCount } from "./user-permissions";
+import { assignedRoleId } from "./user-permissions";
 
 const EMPTY_USER_FORM: UserFormState = {
   name: "", email: "", password: "", branch_id: "",
@@ -246,7 +246,6 @@ export function UsersPage() {
       selectedPermissionUserId={selectedPermissionUserId}
       selectedRoleId={selectedRoleId}
       roleEditor={roleEditor}
-      roleMemberCount={roleEditor ? roleMemberCount(roleEditor, users) : 0}
       canManageRoles={canManageRoles}
       canUpdate={canUpdate}
       formError={formError}

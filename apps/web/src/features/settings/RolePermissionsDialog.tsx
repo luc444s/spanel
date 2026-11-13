@@ -11,7 +11,6 @@ import type { CorePermission, CoreRole } from "../core-management/api";
 export function RolePermissionsDialog({
   role,
   permissions,
-  memberCount,
   saving,
   error,
   onClose,
@@ -19,7 +18,6 @@ export function RolePermissionsDialog({
 }: {
   role: CoreRole | null;
   permissions: CorePermission[];
-  memberCount: number;
   saving: boolean;
   error: string | null;
   onClose: () => void;
@@ -57,13 +55,6 @@ export function RolePermissionsDialog({
       onClose={onClose}
     >
       <form className="space-y-4" onSubmit={submit}>
-        {memberCount > 0 ? (
-          <Alert title={t("Shared role")}>
-            {memberCount === 1
-              ? t("Changes will affect 1 user assigned to this role.")
-              : t("Changes will affect {count} users assigned to this role.", { count: memberCount })}
-          </Alert>
-        ) : null}
         <Select
           value={module}
           onChange={setModule}
