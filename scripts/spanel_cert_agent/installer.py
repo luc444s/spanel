@@ -20,6 +20,13 @@ def install_paths(config: AgentConfig, hostname: str) -> tuple[Path, Path]:
     return directory / "fullchain.pem", directory / "privkey.pem"
 
 
+def apply_key_permissions(config: AgentConfig, path: Path) -> None:
+    """Apply the configured key mode/group so the mail daemons can read it."""
+    os.chmod(path, config.key_mode)
+    if config.key_group is not None:
+        os.chown(path, -1, config.key_group)
+
+
 def _atomic_copy(source: Path, destination: Path, mode: int) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary = tempfile.mkstemp(
@@ -71,5 +78,6 @@ def install_pair(
 
     cert_path, key_path = install_paths(config, hostname)
     _atomic_copy(cert_source, cert_path, 0o644)
-    _atomic_copy(key_source, key_path, 0o600)
+    _atomic_copy(key_source, key_path, config.key_mode)
+    apply_key_permissions(config, key_path)
     return cert_path, key_path, info

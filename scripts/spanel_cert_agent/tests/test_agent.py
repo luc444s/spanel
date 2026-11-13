@@ -169,6 +169,23 @@ reload_command = ["dovecot", "reload"]
     assert config.certbot.webroot_path == Path("/var/www")
     assert config.postfix.postmap_command == ("postmap", "/etc/postfix/sni")
     assert config.dovecot.reload_command == ("dovecot", "reload")
+    assert config.key_mode == 0o600
+    assert config.key_group is None
+
+
+def test_config_reads_key_mode_and_group(tmp_path):
+    config_file = tmp_path / "cert-agent.toml"
+    config_file.write_text(
+        'allowlist = ["mail.systutor.com"]\n'
+        'key_mode = "640"\n'
+        "key_group = 107\n",
+        encoding="utf-8",
+    )
+
+    config = load_config(config_file, env={})
+
+    assert config.key_mode == 0o640
+    assert config.key_group == 107
 
 
 def test_config_fails_closed_without_reload_commands(tmp_path):

@@ -21,7 +21,7 @@ from pathlib import Path
 
 from .config import AgentConfig, AgentConfigError
 from .health import now_iso
-from .installer import _atomic_copy, install_paths
+from .installer import _atomic_copy, apply_key_permissions, install_paths
 from .probe import verify_hostname
 from .sni import (
     SniError,
@@ -144,7 +144,8 @@ def create_generation(config: AgentConfig, hostname: str, lineage: Path, *, runn
     directory.mkdir(parents=True, exist_ok=False)
     try:
         _atomic_copy(cert_source, directory / "fullchain.pem", 0o644)
-        _atomic_copy(key_source, directory / "privkey.pem", 0o600)
+        _atomic_copy(key_source, directory / "privkey.pem", config.key_mode)
+        apply_key_permissions(config, directory / "privkey.pem")
         validate_pair(
             directory / "fullchain.pem",
             directory / "privkey.pem",
@@ -171,7 +172,8 @@ def activate_generation(config: AgentConfig, hostname: str, name: str) -> None:
     os.replace(temporary, link)
     cert_path, key_path = install_paths(config, hostname)
     _atomic_copy(directory / "fullchain.pem", cert_path, 0o644)
-    _atomic_copy(directory / "privkey.pem", key_path, 0o600)
+    _atomic_copy(directory / "privkey.pem", key_path, config.key_mode)
+    apply_key_permissions(config, key_path)
 
 
 def _remove_active_install(config: AgentConfig, hostname: str) -> None:

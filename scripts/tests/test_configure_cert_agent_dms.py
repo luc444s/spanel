@@ -180,3 +180,26 @@ def test_wait_for_postfix_retries_until_ready(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(configure.time, "sleep", lambda _seconds: None)
 
     configure._wait_for_postfix("mailserver")
+
+
+def test_root_keys_are_written_before_sections() -> None:
+    original = (
+        'allowlist = ["mail.example.test"]\n\n[postfix]\nsni_map_path = "/x"\n'
+    )
+
+    updated = configure._upsert_root_keys(
+        original, {"key_mode": '"640"', "key_group": "107"}
+    )
+
+    assert 'key_mode = "640"' in updated
+    assert "key_group = 107" in updated
+    assert updated.index("key_group") < updated.index("[postfix]")
+
+
+def test_root_keys_replace_existing_values() -> None:
+    original = 'key_mode = "600"\n\n[dovecot]\nlocal_name_path = "/x"\n'
+
+    updated = configure._upsert_root_keys(original, {"key_mode": '"640"'})
+
+    assert 'key_mode = "640"' in updated
+    assert '"600"' not in updated

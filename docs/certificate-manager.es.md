@@ -244,7 +244,9 @@ allowlist de `/etc/spanel/cert-agent.toml` y separa el estado SNI actual:
 - `postfix-main.cf` pasa a cargar ambos mapas y `dovecot.cf` recibe un
   `!include_try` del bloque administrado;
 - las secciones `[postfix]` y `[dovecot]` se escriben en la configuración del
-  agente usando `docker exec <contenedor> ...`.
+  agente usando `docker exec <contenedor> ...`;
+- se añaden `key_mode = "640"` y `key_group = <gid de postfix>` en la raíz para
+  que el usuario de Postfix pueda leer cada clave privada renovada.
 
 `--apply` respalda cada archivo que toca como `.spanel-dms-<marca>.bak`, ejecuta
 `postmap` y luego **recrea** el servicio con

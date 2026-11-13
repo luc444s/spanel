@@ -126,6 +126,8 @@ class AgentConfig:
     default_name: str = DEFAULT_DEFAULT_NAME
     default_cert_path: Path | None = Path("/etc/ssl/cf-mail.fullchain.crt")
     default_key_path: Path | None = Path("/etc/ssl/cf-mail.key")
+    key_mode: int = 0o600
+    key_group: int | None = None
     state_path: Path = Path(DEFAULT_STATE_PATH)
     alerts_path: Path = Path(DEFAULT_ALERTS_PATH)
     requests_dir: Path = Path(DEFAULT_REQUESTS_DIR)
@@ -247,6 +249,29 @@ def load_config(
             raise AgentConfigError(f"{key} must be an integer") from exc
         return parsed if parsed > 0 else default
 
+    def mode_value(section: dict, key: str, env_name: str, default: int) -> int:
+        raw_value = pick(section, key, env_name, default)
+        try:
+            parsed = int(raw_value, 8) if isinstance(raw_value, str) else int(raw_value)
+        except (TypeError, ValueError) as exc:
+            raise AgentConfigError(f"{key} must be an octal mode") from exc
+        return parsed if 0 < parsed < 0o1000 else default
+
+    def group_value(section: dict, key: str, env_name: str) -> int | None:
+        raw_value = pick(section, key, env_name, None)
+        if raw_value is None or raw_value == "":
+            return None
+        try:
+            return int(raw_value)
+        except (TypeError, ValueError):
+            try:
+                import grp
+
+                return grp.getgrnam(str(raw_value)).gr_gid
+            except (KeyError, ImportError) as exc:
+                raise AgentConfigError(f"{key} must be a gid or group name") from exc
+
+
     def float_value(section: dict, key: str, env_name: str, default: float) -> float:
         raw_value = pick(section, key, env_name, default)
         try:
@@ -305,6 +330,8 @@ def load_config(
         default_key_path=_as_path(
             pick(raw, "default_key_path", "SPANEL_CERT_DEFAULT_KEY_PATH", "/etc/ssl/cf-mail.key")
         ),
+        key_mode=mode_value(raw, "key_mode", "SPANEL_CERT_KEY_MODE", 0o600),
+        key_group=group_value(raw, "key_group", "SPANEL_CERT_KEY_GROUP"),
         state_path=_as_path(pick(raw, "state_path", "SPANEL_CERT_STATE_PATH", DEFAULT_STATE_PATH))
         or Path(DEFAULT_STATE_PATH),
         alerts_path=_as_path(

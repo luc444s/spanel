@@ -24,6 +24,7 @@ from pathlib import Path, PurePosixPath
 import tomllib
 
 DEFAULT_AGENT_CONFIG = Path("/etc/spanel/cert-agent.toml")
+DEFAULT_INSTALL_ROOT = Path("/etc/ssl/spanel/mail")
 CONTAINER_CONFIG_ROOT = PurePosixPath("/tmp/docker-mailserver")
 MANAGED_POSTFIX_RELATIVE = PurePosixPath("postfix/sni-spanel")
 MANAGED_DOVECOT_RELATIVE = PurePosixPath("spanel-local_name.conf")
@@ -44,6 +45,8 @@ class ConfigurationPlan:
     original_hostnames: tuple[str, ...]
     legacy_postfix_internal: str
     writes: dict[Path, str]
+    install_root: Path = DEFAULT_INSTALL_ROOT
+    key_gid: int | None = None
 
 
 def _run(command: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -168,6 +171,25 @@ def _replace_postfix_maps(text: str, maps: list[str]) -> str:
     )
 
 
+def _upsert_root_keys(text: str, values: dict[str, str]) -> str:
+    lines = text.splitlines()
+    first_section = next(
+        (index for index, line in enumerate(lines) if line.strip().startswith("[")),
+        len(lines),
+    )
+    root, rest = lines[:first_section], lines[first_section:]
+    for key, value in values.items():
+        pattern = re.compile(rf"^{re.escape(key)}\s*=")
+        replacement = f"{key} = {value}"
+        for index, line in enumerate(root):
+            if pattern.match(line):
+                root[index] = replacement
+                break
+        else:
+            root.append(replacement)
+    return "\n".join(root + rest).rstrip() + "\n"
+
+
 def _upsert_toml_section(text: str, name: str, body: str) -> str:
     block = f"[{name}]\n{body.strip()}\n"
     pattern = re.compile(
@@ -178,11 +200,21 @@ def _upsert_toml_section(text: str, name: str, body: str) -> str:
     return text.rstrip() + "\n\n" + block
 
 
+def _postfix_gid(container: str) -> int | None:
+    try:
+        result = _run(["docker", "exec", container, "id", "-g", "postfix"], check=False)
+    except ConfigureError:
+        return None
+    value = result.stdout.strip()
+    return int(value) if result.returncode == 0 and value.isdigit() else None
+
+
 def build_plan(
     *,
     container: str,
     config_root: Path,
     agent_config: Path,
+    install_root: Path = DEFAULT_INSTALL_ROOT,
 ) -> ConfigurationPlan:
     managed = set(_allowlist(agent_config))
     postfix_main = config_root / "postfix-main.cf"
@@ -250,6 +282,11 @@ def build_plan(
         f'postmap_command = ["docker", "exec", "{container}", "postmap", "{managed_internal}"]\n'
         f'reload_command = ["docker", "exec", "{container}", "postfix", "reload"]',
     )
+    key_gid = _postfix_gid(container)
+    if key_gid is not None:
+        agent_text = _upsert_root_keys(
+            agent_text, {"key_mode": '"640"', "key_group": str(key_gid)}
+        )
     agent_text = _upsert_toml_section(
         agent_text,
         "dovecot",
@@ -274,6 +311,8 @@ def build_plan(
         original_hostnames=tuple(sorted(original_hostnames)),
         legacy_postfix_internal=legacy_internal,
         writes=writes,
+        install_root=install_root,
+        key_gid=key_gid,
     )
 
 
@@ -382,6 +421,7 @@ def apply_plan(plan: ConfigurationPlan) -> None:
     stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     originals: dict[Path, bytes | None] = {}
     database_files: dict[Path, bytes | None] = {}
+    key_modes: dict[Path, tuple[int, int]] = {}
     changed = {
         path: content
         for path, content in plan.writes.items()
@@ -391,6 +431,14 @@ def apply_plan(plan: ConfigurationPlan) -> None:
         print("already configured; no files changed")
         return
     try:
+        if plan.key_gid is not None and plan.install_root.is_dir():
+            for key in sorted(plan.install_root.glob("*/privkey.pem")):
+                key_modes[key] = (
+                    key.stat().st_mode & 0o777,
+                    key.stat().st_gid,
+                )
+                os.chmod(key, 0o640)
+                os.chown(key, -1, plan.key_gid)
         for path, content in changed.items():
             originals[path] = path.read_bytes() if path.exists() else None
             database = path.with_name(f"{path.name}.db")
@@ -435,6 +483,9 @@ def apply_plan(plan: ConfigurationPlan) -> None:
                 path.unlink(missing_ok=True)
             else:
                 path.write_bytes(original)
+        for key, (mode, gid) in key_modes.items():
+            os.chmod(key, mode)
+            os.chown(key, -1, gid)
         for database, content in database_files.items():
             if content is None:
                 database.unlink(missing_ok=True)
@@ -458,6 +509,7 @@ def _print_plan(plan: ConfigurationPlan, *, as_json: bool) -> None:
         "config_root": str(plan.config_root),
         "managed_hostnames": list(plan.managed_hostnames),
         "legacy_hostnames": list(plan.legacy_hostnames),
+        "key_gid": plan.key_gid,
         "changes": changes,
     }
     if as_json:
@@ -466,6 +518,8 @@ def _print_plan(plan: ConfigurationPlan, *, as_json: bool) -> None:
     print(f"Docker Mailserver: {plan.container} ({plan.config_root})")
     print("Managed by Spanel: " + ", ".join(plan.managed_hostnames))
     print("Preserved legacy: " + (", ".join(plan.legacy_hostnames) or "none"))
+    if plan.key_gid is not None:
+        print(f"Private keys readable by gid {plan.key_gid} (mode 0640)")
     for item in changes:
         print(f"- {item['change']}: {item['path']}")
     print(
@@ -480,6 +534,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--container", default="mailserver")
     parser.add_argument("--config-root", type=Path)
     parser.add_argument("--agent-config", type=Path, default=DEFAULT_AGENT_CONFIG)
+    parser.add_argument("--install-root", type=Path, default=DEFAULT_INSTALL_ROOT)
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--json", action="store_true")
     return parser
@@ -493,6 +548,7 @@ def run(argv: list[str] | None = None) -> int:
             container=args.container,
             config_root=root,
             agent_config=args.agent_config,
+            install_root=args.install_root,
         )
         _print_plan(plan, as_json=args.json)
         if args.apply:

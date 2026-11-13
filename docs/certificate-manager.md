@@ -244,7 +244,9 @@ allowlist from `/etc/spanel/cert-agent.toml` and splits the current SNI state:
 - `postfix-main.cf` is updated to load both maps, and `dovecot.cf` gets an
   `!include_try` for the managed block;
 - the `[postfix]` and `[dovecot]` sections are written into the agent config
-  using `docker exec <container> ...`.
+  using `docker exec <container> ...`;
+- `key_mode = "640"` and `key_group = <postfix gid>` are written at the top
+  level so the Postfix user can read each renewed private key.
 
 `--apply` backs up every file it touches with a `.spanel-dms-<timestamp>.bak`
 suffix, runs `postmap`, then recreates the service with
@@ -255,6 +257,17 @@ plain restart is not enough: Docker Mailserver generates
 hostname is still present in `postconf`/`doveconf`, and rolls the files back
 (including the generated `.db`) if validation fails. Without `--apply` the script only prints the plan. It is idempotent: a
 second run reports "no changes required".
+
+The key permissions matter: the agent installs `privkey.pem` as `0600 root:root`
+and Postfix runs as an unprivileged user inside the container, so a 465/587
+handshake fails with `TLSV1_ALERT_INTERNAL_ERROR` while Dovecot (which runs as
+root) still works on 993. If the Postfix group cannot be detected, set the
+values manually in `/etc/spanel/cert-agent.toml`:
+
+```toml
+key_mode = "640"
+key_group = 107
+```
 
 ### Manual check
 
