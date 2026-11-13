@@ -36,7 +36,7 @@ export function Sidebar() {
   });
 
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
-    () => new Set([t("System"), t("Settings"), "System", "Settings"]),
+    () => new Set(),
   );
 
   function toggleSection(key: string) {
