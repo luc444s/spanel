@@ -72,5 +72,5 @@ DELETE /dns/cloudflare/zones/{zone_id}/records/{record_id}
 
 - Requirement: connected Cloudflare zones must be detected in Domains and the
   modal must support viewing, adding, editing and removing DNS records.
-- Commit: pending
-- Deployment: production server `https://spanel.systutor.com` pending
+- Commit: `b279969`
+- Deployment: production server `https://spanel.systutor.com` pending deploy
