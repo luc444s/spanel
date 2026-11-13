@@ -13,7 +13,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@syst
 import { Input } from "@systutor/shell/ui/input";
 import { GithubLink } from "../../shared/layout/GithubLink";
 import { useT } from "../../i18n/use-i18n";
-import { defaultLandingPath } from "./landing";
 
 type LocationState = {
   from?: {
@@ -41,7 +40,7 @@ export function LoginPage() {
       if (response.user.category === "driver") {
         navigate("/app/logistics/vehicle-sessions", { replace: true });
       } else {
-        navigate(requestedPath ?? defaultLandingPath(response.user.permissions), { replace: true });
+        navigate(requestedPath ?? "/app", { replace: true });
       }
     },
   });

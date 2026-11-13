@@ -2,7 +2,7 @@ import { createBrowserRouter, Navigate } from "react-router-dom";
 
 import { LoginPage } from "../features/auth/LoginPage";
 import { PluginRouteBoundary } from "../features/plugins/PluginRouteBoundary";
-import { listFrontendPluginRegistrations } from "../features/plugins/runtime";
+import { listFrontendPluginRegistrations, usePluginFrontendRuntime } from "../features/plugins/runtime";
 import { RequireAuth } from "../features/auth/RequireAuth";
 import { SystemDashboardPage } from "../features/system/SystemDashboardPage";
 import { PluginsPage } from "../features/system/PluginsPage";
@@ -21,7 +21,8 @@ function RootRedirect() {
 
 function AppIndexRedirect() {
   const permissions = useAuthStore((state) => state.permissions);
-  return <Navigate replace to={defaultLandingPath(permissions)} />;
+  const pluginRuntime = usePluginFrontendRuntime();
+  return <Navigate replace to={defaultLandingPath(permissions, pluginRuntime.navigation)} />;
 }
 
 const pluginRoutes = listFrontendPluginRegistrations().flatMap((registration) =>

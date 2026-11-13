@@ -1,15 +1,25 @@
 import { describe, expect, it } from "vitest";
 
 import { defaultLandingPath } from "../features/auth/landing";
-import { buildShellSidebarSections } from "../features/shell/navigation";
+import { buildShellSidebarSections, firstSelectableSidebarPath } from "../features/shell/navigation";
 
-describe("Domains and DNS product priority", () => {
-  it("is the landing page when the user can read domains", () => {
-    expect(defaultLandingPath(["domains.domains.read"])).toBe("/app/domains");
-    expect(defaultLandingPath([])).toBe("/app/dashboard");
+describe("Sidebar landing and ordering", () => {
+  it("lands on the first selectable sidebar option", () => {
+    expect(
+      defaultLandingPath(["domains.domains.read"], [
+        { to: "/app/domains", label: "Domains and DNS", group: "Administration" },
+        { to: "/app/apps", label: "Apps", group: "Administration" },
+      ]),
+    ).toBe("/app/domains");
+
+    expect(
+      defaultLandingPath(["core.plugin.manage"], []),
+    ).toBe("/app/dashboard");
+
+    expect(defaultLandingPath([], [])).toBe("/app/dashboard");
   });
 
-  it("is first inside Administration", () => {
+  it("keeps plugin navigation order as provided", () => {
     const sections = buildShellSidebarSections({
       permissions: [],
       pluginNavigation: [
@@ -22,9 +32,8 @@ describe("Domains and DNS product priority", () => {
     const group = administration?.items[0];
     expect(group?.kind).toBe("group");
     if (group?.kind === "group") {
-      expect(group.items[0]).toMatchObject({
-        to: "/app/domains", label: "Domains and DNS",
-      });
+      expect(group.items[0]).toMatchObject({ to: "/app/apps", label: "Apps" });
+      expect(firstSelectableSidebarPath(sections)).toBe("/app/apps");
     }
   });
 });

@@ -82,11 +82,6 @@ export function buildShellSidebarSections({
     }
 
     for (const [, group] of grouped) {
-      group.children.sort((left, right) => {
-        if (left.to === "/app/domains") return -1;
-        if (right.to === "/app/domains") return 1;
-        return 0;
-      });
       if (group.parent && group.children.length > 0) {
         sections.push({
           title: t(group.parent.label),
@@ -139,4 +134,17 @@ export function buildShellSidebarSections({
   }
 
   return sections;
+}
+
+export function firstSelectableSidebarPath(sections: ShellNavSection[]): string | null {
+  for (const section of sections) {
+    for (const item of section.items) {
+      if (item.kind === "link") return item.to;
+      if (item.kind === "group") {
+        const first = item.items.find((child) => child.kind === "link");
+        if (first) return first.to;
+      }
+    }
+  }
+  return null;
 }
