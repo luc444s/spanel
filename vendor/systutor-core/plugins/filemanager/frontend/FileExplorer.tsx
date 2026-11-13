@@ -1,6 +1,6 @@
 import {
   useCallback, useEffect, useMemo, useRef, useState,
-  type ChangeEvent, type DragEvent, type MouseEvent,
+  type ChangeEvent, type DragEvent, type MouseEvent, type ReactNode,
 } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -22,6 +22,23 @@ import { FileSidebar } from "./FileSidebar";
 import { FileTable } from "./FileTable";
 import { sortEntries, type SortKey, type SortState } from "./format";
 import { isCoarsePointer, isTextFile, isZipFile, parentPath, within } from "./fileUtils";
+import {
+  ArchiveIcon,
+  BackIcon,
+  DownloadIcon,
+  FolderIcon,
+  FolderPlusIcon,
+  ForwardIcon,
+  GridViewIcon,
+  HomeIcon,
+  ListViewIcon,
+  RefreshIcon,
+  RenameIcon,
+  SearchIcon,
+  TrashIcon,
+  UpIcon,
+  UploadIcon,
+} from "./FileIcons";
 import type { Entry, Listing, TextFile, UploadProgress } from "./types";
 
 const EMPTY: Entry[] = [];
@@ -486,10 +503,18 @@ export function FileExplorer({ provider, resourceId, onClose }: Props) {
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex gap-1">
-              <Button size="sm" variant="secondary" aria-label={t("Back")} disabled={nav.index === 0} onClick={back}>←</Button>
-              <Button size="sm" variant="secondary" aria-label={t("Forward")} disabled={nav.index >= nav.stack.length - 1} onClick={forward}>→</Button>
-              <Button size="sm" variant="secondary" aria-label={t("Up")} disabled={folder === ""} onClick={up}>↑</Button>
-              <Button size="sm" variant="secondary" aria-label={t("Refresh")} onClick={refresh}>⟳</Button>
+              <Button size="sm" variant="secondary" aria-label={t("Back")} disabled={nav.index === 0} onClick={back} className="px-2">
+                <BackIcon size={16} className="h-4 w-4" />
+              </Button>
+              <Button size="sm" variant="secondary" aria-label={t("Forward")} disabled={nav.index >= nav.stack.length - 1} onClick={forward} className="px-2">
+                <ForwardIcon size={16} className="h-4 w-4" />
+              </Button>
+              <Button size="sm" variant="secondary" aria-label={t("Up")} disabled={folder === ""} onClick={up} className="px-2">
+                <UpIcon size={16} className="h-4 w-4" />
+              </Button>
+              <Button size="sm" variant="secondary" aria-label={t("Refresh")} onClick={refresh} className="px-2">
+                <RefreshIcon size={16} className="h-4 w-4" />
+              </Button>
             </div>
             <nav aria-label={t("Breadcrumb")} className="flex min-w-0 flex-1 flex-wrap items-center gap-1 text-sm">
               <button type="button" className="text-primary underline" onClick={() => go("")}>{t("Home")}</button>
@@ -503,13 +528,15 @@ export function FileExplorer({ provider, resourceId, onClose }: Props) {
             </nav>
             <div className="relative w-40 shrink-0 sm:w-56">
               <Input
-                className="h-8 py-1 pl-7 text-xs"
+                className="h-8 py-1 pl-8 text-xs"
                 placeholder={t("Search in this folder")}
                 aria-label={t("Search in this folder")}
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
               />
-              <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs" aria-hidden>🔍</span>
+              <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden>
+                <SearchIcon size={14} className="h-3.5 w-3.5" />
+              </span>
             </div>
             <div className="flex shrink-0 overflow-hidden rounded-md border border-border" role="group" aria-label={t("View mode")}>
               <button
@@ -518,9 +545,9 @@ export function FileExplorer({ provider, resourceId, onClose }: Props) {
                 title={t("List view")}
                 aria-pressed={view === "list"}
                 onClick={() => setView("list")}
-                className={`px-2 py-1 text-sm ${view === "list" ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground hover:bg-accent"}`}
+                className={`inline-flex items-center justify-center px-2 py-1 ${view === "list" ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground hover:bg-accent"}`}
               >
-                ☰
+                <ListViewIcon size={16} className="h-4 w-4" />
               </button>
               <button
                 type="button"
@@ -528,16 +555,24 @@ export function FileExplorer({ provider, resourceId, onClose }: Props) {
                 title={t("Grid view")}
                 aria-pressed={view === "grid"}
                 onClick={() => setView("grid")}
-                className={`px-2 py-1 text-sm ${view === "grid" ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground hover:bg-accent"}`}
+                className={`inline-flex items-center justify-center px-2 py-1 ${view === "grid" ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground hover:bg-accent"}`}
               >
-                ▦
+                <GridViewIcon size={16} className="h-4 w-4" />
               </button>
             </div>
           </div>
           <div className="flex gap-1 overflow-x-auto pb-0.5 md:hidden">
             {rootFolders.map((name) => (
-              <Button key={name} size="sm" variant={folder === name ? "primary" : "secondary"}
-                onClick={() => go(name)}>📁 {name}</Button>
+              <Button
+                key={name}
+                size="sm"
+                variant={folder === name ? "primary" : "secondary"}
+                className="inline-flex items-center gap-1.5"
+                onClick={() => go(name)}
+              >
+                <FolderIcon size={14} className="h-3.5 w-3.5" />
+                {name}
+              </Button>
             ))}
           </div>
         </div>
@@ -545,17 +580,41 @@ export function FileExplorer({ provider, resourceId, onClose }: Props) {
       actions={canWrite ? (
         <>
           <input ref={inputRef} className="hidden" type="file" multiple onChange={onFileChange} />
-          <Button size="sm" onClick={() => inputRef.current?.click()}>⬆ {t("Upload files")}</Button>
-          <Button size="sm" variant="secondary" onClick={askNewFolder}>📁 {t("New folder")}</Button>
-          <Button size="sm" variant="secondary" disabled={!single} onClick={() => single && void download(single.name)}>⬇ {t("Download")}</Button>
-          <Button size="sm" variant="secondary" disabled={!selectedEntries.length} onClick={() => askCompress(selectedEntries.map((entry) => entry.name))}>🗜 {t("Compress")}</Button>
-          <Button size="sm" variant="secondary" disabled={!single || !isZipFile(single.name)} onClick={() => single && setExtracting(single.name)}>📂 {t("Extract")}</Button>
-          <Button size="sm" variant="secondary" disabled={!single} onClick={() => single && askRename(single)}>✏ {t("Rename")}</Button>
-          <Button size="sm" variant="secondary" disabled={!selectedEntries.length} onClick={() => setDeleting(selectedEntries)}>🗑 {t("Delete")}</Button>
+          <Button size="sm" className="inline-flex items-center gap-1.5" onClick={() => inputRef.current?.click()}>
+            <UploadIcon size={15} className="h-4 w-4" />
+            {t("Upload files")}
+          </Button>
+          <Button size="sm" variant="secondary" className="inline-flex items-center gap-1.5" onClick={askNewFolder}>
+            <FolderPlusIcon size={15} className="h-4 w-4" />
+            {t("New folder")}
+          </Button>
+          <Button size="sm" variant="secondary" className="inline-flex items-center gap-1.5" disabled={!single} onClick={() => single && void download(single.name)}>
+            <DownloadIcon size={15} className="h-4 w-4" />
+            {t("Download")}
+          </Button>
+          <Button size="sm" variant="secondary" className="inline-flex items-center gap-1.5" disabled={!selectedEntries.length} onClick={() => askCompress(selectedEntries.map((entry) => entry.name))}>
+            <ArchiveIcon size={15} className="h-4 w-4" />
+            {t("Compress")}
+          </Button>
+          <Button size="sm" variant="secondary" className="inline-flex items-center gap-1.5" disabled={!single || !isZipFile(single.name)} onClick={() => single && setExtracting(single.name)}>
+            <ArchiveIcon size={15} className="h-4 w-4" />
+            {t("Extract")}
+          </Button>
+          <Button size="sm" variant="secondary" className="inline-flex items-center gap-1.5" disabled={!single} onClick={() => single && askRename(single)}>
+            <RenameIcon size={15} className="h-4 w-4" />
+            {t("Rename")}
+          </Button>
+          <Button size="sm" variant="secondary" className="inline-flex items-center gap-1.5" disabled={!selectedEntries.length} onClick={() => setDeleting(selectedEntries)}>
+            <TrashIcon size={15} className="h-4 w-4" />
+            {t("Delete")}
+          </Button>
         </>
       ) : (
         <>
-          <Button size="sm" variant="secondary" disabled={!single} onClick={() => single && void download(single.name)}>⬇ {t("Download")}</Button>
+          <Button size="sm" variant="secondary" className="inline-flex items-center gap-1.5" disabled={!single} onClick={() => single && void download(single.name)}>
+            <DownloadIcon size={15} className="h-4 w-4" />
+            {t("Download")}
+          </Button>
           <p className="self-center text-xs text-muted-foreground">{t("Read-only mode")}</p>
         </>
       )}
@@ -821,12 +880,12 @@ type BackgroundActions = {
 };
 
 function backgroundItems(canWrite: boolean, actions: BackgroundActions, t: Translator) {
-  const item = (label: string, run: () => void) => (
+  const item = (key: string, label: ReactNode, run: () => void) => (
     <button
-      key={label}
+      key={key}
       type="button"
       role="menuitem"
-      className="block w-full px-3 py-1.5 text-left hover:bg-accent"
+      className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-accent"
       onClick={() => {
         actions.close();
         run();
@@ -838,10 +897,10 @@ function backgroundItems(canWrite: boolean, actions: BackgroundActions, t: Trans
 
   return (
     <>
-      {canWrite ? item(`⬆ ${t("Upload files")}`, actions.onUpload) : null}
-      {canWrite ? item(`📁 ${t("New folder")}`, actions.onNewFolder) : null}
-      {item(`⟳ ${t("Refresh")}`, actions.onRefresh)}
-      {item(`🏠 ${t("Go home")}`, actions.onHome)}
+      {canWrite ? item("upload", <><UploadIcon size={14} className="h-3.5 w-3.5" />{t("Upload files")}</>, actions.onUpload) : null}
+      {canWrite ? item("new-folder", <><FolderPlusIcon size={14} className="h-3.5 w-3.5" />{t("New folder")}</>, actions.onNewFolder) : null}
+      {item("refresh", <><RefreshIcon size={14} className="h-3.5 w-3.5" />{t("Refresh")}</>, actions.onRefresh)}
+      {item("home", <><HomeIcon size={14} className="h-3.5 w-3.5" />{t("Go home")}</>, actions.onHome)}
     </>
   );
 }

@@ -2,6 +2,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { useT } from "@/i18n/use-i18n";
+import { CloseIcon, FolderIcon } from "./FileIcons";
 
 type Props = {
   title: string;
@@ -61,7 +62,9 @@ export function FileManagerModal({
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="flex items-center gap-3 border-b border-border bg-chrome px-4 py-2 text-chrome-foreground">
-          <span className="text-lg" aria-hidden>📁</span>
+          <span className="text-chrome-muted" aria-hidden>
+            <FolderIcon size={18} className="h-[18px] w-[18px]" />
+          </span>
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-sm font-semibold">{title}</h2>
             <p className="truncate text-xs text-chrome-muted">{subtitle}</p>
@@ -71,9 +74,9 @@ export function FileManagerModal({
             type="button"
             onClick={onClose}
             aria-label={t("Close")}
-            className="rounded px-2 py-1 text-lg leading-none text-chrome-muted hover:bg-chrome-foreground/10 hover:text-chrome-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="rounded p-1.5 text-chrome-muted hover:bg-chrome-foreground/10 hover:text-chrome-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
-            ✕
+            <CloseIcon size={18} className="h-[18px] w-[18px]" />
           </button>
         </div>
 

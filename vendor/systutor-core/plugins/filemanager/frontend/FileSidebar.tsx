@@ -1,5 +1,6 @@
 import { cn } from "@systutor/shell/ui/cn";
 import { useT } from "@/i18n/use-i18n";
+import { FolderIcon, HomeIcon } from "./FileIcons";
 
 type Props = {
   folders: string[];
@@ -22,7 +23,8 @@ export function FileSidebar({ folders, current, onGo }: Props) {
           current === "" && "bg-accent font-medium",
         )}
       >
-        <span aria-hidden>🏠</span> {t("Home")}
+        <HomeIcon size={15} className="h-4 w-4 shrink-0" />
+        {t("Home")}
       </button>
       {folders.map((name) => {
         const active = current === name;
@@ -36,7 +38,7 @@ export function FileSidebar({ folders, current, onGo }: Props) {
               active && "bg-accent font-medium",
             )}
           >
-            <span aria-hidden>📁</span>
+            <FolderIcon size={15} className="h-4 w-4 shrink-0" />
             <span className="truncate">{name}</span>
           </button>
         );

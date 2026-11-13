@@ -2,7 +2,7 @@ import { useRef, type MouseEvent, type TouchEvent } from "react";
 
 import { useT } from "@/i18n/use-i18n";
 import { formatSize, formatType } from "./format";
-import { fileIcon } from "./fileUtils";
+import { FileTypeIcon } from "./FileIcons";
 import type { Entry } from "./types";
 
 type Props = {
@@ -87,7 +87,9 @@ export function FileGrid({ entries, selected, onSelect, onToggle, onOpen, onCont
               onClick={(event) => event.stopPropagation()}
               onChange={(event) => onToggle(entry, event.target.checked)}
             />
-            <span className="text-4xl leading-none" aria-hidden>{fileIcon(entry.name, entry.directory)}</span>
+            <span className="flex h-10 w-10 items-center justify-center text-muted-foreground" aria-hidden>
+              <FileTypeIcon name={entry.name} directory={entry.directory} size={32} className="h-8 w-8" />
+            </span>
             <p className="line-clamp-2 w-full break-all text-xs font-medium">{entry.name}</p>
             <p className="text-[11px] text-muted-foreground">
               {entry.directory ? formatType(entry.name, true) : `${formatType(entry.name, false)} · ${formatSize(entry.size)}`}

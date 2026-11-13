@@ -31,20 +31,4 @@ export function isCoarsePointer() {
   return typeof window !== "undefined" && Boolean(window.matchMedia?.("(pointer: coarse)").matches);
 }
 
-const FILE_ICONS: Record<string, string> = {
-  png: "🖼️", jpg: "🖼️", jpeg: "🖼️", gif: "🖼️", webp: "🖼️", svg: "🖼️", avif: "🖼️",
-  zip: "🗜️", tar: "🗜️", gz: "🗜️", rar: "🗜️", "7z": "🗜️",
-  pdf: "📕", doc: "📘", docx: "📘", xls: "📗", xlsx: "📗", ppt: "📙", pptx: "📙",
-  mp3: "🎵", wav: "🎵", ogg: "🎵", flac: "🎵",
-  mp4: "🎬", mov: "🎬", mkv: "🎬", webm: "🎬",
-  php: "🐘", js: "📜", jsx: "📜", ts: "📜", tsx: "📜", css: "🎨", scss: "🎨",
-  json: "🧾", xml: "🧾", yml: "🧾", yaml: "🧾", sql: "🗄️", md: "📝", txt: "📄",
-  html: "🌐", htm: "🌐", sh: "⚙️", ini: "⚙️", conf: "⚙️", env: "⚙️",
-};
 
-export function fileIcon(name: string, directory: boolean) {
-  if (directory) return "📁";
-  const dot = name.lastIndexOf(".");
-  const extension = dot < 0 ? "" : name.slice(dot + 1).toLowerCase();
-  return FILE_ICONS[extension] ?? "📄";
-}

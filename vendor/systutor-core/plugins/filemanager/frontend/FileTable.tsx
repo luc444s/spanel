@@ -2,6 +2,7 @@ import { useRef, type MouseEvent, type TouchEvent } from "react";
 
 import { useT } from "@/i18n/use-i18n";
 import { formatDate, formatSize, formatType, type SortKey, type SortState } from "./format";
+import { FileTypeIcon } from "./FileIcons";
 import type { Entry } from "./types";
 
 type Props = {
@@ -114,8 +115,10 @@ export function FileTable({
                 />
               </td>
               <td className="truncate p-2">
-                <span className="mr-2" aria-hidden>{entry.directory ? "📁" : "📄"}</span>
-                <span className={entry.directory ? "font-medium" : ""}>{entry.name}</span>
+                <span className="mr-2 inline-flex align-middle text-muted-foreground" aria-hidden>
+                  <FileTypeIcon name={entry.name} directory={entry.directory} size={16} className="h-4 w-4" />
+                </span>
+                <span className={entry.directory ? "font-medium align-middle" : "align-middle"}>{entry.name}</span>
               </td>
               <td className="hidden p-2 text-muted-foreground sm:table-cell">
                 {formatType(entry.name, entry.directory)}
