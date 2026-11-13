@@ -24,15 +24,16 @@ describe("Tutora theme", () => {
     }
   });
 
-  it("offers a square Catppuccin Mocha variant with Tutora orange", () => {
-    const mocha = themes.catpuccin_mocha;
+  it("shifts the complete Catppuccin Mocha hierarchy into orange", () => {
     const tutoraMocha = themes.tutora_catpuccin_mocha;
 
-    expect(tutoraMocha.background).toBe(mocha.background);
-    expect(tutoraMocha.card).toBe(mocha.card);
-    expect(tutoraMocha.surface).toBe(mocha.surface);
-    expect(tutoraMocha.primary).toBe("23 88% 57%");
+    expect(tutoraMocha.background).toBe("20 24% 14%");
+    expect(tutoraMocha.card).toBe("21 21% 21%");
+    expect(tutoraMocha.secondary).toBe("23 22% 29%");
+    expect(tutoraMocha.surfaceAlt).toBe("22 23% 18%");
+    expect(tutoraMocha.primary).toBe("22 86% 72%");
     expect(tutoraMocha.ring).toBe(tutoraMocha.primary);
+    expect(tutoraMocha.primary).not.toBe(themes.tutora.primary);
     expect(tutoraMocha.enforceRadius).toBe("none");
     expect(tutoraMocha.enforceShadow).toBe("none");
   });
