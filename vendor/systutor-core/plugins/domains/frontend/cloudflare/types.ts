@@ -82,3 +82,31 @@ export type CloudflareDisconnectResponse = {
   pending_flows: number;
   cancelled_flows: number;
 };
+
+export type CloudflareProvisionRecord = {
+  id: string | null;
+  name: string;
+  type: string;
+  content: string;
+  ttl: number;
+  proxied: boolean;
+};
+
+export type CloudflareProvisionPlan = {
+  domain: string;
+  ipv4: string;
+  www: boolean;
+  replace: boolean;
+  zone_action: string;
+  zone: CloudflareZone | null;
+  nameservers: string[];
+  desired_records: CloudflareProvisionRecord[];
+  conflicts: CloudflareProvisionRecord[];
+  actions: Array<Record<string, unknown>>;
+  drift: boolean;
+};
+
+export type CloudflareProvisionApply = CloudflareProvisionPlan & {
+  applied: boolean;
+  records: CloudflareProvisionRecord[];
+};

@@ -3,6 +3,8 @@ import { ApiError, apiRequest } from "@systutor/shell/api/client";
 import type {
   CloudflareClientStatus,
   CloudflareDisconnectResponse,
+  CloudflareProvisionApply,
+  CloudflareProvisionPlan,
   CloudflareRecord,
   CloudflareRecordDeleteResponse,
   CloudflareRecordList,
@@ -80,4 +82,26 @@ export const disconnectCloudflare = () =>
   apiRequest<CloudflareDisconnectResponse>(`${BASE}/disconnect`, {
     method: "POST",
     body: JSON.stringify({ apply: true }),
+  });
+
+export const provisionPlan = (payload: {
+  domain: string;
+  ipv4: string;
+  www: boolean;
+  replace: boolean;
+}) =>
+  apiRequest<CloudflareProvisionPlan>(`${BASE}/provision/plan`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+export const provisionApply = (payload: {
+  domain: string;
+  ipv4: string;
+  www: boolean;
+  replace: boolean;
+}) =>
+  apiRequest<CloudflareProvisionApply>(`${BASE}/provision/apply`, {
+    method: "POST",
+    body: JSON.stringify(payload),
   });

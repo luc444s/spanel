@@ -116,3 +116,19 @@ export function errorMessageFrom(error: unknown): string {
   }
   return cloudflareErrorMessage(null);
 }
+
+export function hasZoneWriteScope(status: CloudflareStatus | null): boolean {
+  return Boolean(status?.scopes?.some((scope) => /zone\s*write/i.test(scope)));
+}
+
+export function canProvisionCloudflare(status: CloudflareStatus | null): boolean {
+  return isCloudflareConnected(status) && hasZoneWriteScope(status);
+}
+
+export function provisionStateMessage(status: CloudflareStatus | null): string | null {
+  if (!status || !isCloudflareConnected(status)) return null;
+  if (!hasZoneWriteScope(status)) {
+    return "Cloudflare is connected without Zone Write permission. Reconnect to enable provisioning.";
+  }
+  return null;
+}

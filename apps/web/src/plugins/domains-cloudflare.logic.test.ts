@@ -3,14 +3,17 @@ import { describe, expect, it } from "vitest";
 import {
   CLOUDFLARE_FLOW_MAX_MS,
   canManageCloudflareClient,
+  canProvisionCloudflare,
   canRegisterClient,
   canUseCloudflare,
   cloudflareErrorMessage,
   errorMessageFrom,
   flowDeadline,
+  hasZoneWriteScope,
   isCloudflareConnected,
   needsClientRegistration,
   pollDecision,
+  provisionStateMessage,
   zoneCount,
 } from "../../../../vendor/systutor-core/plugins/domains/frontend/cloudflare/logic";
 
@@ -23,6 +26,11 @@ const connected = {
   expires_at: null,
   status: "active",
   updated_at: null,
+};
+
+const connectedProvisioning = {
+  ...connected,
+  scopes: ["Zone Read", "Zone Write", "DNS Read", "DNS Write", "offline_access"],
 };
 
 describe("Cloudflare panel policy", () => {
@@ -89,5 +97,15 @@ describe("Cloudflare panel policy", () => {
     expect(zoneCount(undefined)).toBe(0);
     expect(zoneCount([])).toBe(0);
     expect(zoneCount([{ id: "1" }, { id: "2" }])).toBe(2);
+  });
+
+  it("detects Zone Write and provisioning eligibility", () => {
+    expect(hasZoneWriteScope(null)).toBe(false);
+    expect(hasZoneWriteScope(connected)).toBe(false);
+    expect(hasZoneWriteScope(connectedProvisioning)).toBe(true);
+    expect(canProvisionCloudflare(connected)).toBe(false);
+    expect(canProvisionCloudflare(connectedProvisioning)).toBe(true);
+    expect(provisionStateMessage(connected)).toMatch(/Zone Write/);
+    expect(provisionStateMessage(connectedProvisioning)).toBeNull();
   });
 });
