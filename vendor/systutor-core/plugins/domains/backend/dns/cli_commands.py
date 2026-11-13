@@ -10,7 +10,7 @@ import sys
 import time
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from plugins.domains.backend.cloudflare.client import (
     CloudflareClient,
@@ -21,6 +21,7 @@ from plugins.domains.backend.cloudflare.config import (
     CloudflareConfig,
     CloudflareConfigError,
 )
+from plugins.domains.backend.cloudflare.provisioning import CloudflareProvisioningService
 from plugins.domains.backend.cloudflare.service import CloudflareService
 from plugins.domains.backend.dns.client import PowerDnsClient
 from plugins.domains.backend.dns.errors import (
@@ -235,7 +236,7 @@ def _nameserver_plan(args: argparse.Namespace, client: PowerDnsClient, factory: 
         lines=[
             "nameserver plan",
             f"settings drift: {payload['settings_fields']}",
-            f"zone changes: {len(payload['zones'])}",
+            f"zone changes: {len(cast(list[object], payload['zones']))}",
             str(payload["warning"]),
         ],
     )
@@ -627,14 +628,14 @@ def _cloudflare_register(args: argparse.Namespace, factory: Any) -> int:
             "SUCCESS Cloudflare OAuth client registered",
             f"Client ID: {payload['client_id']}",
             f"Redirect URI: {payload['redirect_uri']}",
-            f"Scopes: {', '.join(payload['scopes'])}",
+            f"Scopes: {', '.join(cast(list[str], payload['scopes']))}",
         ]
     else:
         lines = [
             "Cloudflare OAuth registration plan",
             f"Account: {payload['account_id']}",
             f"Redirect URI: {payload['redirect_uri']}",
-            f"Scopes: {', '.join(payload['scopes'])}",
+            f"Scopes: {', '.join(cast(list[str], payload['scopes']))}",
             "Client secret: <redacted>",
             "dry-run; pass --apply to register",
         ]
@@ -666,7 +667,7 @@ def _cloudflare_connect(args: argparse.Namespace, factory: Any) -> int:
         time.sleep(min(1.0, max(0.0, deadline - time.monotonic())))
         with sessions() as db:
             state = str(
-                CloudflareService(db, None, client, config).flow_status(start["flow_id"])[
+                CloudflareService(db, None, client, config).flow_status(str(start["flow_id"]))[
                     "status"
                 ]
             )
@@ -689,7 +690,7 @@ def _cloudflare_connect(args: argparse.Namespace, factory: Any) -> int:
     lines = [
         "SUCCESS Cloudflare connected",
         f"Account: {connection['account_name']}",
-        f"Scopes: {', '.join(connection['scopes'])}",
+        f"Scopes: {', '.join(cast(list[str], connection['scopes']))}",
         f"Zones discovered: {len(zones)}",
         *(
             f"  {zone['name']}  {zone['status']}  {zone['record_count']} records"
@@ -707,7 +708,7 @@ def _cloudflare_status(args: argparse.Namespace, factory: Any) -> int:
     lines = [
         "Cloudflare connected" if payload["connected"] else "Cloudflare not connected",
         f"Account: {payload['account_name']} ({payload['account_id']})",
-        f"Scopes: {', '.join(payload['scopes'])}",
+        f"Scopes: {', '.join(cast(list[str], payload['scopes']))}",
         f"Status: {payload['status']}",
         f"Expires: {payload['expires_at']}",
     ]
@@ -766,7 +767,8 @@ def _cloudflare_records_list(args: argparse.Namespace, factory: Any) -> int:
             (
                 zone
                 for zone in zones
-                if zone["id"] == needle or zone["name"].rstrip(".") == needle.rstrip(".")
+                if zone["id"] == needle
+                or str(zone["name"]).rstrip(".") == needle.rstrip(".")
             ),
             None,
         )
@@ -790,3 +792,61 @@ def _cloudflare_records_list(args: argparse.Namespace, factory: Any) -> int:
     ]
     _emit(payload, json_output=args.json, lines=lines)
     return 0
+
+
+def _provision_lines(payload: dict[str, Any], *, applied: bool) -> list[str]:
+    action = "created" if payload["zone_action"] == "create" else "reused"
+    zone = payload.get("zone")
+    zone_name = zone.get("name") if isinstance(zone, dict) else payload["domain"]
+    lines = [
+        f"Cloudflare zone: {action} {zone_name}",
+        *(
+            f"  {record['name']} {record['type']} {record['content']} "
+            f"TTL Auto, DNS only"
+            for record in payload["desired_records"]
+        ),
+    ]
+    nameservers = payload.get("nameservers") or []
+    if nameservers:
+        lines.append("Nameservers: " + ", ".join(str(value) for value in nameservers))
+    if payload["zone_action"] == "create":
+        lines.append(
+            "Delegate the domain at its registrar to the returned Cloudflare nameservers."
+        )
+    if payload.get("conflicts") and not payload.get("replace"):
+        lines.append("Conflicts block apply; repeat plan and apply with --replace.")
+    lines.append("Applied successfully." if applied else "Plan only; no Cloudflare changes made.")
+    return lines
+
+
+def _cloudflare_provision(args: argparse.Namespace, factory: Any) -> int:
+    config, client, sessions = _cloudflare_runtime(args, factory)
+    with sessions() as db:
+        provisioner = CloudflareProvisioningService(
+            CloudflareService(db, None, client, config)
+        )
+        should_apply = (
+            args.cloudflare_provision_command == "apply" and bool(args.apply)
+        )
+        if should_apply:
+            payload = provisioner.apply_for_tenant(
+                args.tenant,
+                domain=args.domain,
+                ipv4=args.ipv4,
+                www=args.www,
+                replace=args.replace,
+            )
+        else:
+            payload = provisioner.plan_for_tenant(
+                args.tenant,
+                domain=args.domain,
+                ipv4=args.ipv4,
+                www=args.www,
+                replace=args.replace,
+            )
+    _emit(
+        payload,
+        json_output=args.json,
+        lines=_provision_lines(payload, applied=should_apply),
+    )
+    return 0 if should_apply or not payload["drift"] else 3

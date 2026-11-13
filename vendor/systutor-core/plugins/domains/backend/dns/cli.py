@@ -18,6 +18,7 @@ from plugins.domains.backend.cloudflare.config import CloudflareConfig
 from plugins.domains.backend.dns.cli_commands import (
     _cloudflare_connect,
     _cloudflare_disconnect,
+    _cloudflare_provision,
     _cloudflare_records_list,
     _cloudflare_register,
     _cloudflare_status,
@@ -168,6 +169,26 @@ def build_parser() -> argparse.ArgumentParser:
     cf_records_list.add_argument("zone")
     cf_records_list.add_argument("--tenant", required=True)
     _add_db(cf_records_list)
+
+    provision = cloudflare_commands.add_parser(
+        "provision", help="Plan or apply a Cloudflare zone and origin records"
+    )
+    provision_commands = provision.add_subparsers(
+        dest="cloudflare_provision_command", required=True
+    )
+    for name, help_text in (
+        ("plan", "Plan a Cloudflare zone and DNS-only origin records."),
+        ("apply", "Apply a Cloudflare zone and DNS-only origin records."),
+    ):
+        command = _leaf(provision_commands, name, help_text)
+        command.add_argument("domain")
+        command.add_argument("--tenant", required=True)
+        command.add_argument("--ipv4", required=True)
+        command.add_argument("--www", action="store_true")
+        command.add_argument("--replace", action="store_true")
+        _add_db(command)
+        if name == "apply":
+            command.add_argument("--apply", action="store_true")
     return parser
 
 
@@ -245,6 +266,8 @@ def run(
                 return _cloudflare_zones_list(args, session_factory)
             if args.cloudflare_command == "records":
                 return _cloudflare_records_list(args, session_factory)
+            if args.cloudflare_command == "provision":
+                return _cloudflare_provision(args, session_factory)
             raise DnsValidationError("unknown cloudflare command")
         if args.command == "doctor":
             return _doctor(args, active)  # type: ignore[arg-type]

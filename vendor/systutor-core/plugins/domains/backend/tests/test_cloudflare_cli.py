@@ -46,8 +46,9 @@ class FakeCloudflare:
         self.scope_calls += 1
         return [
             {"id": "1", "name": "Zone Read"},
-            {"id": "2", "name": "DNS Read"},
-            {"id": "3", "name": "DNS Write"},
+            {"id": "2", "name": "Zone Write"},
+            {"id": "3", "name": "DNS Read"},
+            {"id": "4", "name": "DNS Write"},
         ]
 
     def register_client(self, **kwargs):
@@ -74,6 +75,24 @@ class FakeCloudflare:
 
     def list_records(self, credentials, zone_id, refresh=None):
         return list(self.records)
+
+    def create_record(self, credentials, zone_id, payload, refresh=None):
+        created = CloudflareRecord(
+            f"r{len(self.records) + 1}",
+            str(payload["name"]),
+            str(payload["type"]),
+            str(payload["content"]),
+            int(payload["ttl"]),
+            bool(payload["proxied"]),
+            None,
+            None,
+            None,
+        )
+        self.records.append(created)
+        return created
+
+    def delete_record(self, credentials, zone_id, record_id, refresh=None):
+        self.records = [item for item in self.records if item.id != record_id]
 
     def revoke(self, **kwargs):
         self.revoked.append(kwargs["token"])
@@ -133,7 +152,7 @@ def seed_connection(engine, config) -> None:
                 refresh_ciphertext=None,
                 refresh_nonce=None,
                 key_version=access.key_version,
-                scopes_json=["Zone Read", "DNS Read", "DNS Write"],
+                scopes_json=["Zone Read", "Zone Write", "DNS Read", "DNS Write"],
                 expires_at=datetime.now(UTC) + timedelta(hours=1),
                 status="active",
             )
@@ -338,5 +357,46 @@ def test_disconnect_plan_apply_and_idempotence(tmp_path, capsys) -> None:
         )
         assert code == 0
         assert "already disconnected" in capsys.readouterr().out
+    finally:
+        engine.dispose()
+
+
+def test_provision_plan_apply_and_json_contract(tmp_path, capsys) -> None:
+    engine, config, fake, factory = build(tmp_path)
+    try:
+        seed_connection(engine, config)
+        args = [
+            "cloudflare",
+            "provision",
+            "apply",
+            "example.com",
+            "--tenant",
+            "t1",
+            "--ipv4",
+            "192.0.2.80",
+            "--www",
+            "--json",
+        ]
+        assert run(
+            args,
+            session_factory=factory,
+            cloudflare_client=fake,
+            cloudflare_config=config,
+        ) == 3
+        plan = json.loads(capsys.readouterr().out)
+        assert plan["drift"] is True
+        assert all(record["proxied"] is False for record in plan["desired_records"])
+        assert len(fake.records) == 1
+
+        assert run(
+            [*args, "--apply"],
+            session_factory=factory,
+            cloudflare_client=fake,
+            cloudflare_config=config,
+        ) == 0
+        applied = json.loads(capsys.readouterr().out)
+        assert applied["applied"] is True
+        assert applied["drift"] is False
+        assert [record["type"] for record in applied["records"]] == ["A", "CNAME"]
     finally:
         engine.dispose()
