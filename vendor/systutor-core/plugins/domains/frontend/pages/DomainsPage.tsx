@@ -14,6 +14,7 @@ import { Alert } from "@systutor/shell/ui/alert";
 import { Button } from "@systutor/shell/ui/button";
 import { Dialog } from "@systutor/shell/ui/dialog";
 import { Input } from "@systutor/shell/ui/input";
+import { Select } from "@systutor/shell/ui/select";
 import { toast } from "@systutor/shell/ui/toast";
 import { t } from "@/i18n";
 import { DomainsTable } from "../components/DomainsTable";
@@ -117,9 +118,10 @@ export default function DomainsPage() {
   const ownSites = sites.filter(
     (site) => !site.tenant_id || site.tenant_id === currentTenant?.id
   );
-  const selectedSite = ownSites.find((site) => site.site_id === siteId);
+  const selectedSite = addDestinationSites.find((site) => site.site_id === siteId)
+    ?? ownSites.find((site) => site.site_id === siteId);
   const linkTarget
-    = ownSites.find((site) => site.site_id === linkSiteId) ?? ownSites[0];
+    = linkDestinationSites.find((site) => site.site_id === linkSiteId) ?? linkDestinationSites[0];
   const dnsZones = zonesQuery.data?.items ?? [];
   const cloudflareZones = cloudflareZonesQuery.data?.items ?? [];
   const activeZone = dnsDomain ? longestOwnedZone(dnsDomain.domain, dnsZones) : null;
@@ -136,6 +138,19 @@ export default function DomainsPage() {
     && !needsClientRegistration(cloudflareClientQuery.data ?? null);
   const cfNeedsZoneWrite = cfEligible && !hasZoneWriteScope(cloudflareStatusQuery.data ?? null);
   const cfNeedsRepair = needsClientRegistration(cloudflareClientQuery.data ?? null);
+
+  const existingDomainItem = useMemo(
+    () => items.find((item) => normalizeDnsName(item.domain) === normalizedAddDomain),
+    [items, normalizedAddDomain]
+  );
+  const addDestinationSites = useMemo(
+    () => ownSites.filter((site) => !existingDomainItem?.site_id || existingDomainItem.site_id !== site.site_id),
+    [ownSites, existingDomainItem]
+  );
+  const linkDestinationSites = useMemo(
+    () => ownSites.filter((site) => !linking?.site_id || linking.site_id !== site.site_id),
+    [ownSites, linking]
+  );
 
   function resetCloudflareState() {
     setCfOpen(false);
@@ -239,7 +254,8 @@ export default function DomainsPage() {
   }
 
   function openLink(item: DomainItem) {
-    setLinkSiteId(ownSites[0]?.site_id ?? "");
+    const candidates = ownSites.filter((site) => !item.site_id || item.site_id !== site.site_id);
+    setLinkSiteId(candidates[0]?.site_id ?? "");
     setWww(false);
     setLinking(item);
   }
@@ -321,10 +337,16 @@ export default function DomainsPage() {
             <Input
               value={domain}
               onChange={(event) => {
-                setDomain(event.target.value);
+                const next = event.target.value;
+                setDomain(next);
                 setCfPlan(null);
                 setCfApplyResult(null);
                 setCfError(null);
+                const normalized = normalizeDomainInput(next);
+                const existing = items.find((item) => normalizeDnsName(item.domain) === normalized);
+                if (siteId && existing?.site_id === siteId) {
+                  setSiteId(RESERVAR);
+                }
               }}
               placeholder={t("example.com")}
               autoFocus
@@ -332,19 +354,17 @@ export default function DomainsPage() {
           </label>
           <label className="block space-y-1 text-sm text-foreground">
             <span>{t("Destination")}</span>
-            <select
-              className="w-full rounded-md border border-input bg-background px-2 py-2 text-sm"
+            <Select
               value={siteId}
-              onChange={(event) => setSiteId(event.target.value)}
-            >
-              <option value={RESERVAR}>{t("Reserve only (do not publish)")}</option>
-              {ownSites.map((site) => (
-                <option key={site.site_id} value={site.site_id}>
-                  {site.container}
-                  {site.primary_domain ? ` (${site.primary_domain})` : ""}
-                </option>
-              ))}
-            </select>
+              onChange={setSiteId}
+              options={[
+                { value: RESERVAR, label: t("Reserve only (do not publish)") },
+                ...addDestinationSites.map((site) => ({
+                  value: site.site_id,
+                  label: `${site.container}${site.primary_domain ? ` (${site.primary_domain})` : ""}`,
+                })),
+              ]}
+            />
             <span className="text-xs text-muted-foreground">
               {selectedSite
                 ? t("The domain will be published on {container}. The Traefik route will be created and the certificate requested.", { container: selectedSite.container })
@@ -559,18 +579,14 @@ export default function DomainsPage() {
         </p>
         <label className="mt-3 block space-y-1 text-sm text-foreground">
           <span>{t("Site")}</span>
-          <select
-            className="w-full rounded-md border border-input bg-background px-2 py-2 text-sm"
+          <Select
             value={linkTarget?.site_id ?? ""}
-            onChange={(event) => setLinkSiteId(event.target.value)}
-          >
-            {ownSites.map((site) => (
-              <option key={site.site_id} value={site.site_id}>
-                {site.container}
-                {site.primary_domain ? ` (${site.primary_domain})` : ""}
-              </option>
-            ))}
-          </select>
+            onChange={setLinkSiteId}
+            options={linkDestinationSites.map((site) => ({
+              value: site.site_id,
+              label: `${site.container}${site.primary_domain ? ` (${site.primary_domain})` : ""}`,
+            }))}
+          />
         </label>
         <label className="mt-3 flex items-center gap-2 text-sm text-foreground">
           <input
