@@ -4,6 +4,8 @@
 The role is intentionally NOT `tenant_admin`: the core boot sync replaces the
 `tenant_admin` permission set on every start. A separate role survives restarts
 and can be assigned to every active user of the tenant or to selected emails.
+Because tenant users have exactly one role, assigning this role replaces each
+selected user's previous role; use `--dry-run` before applying.
 
 Usage:
     python3 scripts/grant_tenant_permission.py --tenant milton --dry-run
@@ -31,7 +33,7 @@ import json
 import sys
 from pathlib import Path
 
-from sqlalchemy import delete, or_, select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -50,7 +52,11 @@ from systutor.kernel.permissions.models import (
     RolePermission,
     UserRole,
 )
-from systutor.kernel.permissions.service import ensure_permission
+from systutor.kernel.permissions.service import (
+    assign_role_to_user,
+    ensure_permission,
+    remove_role_from_user,
+)
 from systutor.kernel.tenants.models import Tenant
 
 DEFAULT_PERMISSION = "apps.deployments.create"
@@ -141,10 +147,10 @@ def _assign_role(db: Session, user: User, role: Role) -> bool:
             UserRole.role_id == role.id,
         )
     )
-    if existing is not None:
+    current = list(db.scalars(select(UserRole).where(UserRole.user_id == user.id)))
+    if existing is not None and len(current) == 1:
         return False
-    db.add(UserRole(user_id=user.id, role_id=role.id))
-    db.flush()
+    assign_role_to_user(db, user=user, role=role)
     return True
 
 
@@ -198,13 +204,7 @@ def _clone_permissions(
 def _remove_role_from_users(db: Session, users: list[User], role: Role) -> list[str]:
     removed: list[str] = []
     for user in users:
-        result = db.execute(
-            delete(UserRole).where(
-                UserRole.user_id == user.id,
-                UserRole.role_id == role.id,
-            )
-        )
-        if result.rowcount:
+        if remove_role_from_user(db, user=user, role=role):
             removed.append(user.email)
     db.flush()
     return removed

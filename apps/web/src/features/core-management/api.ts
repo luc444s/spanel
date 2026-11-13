@@ -129,6 +129,13 @@ export function updateCoreUser(userId: string, payload: UpdateCoreUserPayload) {
   });
 }
 
+export function replaceCoreUserRole(userId: string, roleId: string) {
+  return apiRequest<CoreUser>(`/api/v1/core/users/${userId}/role`, {
+    method: "PUT",
+    body: JSON.stringify({ role_id: roleId }),
+  });
+}
+
 export function disableCoreUser(userId: string) {
   return apiRequest<CoreUser>(`/api/v1/core/users/${userId}/disable`, { method: "POST" });
 }

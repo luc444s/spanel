@@ -14,6 +14,7 @@ from systutor.api.v1.core.schemas import (
     CoreUserCategoryRead,
     CoreUserCreateRequest,
     CoreUserRead,
+    CoreUserRoleReplaceRequest,
     CoreUserUpdateRequest,
 )
 from systutor.api.v1.core.services.users import (
@@ -21,11 +22,13 @@ from systutor.api.v1.core.services.users import (
     get_core_user,
     get_user_categories,
     list_core_users,
+    replace_core_user_role,
     set_core_user_active,
     update_core_user,
 )
 from systutor.kernel.auth.dependencies import get_current_tenant_context, require_permission
 from systutor.kernel.auth.models import User
+from systutor.kernel.permissions.service import get_role_for_tenant
 from systutor.kernel.tenants.context import TenantContext
 from systutor.kernel.tenants.service import TenantScopeError, get_branch_for_tenant
 
@@ -36,6 +39,7 @@ REQUIRE_USERS_READ = Depends(require_permission("core.users.read"))
 REQUIRE_USERS_CREATE = Depends(require_permission("core.users.create"))
 REQUIRE_USERS_UPDATE = Depends(require_permission("core.users.update"))
 REQUIRE_USERS_DISABLE = Depends(require_permission("core.users.disable"))
+REQUIRE_ROLES_MANAGE = Depends(require_permission("core.roles.manage"))
 
 
 def _resolve_branch(db: Session, *, tenant_id: str, branch_id: str | None):
@@ -156,6 +160,39 @@ def update_user(
         db.rollback()
         raise handle_integrity_error(exc) from exc
     except (TenantScopeError, ValueError) as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return CoreUserRead.model_validate(item)
+
+
+@router.put("/{user_id}/role", response_model=CoreUserRead)
+def replace_user_role(
+    user_id: str,
+    payload: CoreUserRoleReplaceRequest,
+    request: Request,
+    db: Session = DB_SESSION,
+    tenant_context: TenantContext = TENANT_CONTEXT,
+    _: User = REQUIRE_ROLES_MANAGE,
+) -> CoreUserRead:
+    role = get_role_for_tenant(
+        db,
+        tenant_id=tenant_context.current_tenant_id,
+        role_id=payload.role_id,
+    )
+    if role is None:
+        raise tenant_not_found("Role")
+    try:
+        item = replace_core_user_role(
+            db,
+            tenant_id=tenant_context.current_tenant_id,
+            user_id=user_id,
+            role=role,
+            action_context=build_action_context(request, tenant_context),
+        )
+        if item is None:
+            raise tenant_not_found("User")
+        db.commit()
+    except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return CoreUserRead.model_validate(item)

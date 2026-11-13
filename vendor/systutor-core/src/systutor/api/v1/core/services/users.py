@@ -11,7 +11,9 @@ from systutor.kernel.auth.service import (
     list_users_for_tenant,
     update_user_for_tenant,
 )
+from systutor.kernel.permissions.models import Role
 from systutor.kernel.permissions.service import (
+    ensure_unassigned_role,
     list_roles_by_ids_for_tenant,
     list_roles_by_names_for_tenant,
     list_user_role_names,
@@ -28,6 +30,8 @@ _USER_CATEGORIES: dict[str, tuple[str, list[str]]] = {}
 
 def register_user_category(key: str, label: str, role_names: list[str]) -> None:
     """Register a user category for the host application."""
+    if len(role_names) > 1:
+        raise ValueError("A user category can assign at most one role")
     _USER_CATEGORIES[key] = (label, list(role_names))
 
 
@@ -74,6 +78,43 @@ def get_core_user(db: Session, *, tenant_id: str, user_id: str) -> dict[str, obj
     return serialize_core_user(db, user)
 
 
+def replace_core_user_role(
+    db: Session,
+    *,
+    tenant_id: str,
+    user_id: str,
+    role: Role,
+    action_context: CoreActionContext,
+) -> dict[str, object] | None:
+    user = get_user_for_tenant(db, tenant_id=tenant_id, user_id=user_id)
+    if user is None:
+        return None
+    if role.tenant_id != tenant_id:
+        raise ValueError("Invalid role for tenant")
+    if not role.is_active:
+        raise ValueError("Disabled roles cannot be assigned")
+
+    previous_roles = list_user_role_names(db, tenant_id=tenant_id, user_id=user.id)
+    replace_user_roles(db, user=user, roles=[role])
+    audit_core_action(
+        db,
+        context=action_context,
+        action="user.role.replace",
+        entity_type="user",
+        entity_id=user.id,
+        details={"previous_roles": previous_roles, "role_id": role.id, "role": role.name},
+    )
+    emit_core_event(
+        db,
+        context=action_context,
+        event_name="core.user.role_replaced",
+        entity_type="user",
+        entity_id=user.id,
+        payload={"tenant_id": tenant_id, "role_id": role.id, "role": role.name},
+    )
+    return serialize_core_user(db, user)
+
+
 def create_core_user(
     db: Session,
     *,
@@ -102,6 +143,10 @@ def create_core_user(
         raise ValueError("Invalid role for tenant")
     if any(not role.is_active for role in roles):
         raise ValueError("Disabled roles cannot be assigned")
+    if len(roles) > 1:
+        raise ValueError("A tenant user must have exactly one role")
+    if not roles:
+        roles = [ensure_unassigned_role(db, tenant_id=tenant_id)]
 
     user = create_user_for_tenant(
         db,
@@ -167,6 +212,10 @@ def update_core_user(
             raise ValueError("Invalid role for tenant")
         if any(not role.is_active for role in roles):
             raise ValueError("Disabled roles cannot be assigned")
+        if len(roles) > 1:
+            raise ValueError("A tenant user must have exactly one role")
+        if not roles:
+            roles = [ensure_unassigned_role(db, tenant_id=tenant_id)]
 
     user = update_user_for_tenant(
         db,

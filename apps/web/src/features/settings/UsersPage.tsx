@@ -1,8 +1,14 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FormEvent, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+
+import { Alert } from "@systutor/shell/ui/alert";
+import { Badge } from "@systutor/shell/ui/badge";
+import { Button } from "@systutor/shell/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@systutor/shell/ui/card";
+import { DataTable } from "@systutor/shell/ui/data-table";
+import { useT } from "@/i18n/use-i18n";
 
 import {
-  CoreBranch,
   CoreRole,
   CoreUser,
   coreManagementKeys,
@@ -11,137 +17,159 @@ import {
   enableCoreUser,
   invalidateCoreManagementKey,
   listCoreBranches,
+  listCorePermissions,
   listCoreRoles,
   listCoreUsers,
+  replaceCoreUserRole,
+  updateCoreRole,
   updateCoreUser,
 } from "../core-management/api";
 import { useAuthStore } from "../auth/store";
-import { Alert } from "@systutor/shell/ui/alert";
-import { Badge } from "@systutor/shell/ui/badge";
-import { Button } from "@systutor/shell/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@systutor/shell/ui/card";
-import { DataTable } from "@systutor/shell/ui/data-table";
-import { Dialog } from "@systutor/shell/ui/dialog";
-import { Input, newCredentialProps, noAutofillProps } from "@systutor/shell/ui/input";
-import { Select } from "@systutor/shell/ui/select";
-import { useT } from "@/i18n/use-i18n";
-
-type UserFormState = {
-  id?: string;
-  name: string;
-  email: string;
-  password: string;
-  branch_id: string;
-  role_ids: string[];
-};
+import { UserEditorDialog, type UserFormState } from "./UserEditorDialog";
+import { assignedRoleId, roleMemberCount } from "./user-permissions";
 
 const EMPTY_USER_FORM: UserFormState = {
-  name: "",
-  email: "",
-  password: "",
-  branch_id: "",
-  role_ids: [],
+  name: "", email: "", password: "", branch_id: "",
 };
-
-function getAssignableRoles(roles: CoreRole[]) {
-  return roles.filter((role) => role.active);
-}
 
 export function UsersPage() {
   const t = useT();
   const queryClient = useQueryClient();
-  const permissions = useAuthStore((state) => state.permissions);
+  const sessionPermissions = useAuthStore((state) => state.permissions);
+  const canCreate = sessionPermissions.includes("core.users.create");
+  const canUpdate = sessionPermissions.includes("core.users.update");
+  const canDisable = sessionPermissions.includes("core.users.disable");
+  const canManageRoles = sessionPermissions.includes("core.roles.manage");
+  const canOpenEditor = canUpdate || canManageRoles;
+
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [formState, setFormState] = useState<UserFormState>(EMPTY_USER_FORM);
+  const [selectedPermissionUserId, setSelectedPermissionUserId] = useState("");
+  const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
+  const [roleEditor, setRoleEditor] = useState<CoreRole | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
-
-  const canCreate = permissions.includes("core.users.create");
-  const canUpdate = permissions.includes("core.users.update");
-  const canDisable = permissions.includes("core.users.disable");
-  const canEditUsers = canCreate || canUpdate;
+  const [assignmentError, setAssignmentError] = useState<string | null>(null);
+  const [roleError, setRoleError] = useState<string | null>(null);
 
   const usersQuery = useQuery({ queryKey: [...coreManagementKeys.users], queryFn: listCoreUsers });
   const rolesQuery = useQuery({
-    queryKey: [...coreManagementKeys.roles],
-    queryFn: listCoreRoles,
-    enabled: canEditUsers,
+    queryKey: [...coreManagementKeys.roles], queryFn: listCoreRoles,
+    enabled: canOpenEditor || canCreate,
   });
   const branchesQuery = useQuery({
-    queryKey: [...coreManagementKeys.branches],
-    queryFn: listCoreBranches,
-    enabled: canEditUsers,
+    queryKey: [...coreManagementKeys.branches], queryFn: listCoreBranches,
+    enabled: canOpenEditor || canCreate,
   });
+  const permissionsQuery = useQuery({
+    queryKey: [...coreManagementKeys.permissions], queryFn: listCorePermissions,
+    enabled: isDialogOpen && canManageRoles,
+  });
+  const users = usersQuery.data ?? [];
+  const roles = useMemo(() => (rolesQuery.data ?? []).filter((role) => role.active), [rolesQuery.data]);
 
   const saveUserMutation = useMutation({
-    mutationFn: async (payload: UserFormState) => {
-      if (payload.id) {
-        return updateCoreUser(payload.id, {
+    mutationFn: async (payload: UserFormState) => payload.id
+      ? updateCoreUser(payload.id, {
           name: payload.name,
           email: payload.email,
           password: payload.password || undefined,
           branch_id: payload.branch_id || null,
-          role_ids: payload.role_ids,
-        });
-      }
-
-      return createCoreUser({
-        name: payload.name,
-        email: payload.email,
-        password: payload.password,
-        branch_id: payload.branch_id || null,
-        role_ids: payload.role_ids,
-      });
-    },
+        })
+      : createCoreUser({
+          name: payload.name,
+          email: payload.email,
+          password: payload.password,
+          branch_id: payload.branch_id || null,
+          role_ids: [],
+        }),
     onSuccess: async () => {
-      await invalidateCoreManagementKey(queryClient, coreManagementKeys.users);
-      setIsDialogOpen(false);
-      setFormState(EMPTY_USER_FORM);
-      setFormError(null);
+      await Promise.all([
+        invalidateCoreManagementKey(queryClient, coreManagementKeys.users),
+        invalidateCoreManagementKey(queryClient, coreManagementKeys.roles),
+      ]);
+      closeEditor();
     },
   });
-
   const toggleUserMutation = useMutation({
-    mutationFn: async ({ userId, active }: { userId: string; active: boolean }) => {
-      return active ? disableCoreUser(userId) : enableCoreUser(userId);
-    },
+    mutationFn: ({ userId, active }: { userId: string; active: boolean }) => active
+      ? disableCoreUser(userId) : enableCoreUser(userId),
+    onSuccess: () => invalidateCoreManagementKey(queryClient, coreManagementKeys.users),
+  });
+  const assignmentMutation = useMutation({
+    mutationFn: ({ userId, roleId }: { userId: string; roleId: string }) =>
+      replaceCoreUserRole(userId, roleId),
     onSuccess: async () => {
-      await invalidateCoreManagementKey(queryClient, coreManagementKeys.users);
+      await Promise.all([
+        invalidateCoreManagementKey(queryClient, coreManagementKeys.users),
+        queryClient.invalidateQueries({ queryKey: ["auth", "me"] }),
+        queryClient.invalidateQueries({ queryKey: ["system", "plugin-runtime"] }),
+      ]);
+    },
+  });
+  const roleMutation = useMutation({
+    mutationFn: ({ roleId, permissionNames }: { roleId: string; permissionNames: string[] }) =>
+      updateCoreRole(roleId, { permission_names: permissionNames }),
+    onSuccess: async () => {
+      await Promise.all([
+        invalidateCoreManagementKey(queryClient, coreManagementKeys.roles),
+        queryClient.invalidateQueries({ queryKey: ["auth", "me"] }),
+        queryClient.invalidateQueries({ queryKey: ["system", "plugin-runtime"] }),
+      ]);
+      setRoleEditor(null);
     },
   });
 
-  const rolesByName = useMemo(() => {
-    const entries = (rolesQuery.data ?? []).map((role) => [role.name, role.id] as const);
-    return new Map(entries);
-  }, [rolesQuery.data]);
+  function closeEditor() {
+    setIsDialogOpen(false);
+    setFormState(EMPTY_USER_FORM);
+    setRoleEditor(null);
+    setFormError(null);
+    setAssignmentError(null);
+    setRoleError(null);
+  }
+
+  function selectPermissionUser(userId: string) {
+    const user = users.find((item) => item.id === userId);
+    setSelectedPermissionUserId(userId);
+    setSelectedRoleId(assignedRoleId(user, roles));
+    if (user) {
+      setFormState({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        password: "",
+        branch_id: user.branch_id ?? "",
+      });
+    }
+    setAssignmentError(null);
+  }
 
   function openCreateDialog() {
     setFormState(EMPTY_USER_FORM);
+    setSelectedPermissionUserId("");
+    setSelectedRoleId(null);
     setFormError(null);
     setIsDialogOpen(true);
   }
 
   function openEditDialog(user: CoreUser) {
     setFormState({
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      password: "",
-      branch_id: user.branch_id ?? "",
-      role_ids: user.roles.map((roleName) => rolesByName.get(roleName) ?? "").filter(Boolean),
+      id: user.id, name: user.name, email: user.email, password: "", branch_id: user.branch_id ?? "",
     });
+    setSelectedPermissionUserId(user.id);
+    setSelectedRoleId(assignedRoleId(user, roles));
     setFormError(null);
+    setAssignmentError(null);
     setIsDialogOpen(true);
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function submitProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFormError(null);
-
     if (!formState.id && !formState.password) {
       setFormError(t("Password is required when creating a user."));
       return;
     }
-
     try {
       await saveUserMutation.mutateAsync(formState);
     } catch (error) {
@@ -149,227 +177,93 @@ export function UsersPage() {
     }
   }
 
-  return (
-    <UsersPageContent
-      users={usersQuery.data ?? []}
-      roles={getAssignableRoles(rolesQuery.data ?? [])}
-      branches={branchesQuery.data ?? []}
-      canCreate={canCreate}
-      canUpdate={canUpdate}
-      canDisable={canDisable}
-      isDialogOpen={isDialogOpen}
-      formState={formState}
-      formError={formError}
-      isSaving={saveUserMutation.isPending}
-      isToggling={toggleUserMutation.isPending}
-      hasError={Boolean(usersQuery.error || rolesQuery.error || branchesQuery.error)}
-      onCreate={openCreateDialog}
-      onEdit={openEditDialog}
-      onCloseDialog={() => setIsDialogOpen(false)}
-      onSubmit={handleSubmit}
-      onFieldChange={(value) => setFormState((current) => ({ ...current, ...value }))}
-      onToggleUser={(user) => toggleUserMutation.mutate({ userId: user.id, active: user.active })}
-    />
+  async function saveAssignment() {
+    if (!selectedPermissionUserId || !selectedRoleId) return;
+    setAssignmentError(null);
+    try {
+      await assignmentMutation.mutateAsync({
+        userId: selectedPermissionUserId, roleId: selectedRoleId,
+      });
+    } catch (error) {
+      setAssignmentError(error instanceof Error ? error.message : t("Could not save the assignment."));
+    }
+  }
+
+  async function saveRole(permissionNames: string[]) {
+    if (!roleEditor) return;
+    setRoleError(null);
+    try {
+      await roleMutation.mutateAsync({ roleId: roleEditor.id, permissionNames });
+    } catch (error) {
+      setRoleError(error instanceof Error ? error.message : t("Could not save the role."));
+    }
+  }
+
+  const hasError = Boolean(
+    usersQuery.error || rolesQuery.error || branchesQuery.error || permissionsQuery.error,
   );
-}
 
-type UsersPageContentProps = {
-  users: CoreUser[];
-  roles: CoreRole[];
-  branches: CoreBranch[];
-  canCreate: boolean;
-  canUpdate: boolean;
-  canDisable: boolean;
-  isDialogOpen: boolean;
-  formState: UserFormState;
-  formError: string | null;
-  isSaving: boolean;
-  isToggling: boolean;
-  hasError: boolean;
-  onCreate: () => void;
-  onEdit: (user: CoreUser) => void;
-  onCloseDialog: () => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-  onFieldChange: (value: Partial<UserFormState>) => void;
-  onToggleUser: (user: CoreUser) => void;
-};
-
-export function UsersPageContent({
-  users,
-  roles,
-  branches,
-  canCreate,
-  canUpdate,
-  canDisable,
-  isDialogOpen,
-  formState,
-  formError,
-  isSaving,
-  isToggling,
-  hasError,
-  onCreate,
-  onEdit,
-  onCloseDialog,
-  onSubmit,
-  onFieldChange,
-  onToggleUser,
-}: UsersPageContentProps) {
-  const t = useT();
-  return (
-    <section className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div className="space-y-2">
-          <h1 className="text-2xl font-semibold text-foreground">{t("Users")}</h1>
-          <p className="text-sm text-muted-foreground">
-            {t("Tenant-aware administration of users, branches, and effective core roles.")}
-          </p>
-        </div>
-        {canCreate ? <Button onClick={onCreate}>{t("Create user")}</Button> : null}
+  return <section className="space-y-6">
+    <div className="flex items-start justify-between gap-4">
+      <div className="space-y-2">
+        <h1 className="text-2xl font-semibold text-foreground">{t("Users")}</h1>
+        <p className="text-sm text-muted-foreground">{t("Tenant-aware administration of users, branches, and effective core roles.")}</p>
       </div>
-
-      {hasError ? (
-        <Alert title={t("Could not load users")}>
-          {t("Check permissions or backend connectivity.")}
-        </Alert>
-      ) : null}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("Users")}</CardTitle>
-          <CardDescription>{t("Minimal operational list for the current tenant.")}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <DataTable
-            columns={[
-              { key: "name", header: t("Name"), render: (user) => user.name },
-              { key: "email", header: t("Email"), render: (user) => user.email },
-              {
-                key: "branch",
-                header: t("Branch"),
-                render: (user) => branches.find((branch) => branch.id === user.branch_id)?.name ?? "-",
-              },
-              {
-                key: "roles",
-                header: t("Roles"),
-                render: (user) => (
-                  <div className="flex flex-wrap gap-2">
-                    {user.roles.length > 0 ? user.roles.map((role) => <Badge key={role}>{role}</Badge>) : "-"}
-                  </div>
-                ),
-              },
-              {
-                key: "status",
-                header: t("Status"),
-                render: (user) => <StatusBadge active={user.active} />,
-              },
-              {
-                key: "actions",
-                header: t("Actions"),
-                className: "w-56",
-                render: (user) => (
-                  <div className="flex flex-wrap gap-2">
-                    {canUpdate ? (
-                      <Button variant="secondary" onClick={() => onEdit(user)}>
-                        {t("Edit")}
-                      </Button>
-                    ) : null}
-                    {canDisable ? (
-                      <Button variant="secondary" disabled={isToggling} onClick={() => onToggleUser(user)}>
-                        {user.active ? t("Deactivate") : t("Activate")}
-                      </Button>
-                    ) : null}
-                  </div>
-                ),
-              },
-            ]}
-            rows={users}
-            rowKey={(user) => user.id}
-            emptyMessage={t("No users in this tenant.")}
-          />
-        </CardContent>
-      </Card>
-
-      <Dialog
-        open={isDialogOpen}
-        title={formState.id ? t("Edit user") : t("Create user")}
-        description={t("Minimal core management form.")}
-        onClose={onCloseDialog}
-      >
-        <form className="space-y-4" onSubmit={onSubmit}>
-          <label className="block space-y-2 text-sm text-foreground">
-            <span>{t("Name")}</span>
-            <Input value={formState.name} onChange={(event) => onFieldChange({ name: event.target.value })} />
-          </label>
-
-          <label className="block space-y-2 text-sm text-foreground">
-            <span>{t("Email")}</span>
-            <Input type="email" value={formState.email} onChange={(event) => onFieldChange({ email: event.target.value })} {...noAutofillProps} />
-          </label>
-
-          <label className="block space-y-2 text-sm text-foreground">
-            <span>{t("Password")}</span>
-            <Input
-              type="password"
-              value={formState.password}
-              onChange={(event) => onFieldChange({ password: event.target.value })}
-              {...newCredentialProps}
-            />
-          </label>
-
-          <label className="block space-y-2 text-sm text-foreground">
-            <span>{t("Branch")}</span>
-            <Select
-              value={formState.branch_id || ""}
-              onChange={(value) => onFieldChange({ branch_id: value })}
-              options={[
-                { value: "", label: t("No branch") },
-                ...branches.map((branch) => ({ value: branch.id, label: t("{code} - {name}", { code: branch.code, name: branch.name }) })),
-              ]}
-            />
-          </label>
-
-          <fieldset className="space-y-2">
-            <legend className="text-sm text-foreground">{t("Roles")}</legend>
-            <div className="grid gap-2 rounded-md border border-border bg-muted/60 p-3 sm:grid-cols-2 max-h-64 overflow-y-auto">
-              {roles.map((role) => {
-                const checked = formState.role_ids.includes(role.id);
-                return (
-                  <label key={role.id} className="flex items-center gap-2 text-sm text-foreground">
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={(event) => {
-                        onFieldChange({
-                          role_ids: event.target.checked
-                            ? [...formState.role_ids, role.id]
-                            : formState.role_ids.filter((item) => item !== role.id),
-                        });
-                      }}
-                    />
-                    <span>{role.name}</span>
-                  </label>
-                );
-              })}
-            </div>
-          </fieldset>
-
-          {formError ? <Alert title={t("Could not save the user")}>{formError}</Alert> : null}
-
-          <div className="flex justify-end gap-3">
-            <Button type="button" variant="secondary" onClick={onCloseDialog}>
-              {t("Cancel")}
-            </Button>
-            <Button type="submit" disabled={isSaving}>
-              {formState.id ? t("Save changes") : t("Create user")}
-            </Button>
-          </div>
-        </form>
-      </Dialog>
-    </section>
-  );
-}
-
-function StatusBadge({ active }: { active: boolean }) {
-  const t = useT();
-  return <Badge>{active ? t("Active") : t("Inactive")}</Badge>;
+      {canCreate ? <Button onClick={openCreateDialog}>{t("Create user")}</Button> : null}
+    </div>
+    {hasError ? <Alert title={t("Could not load users")}>{t("Check permissions or backend connectivity.")}</Alert> : null}
+    <Card>
+      <CardHeader>
+        <CardTitle>{t("Users")}</CardTitle>
+        <CardDescription>{t("Minimal operational list for the current tenant.")}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <DataTable
+          columns={[
+            { key: "name", header: t("Name"), render: (user) => user.name },
+            { key: "email", header: t("Email"), render: (user) => user.email },
+            { key: "branch", header: t("Branch"), render: (user) => (branchesQuery.data ?? []).find((branch) => branch.id === user.branch_id)?.name ?? "-" },
+            { key: "roles", header: t("Role"), render: (user) => user.roles[0] ? <Badge>{user.roles[0]}</Badge> : "-" },
+            { key: "status", header: t("Status"), render: (user) => <Badge>{user.active ? t("Active") : t("Inactive")}</Badge> },
+            { key: "actions", header: t("Actions"), className: "w-56", render: (user) => <div className="flex gap-2">
+              {canOpenEditor ? <Button variant="secondary" onClick={() => openEditDialog(user)}>{t("Edit")}</Button> : null}
+              {canDisable ? <Button variant="secondary" disabled={toggleUserMutation.isPending} onClick={() => toggleUserMutation.mutate({ userId: user.id, active: user.active })}>{user.active ? t("Deactivate") : t("Activate")}</Button> : null}
+            </div> },
+          ]}
+          rows={users}
+          rowKey={(user) => user.id}
+          emptyMessage={t("No users in this tenant.")}
+        />
+      </CardContent>
+    </Card>
+    <UserEditorDialog
+      open={isDialogOpen}
+      formState={formState}
+      users={users}
+      roles={roles}
+      branches={branchesQuery.data ?? []}
+      permissions={permissionsQuery.data ?? []}
+      selectedPermissionUserId={selectedPermissionUserId}
+      selectedRoleId={selectedRoleId}
+      roleEditor={roleEditor}
+      roleMemberCount={roleEditor ? roleMemberCount(roleEditor, users) : 0}
+      canManageRoles={canManageRoles}
+      canUpdate={canUpdate}
+      formError={formError}
+      assignmentError={assignmentError}
+      roleError={roleError}
+      savingProfile={saveUserMutation.isPending}
+      savingAssignment={assignmentMutation.isPending}
+      savingRole={roleMutation.isPending}
+      onClose={closeEditor}
+      onProfileSubmit={submitProfile}
+      onFieldChange={(value) => setFormState((current) => ({ ...current, ...value }))}
+      onSelectPermissionUser={selectPermissionUser}
+      onSelectRole={setSelectedRoleId}
+      onSaveAssignment={saveAssignment}
+      onOpenRole={setRoleEditor}
+      onCloseRole={() => setRoleEditor(null)}
+      onSaveRole={saveRole}
+    />
+  </section>;
 }

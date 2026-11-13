@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from systutor.api.v1.core.common import CoreActionContext, audit_core_action, emit_core_event
 from systutor.kernel.permissions.models import Role
 from systutor.kernel.permissions.service import (
+    UNASSIGNED_ROLE_NAME,
     create_role_for_tenant,
     get_role_for_tenant,
     list_permissions_by_names,
@@ -87,6 +88,8 @@ def update_core_role(
 
     permissions = None
     if permission_names is not None:
+        if role.name == UNASSIGNED_ROLE_NAME and permission_names:
+            raise ValueError("The unassigned role cannot grant permissions")
         permissions = list_permissions_by_names(db, permission_names=permission_names)
         if len(permissions) != len(set(permission_names)):
             raise ValueError("Invalid permission in payload")

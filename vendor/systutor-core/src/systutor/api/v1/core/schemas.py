@@ -25,7 +25,7 @@ class CoreUserCreateRequest(BaseModel):
     password: str
     branch_id: str | None = None
     category: str | None = None
-    role_ids: list[str] = []
+    role_ids: list[str] = Field(default_factory=list, max_length=1)
     warehouse_ids: list[str] = []
 
 
@@ -35,13 +35,17 @@ class CoreUserUpdateRequest(BaseModel):
     password: str | None = None
     branch_id: str | None = None
     category: str | None = None
-    role_ids: list[str] | None = None
+    role_ids: list[str] | None = Field(default=None, max_length=1)
     warehouse_ids: list[str] | None = None
 
 
 class CoreUserCategoryRead(BaseModel):
     value: str
     label: str
+
+
+class CoreUserRoleReplaceRequest(BaseModel):
+    role_id: str = Field(min_length=1, max_length=36)
 
 
 class CoreRoleRead(BaseModel):

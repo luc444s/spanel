@@ -168,6 +168,11 @@ Endpoints:
 - `GET /api/v1/system/ready`
 - `POST /api/v1/auth/login`
 - `GET /api/v1/core/users` (requires `core.users.read`)
+- `PUT /api/v1/core/users/{user_id}/role` (requires `core.roles.manage`)
+
+Tenant users have exactly one tenant-scoped role. Replacing the role is atomic;
+users created without an explicit role receive the zero-permission `unassigned`
+role. A role can still be shared by any number of users.
 
 ### Demo seed
 

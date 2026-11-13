@@ -98,6 +98,32 @@ def create_role_for_tenant(
     return role
 
 
+UNASSIGNED_ROLE_NAME = "unassigned"
+
+
+def ensure_unassigned_role(db: Session, *, tenant_id: str) -> Role:
+    role = db.scalar(
+        select(Role).where(
+            Role.tenant_id == tenant_id,
+            Role.name == UNASSIGNED_ROLE_NAME,
+        )
+    )
+    if role is not None:
+        db.execute(delete(RolePermission).where(RolePermission.role_id == role.id))
+        if not role.is_active:
+            role.is_active = True
+            db.add(role)
+            db.flush()
+        db.flush()
+        return role
+    return create_role_for_tenant(
+        db,
+        tenant_id=tenant_id,
+        name=UNASSIGNED_ROLE_NAME,
+        description="No access assigned",
+    )
+
+
 def update_role_for_tenant(
     db: Session,
     *,
@@ -132,8 +158,17 @@ def assign_role_to_user(db: Session, *, user: User, role: Role) -> UserRole:
     )
     existing = db.scalar(stmt)
     if existing is not None:
+        db.execute(
+            delete(UserRole).where(
+                UserRole.user_id == user.id,
+                UserRole.id != existing.id,
+            )
+        )
+        db.flush()
         return existing
 
+    db.execute(delete(UserRole).where(UserRole.user_id == user.id))
+    db.flush()
     user_role = UserRole(user_id=user.id, role_id=role.id)
     db.add(user_role)
     db.flush()
@@ -152,26 +187,19 @@ def remove_role_from_user(db: Session, *, user: User, role: Role) -> bool:
     if user_role is None:
         return False
 
-    db.delete(user_role)
-    db.flush()
+    replacement = ensure_unassigned_role(db, tenant_id=user.tenant_id)
+    if replacement.id == role.id:
+        return False
+    assign_role_to_user(db, user=user, role=replacement)
     return True
 
 
 def replace_user_roles(db: Session, *, user: User, roles: list[Role]) -> None:
+    if len(roles) != 1:
+        raise ValueError("A tenant user must have exactly one role")
     if any(role.tenant_id != user.tenant_id for role in roles):
         raise TenantScopeError("Role does not belong to the user's tenant")
-
-    db.execute(delete(UserRole).where(UserRole.user_id == user.id))
-    db.flush()
-
-    seen_role_ids: set[str] = set()
-    for role in roles:
-        if role.id in seen_role_ids:
-            continue
-        seen_role_ids.add(role.id)
-        db.add(UserRole(user_id=user.id, role_id=role.id))
-
-    db.flush()
+    assign_role_to_user(db, user=user, role=roles[0])
 
 
 def list_permissions(db: Session) -> list[Permission]:

@@ -45,7 +45,10 @@ class Permission(Base):
 
 class UserRole(Base):
     __tablename__ = "user_roles"
-    __table_args__ = (UniqueConstraint("user_id", "role_id", name="uq_user_role"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "role_id", name="uq_user_role"),
+        UniqueConstraint("user_id", name="uq_user_role_user"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
