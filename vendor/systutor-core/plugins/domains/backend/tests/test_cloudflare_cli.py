@@ -270,7 +270,7 @@ def test_connect_wait_zero_status_zones_and_records(tmp_path, capsys) -> None:
                 "cloudflare",
                 "connect",
                 "--tenant",
-                "t1",
+                "one",
                 "--wait-seconds",
                 "0",
             ],
@@ -284,7 +284,7 @@ def test_connect_wait_zero_status_zones_and_records(tmp_path, capsys) -> None:
         assert "pending" in output
 
         code = run(
-            ["cloudflare", "status", "--tenant", "t1"],
+            ["cloudflare", "status", "--tenant", "one"],
             session_factory=factory,
             cloudflare_client=fake,
             cloudflare_config=config,
@@ -294,17 +294,19 @@ def test_connect_wait_zero_status_zones_and_records(tmp_path, capsys) -> None:
         assert "Lab" in output
 
         code = run(
-            ["cloudflare", "zones", "list", "--tenant", "t1", "--json"],
+            ["cloudflare", "zones", "list", "--tenant", "one", "--json"],
             session_factory=factory,
             cloudflare_client=fake,
             cloudflare_config=config,
         )
         payload = json.loads(capsys.readouterr().out)
         assert code == 0
+        assert payload["tenant_id"] == "t1"
+        assert payload["tenant_slug"] == "one"
         assert payload["zones"][0]["record_count"] == 7
 
         code = run(
-            ["cloudflare", "records", "list", "example.com", "--tenant", "t1", "--json"],
+            ["cloudflare", "records", "list", "example.com", "--tenant", "one", "--json"],
             session_factory=factory,
             cloudflare_client=fake,
             cloudflare_config=config,
@@ -324,7 +326,7 @@ def test_disconnect_plan_apply_and_idempotence(tmp_path, capsys) -> None:
         seed_connection(engine, config)
 
         code = run(
-            ["cloudflare", "disconnect", "--tenant", "t1"],
+            ["cloudflare", "disconnect", "--tenant", "one"],
             session_factory=factory,
             cloudflare_client=fake,
             cloudflare_config=config,
@@ -337,7 +339,7 @@ def test_disconnect_plan_apply_and_idempotence(tmp_path, capsys) -> None:
             assert db.scalar(select(CloudflareConnection)) is not None
 
         code = run(
-            ["cloudflare", "disconnect", "--tenant", "t1", "--apply"],
+            ["cloudflare", "disconnect", "--tenant", "one", "--apply"],
             session_factory=factory,
             cloudflare_client=fake,
             cloudflare_config=config,
@@ -371,7 +373,7 @@ def test_provision_plan_apply_and_json_contract(tmp_path, capsys) -> None:
             "apply",
             "example.com",
             "--tenant",
-            "t1",
+            "one",
             "--ipv4",
             "192.0.2.80",
             "--www",

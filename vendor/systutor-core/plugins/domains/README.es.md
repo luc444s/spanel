@@ -213,13 +213,13 @@ secreto por variable de entorno.
 python3 scripts/spanel_dns.py cloudflare oauth register \
   --account-id CUENTA --bootstrap-token-file RUTA \
   --redirect-uri https://spanel.lab/api/v1/plugins/domains/dns/cloudflare/oauth/callback
-python3 scripts/spanel_dns.py cloudflare connect --tenant TENANT [--wait-seconds 300]
-python3 scripts/spanel_dns.py cloudflare status --tenant TENANT
-python3 scripts/spanel_dns.py cloudflare disconnect --tenant TENANT [--apply]
-python3 scripts/spanel_dns.py cloudflare zones list --tenant TENANT
-python3 scripts/spanel_dns.py cloudflare records list ZONA --tenant TENANT
-python3 scripts/spanel_dns.py cloudflare provision plan DOMINIO --tenant TENANT --ipv4 DIRECCION [--www] [--replace]
-python3 scripts/spanel_dns.py cloudflare provision apply DOMINIO --tenant TENANT --ipv4 DIRECCION [--www] [--replace] --apply
+python3 scripts/spanel_dns.py cloudflare connect --tenant SLUG_TENANT [--wait-seconds 300]
+python3 scripts/spanel_dns.py cloudflare status --tenant SLUG_TENANT
+python3 scripts/spanel_dns.py cloudflare disconnect --tenant SLUG_TENANT [--apply]
+python3 scripts/spanel_dns.py cloudflare zones list --tenant SLUG_TENANT
+python3 scripts/spanel_dns.py cloudflare records list ZONA --tenant SLUG_TENANT
+python3 scripts/spanel_dns.py cloudflare provision plan DOMINIO --tenant SLUG_TENANT --ipv4 DIRECCION [--www] [--replace]
+python3 scripts/spanel_dns.py cloudflare provision apply DOMINIO --tenant SLUG_TENANT --ipv4 DIRECCION [--www] [--replace] --apply
 ```
 
 `oauth register` es dry-run salvo `--apply`; el bootstrap token debe ser
@@ -232,6 +232,8 @@ best-effort y elimina credenciales locales de forma idempotente. Todos aceptan
 planes de aprovisionamiento solo muestran el contenido solicitado y conflictos
 en los owners gestionados. Apply recalcula el plan, exige `--replace` para
 eliminar A/AAAA/CNAME conflictivos y nunca cambia la delegación del registrador.
+`--tenant` resuelve primero el slug del tenant; los IDs exactos siguen aceptados
+por compatibilidad.
 
 ### Panel
 

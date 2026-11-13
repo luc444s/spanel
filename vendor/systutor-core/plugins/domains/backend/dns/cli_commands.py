@@ -593,6 +593,21 @@ def _cloudflare_runtime(args: argparse.Namespace, factory: Any):
     return config, client, sessions
 
 
+def _tenant_id(db: Any, slug_or_id: str) -> str:
+    """Resolve the operator-facing tenant slug, retaining ID compatibility."""
+    from sqlalchemy import select
+
+    from systutor.kernel.tenants.models import Tenant
+
+    needle = (slug_or_id or "").strip()
+    row = db.scalar(select(Tenant).where(Tenant.slug == needle))
+    if row is None:
+        row = db.get(Tenant, needle)
+    if row is None:
+        raise CloudflareNotFound("tenant not found")
+    return str(row.id)
+
+
 def _read_bootstrap_token(path_value: str) -> str:
     path = Path(path_value)
     try:
@@ -647,8 +662,9 @@ def _cloudflare_connect(args: argparse.Namespace, factory: Any) -> int:
     config, client, sessions = _cloudflare_runtime(args, factory)
     wait_seconds = max(0, min(int(args.wait_seconds), 900))
     with sessions() as db:
+        tenant_id = _tenant_id(db, args.tenant)
         service = CloudflareService(db, None, client, config)
-        start = service.start_flow_for_tenant(args.tenant)
+        start = service.start_flow_for_tenant(tenant_id)
     if not args.json:
         print(f"Authorize Cloudflare in the browser: {start['authorization_url']}")
         print(f"Waiting up to {wait_seconds}s for the callback...")
@@ -684,9 +700,14 @@ def _cloudflare_connect(args: argparse.Namespace, factory: Any) -> int:
 
     with sessions() as db:
         service = CloudflareService(db, None, client, config)
-        connection = service.status_for_tenant(args.tenant)
-        zones = service.zones_for_tenant(args.tenant)
-    payload = {"connection": connection, "zones": zones, "status": "consumed"}
+        connection = service.status_for_tenant(tenant_id)
+        zones = service.zones_for_tenant(tenant_id)
+    payload = {
+        "tenant_slug": args.tenant,
+        "connection": connection,
+        "zones": zones,
+        "status": "consumed",
+    }
     lines = [
         "SUCCESS Cloudflare connected",
         f"Account: {connection['account_name']}",
@@ -704,7 +725,9 @@ def _cloudflare_connect(args: argparse.Namespace, factory: Any) -> int:
 def _cloudflare_status(args: argparse.Namespace, factory: Any) -> int:
     config, client, sessions = _cloudflare_runtime(args, factory)
     with sessions() as db:
-        payload = CloudflareService(db, None, client, config).status_for_tenant(args.tenant)
+        tenant_id = _tenant_id(db, args.tenant)
+        payload = CloudflareService(db, None, client, config).status_for_tenant(tenant_id)
+    payload["tenant_slug"] = args.tenant
     lines = [
         "Cloudflare connected" if payload["connected"] else "Cloudflare not connected",
         f"Account: {payload['account_name']} ({payload['account_id']})",
@@ -719,9 +742,11 @@ def _cloudflare_status(args: argparse.Namespace, factory: Any) -> int:
 def _cloudflare_disconnect(args: argparse.Namespace, factory: Any) -> int:
     config, client, sessions = _cloudflare_runtime(args, factory)
     with sessions() as db:
+        tenant_id = _tenant_id(db, args.tenant)
         payload = CloudflareService(db, None, client, config).disconnect_for_tenant(
-            args.tenant, apply=args.apply
+            tenant_id, apply=args.apply
         )
+    payload["tenant_slug"] = args.tenant
     if payload["already_disconnected"]:
         lines = ["Cloudflare is already disconnected"]
     elif args.apply:
@@ -744,8 +769,9 @@ def _cloudflare_disconnect(args: argparse.Namespace, factory: Any) -> int:
 def _cloudflare_zones_list(args: argparse.Namespace, factory: Any) -> int:
     config, client, sessions = _cloudflare_runtime(args, factory)
     with sessions() as db:
-        zones = CloudflareService(db, None, client, config).zones_for_tenant(args.tenant)
-    payload = {"tenant_id": args.tenant, "zones": zones}
+        tenant_id = _tenant_id(db, args.tenant)
+        zones = CloudflareService(db, None, client, config).zones_for_tenant(tenant_id)
+    payload = {"tenant_id": tenant_id, "tenant_slug": args.tenant, "zones": zones}
     lines = [
         f"Zones discovered: {len(zones)}",
         *(
@@ -761,8 +787,9 @@ def _cloudflare_records_list(args: argparse.Namespace, factory: Any) -> int:
     config, client, sessions = _cloudflare_runtime(args, factory)
     needle = args.zone.strip()
     with sessions() as db:
+        tenant_id = _tenant_id(db, args.tenant)
         service = CloudflareService(db, None, client, config)
-        zones = service.zones_for_tenant(args.tenant)
+        zones = service.zones_for_tenant(tenant_id)
         match = next(
             (
                 zone
@@ -775,9 +802,10 @@ def _cloudflare_records_list(args: argparse.Namespace, factory: Any) -> int:
         if match is None:
             raise CloudflareNotFound("Cloudflare zone not found")
         zone_id = str(match["id"])
-        records = service.records_for_tenant(args.tenant, zone_id)
+        records = service.records_for_tenant(tenant_id, zone_id)
     payload = {
-        "tenant_id": args.tenant,
+        "tenant_id": tenant_id,
+        "tenant_slug": args.tenant,
         "zone_id": zone_id,
         "zone": match["name"],
         "records": records,
@@ -822,6 +850,7 @@ def _provision_lines(payload: dict[str, Any], *, applied: bool) -> list[str]:
 def _cloudflare_provision(args: argparse.Namespace, factory: Any) -> int:
     config, client, sessions = _cloudflare_runtime(args, factory)
     with sessions() as db:
+        tenant_id = _tenant_id(db, args.tenant)
         provisioner = CloudflareProvisioningService(
             CloudflareService(db, None, client, config)
         )
@@ -830,7 +859,7 @@ def _cloudflare_provision(args: argparse.Namespace, factory: Any) -> int:
         )
         if should_apply:
             payload = provisioner.apply_for_tenant(
-                args.tenant,
+                tenant_id,
                 domain=args.domain,
                 ipv4=args.ipv4,
                 www=args.www,
@@ -838,12 +867,14 @@ def _cloudflare_provision(args: argparse.Namespace, factory: Any) -> int:
             )
         else:
             payload = provisioner.plan_for_tenant(
-                args.tenant,
+                tenant_id,
                 domain=args.domain,
                 ipv4=args.ipv4,
                 www=args.www,
                 replace=args.replace,
             )
+        payload["tenant_id"] = tenant_id
+        payload["tenant_slug"] = args.tenant
     _emit(
         payload,
         json_output=args.json,

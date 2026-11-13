@@ -140,25 +140,25 @@ def build_parser() -> argparse.ArgumentParser:
     register.add_argument("--apply", action="store_true")
 
     connect = _leaf(cloudflare_commands, "connect", "Start browser authorization for a tenant.")
-    connect.add_argument("--tenant", required=True)
+    _add_tenant(connect)
     _add_db(connect)
     connect.add_argument("--wait-seconds", type=int, default=300)
 
     status = _leaf(cloudflare_commands, "status", "Show one tenant's Cloudflare connection.")
-    status.add_argument("--tenant", required=True)
+    _add_tenant(status)
     _add_db(status)
 
     disconnect = _leaf(
         cloudflare_commands, "disconnect", "Plan or remove one tenant's Cloudflare authorization."
     )
-    disconnect.add_argument("--tenant", required=True)
+    _add_tenant(disconnect)
     _add_db(disconnect)
     disconnect.add_argument("--apply", action="store_true")
 
     cf_zones = cloudflare_commands.add_parser("zones", help="Cloudflare zone discovery")
     cf_zone_commands = cf_zones.add_subparsers(dest="cloudflare_zones_command", required=True)
     cf_zones_list = _leaf(cf_zone_commands, "list", "List Cloudflare zones and record counts.")
-    cf_zones_list.add_argument("--tenant", required=True)
+    _add_tenant(cf_zones_list)
     _add_db(cf_zones_list)
 
     cf_records = cloudflare_commands.add_parser("records", help="Cloudflare DNS record discovery")
@@ -167,7 +167,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     cf_records_list = _leaf(cf_record_commands, "list", "List redacted DNS records in a zone.")
     cf_records_list.add_argument("zone")
-    cf_records_list.add_argument("--tenant", required=True)
+    _add_tenant(cf_records_list)
     _add_db(cf_records_list)
 
     provision = cloudflare_commands.add_parser(
@@ -182,7 +182,7 @@ def build_parser() -> argparse.ArgumentParser:
     ):
         command = _leaf(provision_commands, name, help_text)
         command.add_argument("domain")
-        command.add_argument("--tenant", required=True)
+        _add_tenant(command)
         command.add_argument("--ipv4", required=True)
         command.add_argument("--www", action="store_true")
         command.add_argument("--replace", action="store_true")
@@ -200,6 +200,15 @@ def _leaf(parent: argparse._SubParsersAction, name: str, help_text: str) -> argp
 
 def _add_db(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--db-url", default=os.getenv("SYSTUTOR_DATABASE_URL", ""))
+
+
+def _add_tenant(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--tenant",
+        required=True,
+        metavar="SLUG",
+        help="Tenant slug (ID remains accepted)",
+    )
 
 
 def _add_approved_zones(parser: argparse.ArgumentParser) -> None:

@@ -208,13 +208,13 @@ is no plaintext environment fallback.
 python3 scripts/spanel_dns.py cloudflare oauth register \
   --account-id ACCOUNT --bootstrap-token-file PATH \
   --redirect-uri https://spanel.lab/api/v1/plugins/domains/dns/cloudflare/oauth/callback
-python3 scripts/spanel_dns.py cloudflare connect --tenant TENANT [--wait-seconds 300]
-python3 scripts/spanel_dns.py cloudflare status --tenant TENANT
-python3 scripts/spanel_dns.py cloudflare disconnect --tenant TENANT [--apply]
-python3 scripts/spanel_dns.py cloudflare zones list --tenant TENANT
-python3 scripts/spanel_dns.py cloudflare records list ZONE --tenant TENANT
-python3 scripts/spanel_dns.py cloudflare provision plan DOMAIN --tenant TENANT --ipv4 ADDRESS [--www] [--replace]
-python3 scripts/spanel_dns.py cloudflare provision apply DOMAIN --tenant TENANT --ipv4 ADDRESS [--www] [--replace] --apply
+python3 scripts/spanel_dns.py cloudflare connect --tenant TENANT_SLUG [--wait-seconds 300]
+python3 scripts/spanel_dns.py cloudflare status --tenant TENANT_SLUG
+python3 scripts/spanel_dns.py cloudflare disconnect --tenant TENANT_SLUG [--apply]
+python3 scripts/spanel_dns.py cloudflare zones list --tenant TENANT_SLUG
+python3 scripts/spanel_dns.py cloudflare records list ZONE --tenant TENANT_SLUG
+python3 scripts/spanel_dns.py cloudflare provision plan DOMAIN --tenant TENANT_SLUG --ipv4 ADDRESS [--www] [--replace]
+python3 scripts/spanel_dns.py cloudflare provision apply DOMAIN --tenant TENANT_SLUG --ipv4 ADDRESS [--www] [--replace] --apply
 ```
 
 `oauth register` is a dry-run unless `--apply` is present; the bootstrap token
@@ -227,6 +227,8 @@ All commands accept `--json`; discovery record content is always redacted.
 Provision plans return only the requested record content and conflicts at the
 managed owners. Apply recomputes the plan, requires `--replace` to remove
 conflicting A/AAAA/CNAME records, and never changes registrar delegation.
+`--tenant` resolves the tenant slug first; exact tenant IDs remain accepted for
+backward compatibility.
 
 ### Panel
 

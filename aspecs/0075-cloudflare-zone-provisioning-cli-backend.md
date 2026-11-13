@@ -90,10 +90,10 @@ existing normalized `CloudflareZone`; upstream bodies remain opaque on errors.
 Extend `scripts/spanel_dns.py` through the existing parser/service path:
 
 ```text
-cloudflare provision plan DOMAIN --tenant TENANT --ipv4 ADDRESS [--www]
+cloudflare provision plan DOMAIN --tenant TENANT_SLUG --ipv4 ADDRESS [--www]
   [--replace] [--db-url URL] [--json]
 
-cloudflare provision apply DOMAIN --tenant TENANT --ipv4 ADDRESS [--www]
+cloudflare provision apply DOMAIN --tenant TENANT_SLUG --ipv4 ADDRESS [--www]
   [--replace] [--db-url URL] [--json] --apply
 ```
 
@@ -102,6 +102,9 @@ cloudflare provision apply DOMAIN --tenant TENANT --ipv4 ADDRESS [--www]
 mutation. Successful apply returns `0`. Human output states whether the zone is
 reused/created, every managed record, `DNS only`, and nameservers/delegation
 instructions for a new zone. JSON is stable and contains `proxied: false`.
+The operator-facing `--tenant` value is resolved by tenant slug; an exact tenant
+ID remains accepted for backward compatibility, but documentation and examples
+use slugs.
 
 ### FastAPI backend
 
