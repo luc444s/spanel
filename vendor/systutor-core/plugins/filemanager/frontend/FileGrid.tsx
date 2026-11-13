@@ -79,14 +79,7 @@ export function FileGrid({ entries, selected, onSelect, onToggle, onOpen, onCont
             onTouchMove={cancelLongPress}
             onTouchCancel={cancelLongPress}
           >
-            <input
-              type="checkbox"
-              aria-label={t("Select {name}", { name: entry.name })}
-              checked={isSelected}
-              className="absolute left-2 top-2"
-              onClick={(event) => event.stopPropagation()}
-              onChange={(event) => onToggle(entry, event.target.checked)}
-            />
+
             <span className="flex h-10 w-10 items-center justify-center text-muted-foreground" aria-hidden>
               <FileTypeIcon name={entry.name} directory={entry.directory} size={32} className="h-8 w-8" />
             </span>

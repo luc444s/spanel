@@ -702,6 +702,7 @@ export function FileExplorer({ provider, resourceId, onClose }: Props) {
               onSort={toggleSort}
               onSelect={select}
               onToggle={toggle}
+              onToggleAll={(checked) => setSelected(new Set(checked ? visible.map((entry) => entry.name) : []))}
               onOpen={activate}
               onContext={(entry, point) => setMenu({ entry, ...point })}
             />

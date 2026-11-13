@@ -12,6 +12,7 @@ type Props = {
   onSort: (key: SortKey) => void;
   onSelect: (entry: Entry, index: number, event: MouseEvent) => void;
   onToggle: (entry: Entry, checked: boolean) => void;
+  onToggleAll: (checked: boolean) => void;
   onOpen: (entry: Entry) => void;
   onContext: (entry: Entry, point: { x: number; y: number }) => void;
 };
@@ -30,6 +31,7 @@ export function FileTable({
   onSort,
   onSelect,
   onToggle,
+  onToggleAll,
   onOpen,
   onContext,
 }: Props) {
@@ -51,6 +53,11 @@ export function FileTable({
     timer.current = null;
   }
 
+  const checkboxClass =
+    "h-4 w-4 cursor-pointer rounded-sm border border-muted-foreground/40 bg-transparent accent-primary";
+  const allSelected = entries.length > 0 && entries.every((entry) => selected.has(entry.name));
+  const someSelected = entries.some((entry) => selected.has(entry.name)) && !allSelected;
+
   return (
     <table className="w-full table-fixed text-left text-sm">
       <thead className="sticky top-0 z-10 bg-muted text-xs uppercase tracking-wide text-muted-foreground">
@@ -58,7 +65,28 @@ export function FileTable({
           <th className="w-10 p-2" aria-label={t("Select")} />
           {COLUMNS.map((column) => (
             <th key={column.label || "actions"} className={`p-2 font-medium ${column.className}`}>
-              {column.key ? (
+              {column.key === "name" ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    aria-label={t("Select all")}
+                    className={checkboxClass}
+                    checked={allSelected}
+                    ref={(el) => {
+                      if (el) el.indeterminate = someSelected;
+                    }}
+                    onChange={(event) => onToggleAll(event.target.checked)}
+                  />
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 hover:text-foreground"
+                    onClick={() => onSort(column.key as SortKey)}
+                  >
+                    {t(column.label)}
+                    {sort.key === column.key ? (sort.direction === "asc" ? "▲" : "▼") : ""}
+                  </button>
+                </div>
+              ) : column.key ? (
                 <button
                   type="button"
                   className="flex items-center gap-1 hover:text-foreground"
@@ -110,6 +138,7 @@ export function FileTable({
                   type="checkbox"
                   aria-label={t("Select {name}", { name: entry.name })}
                   checked={isSelected}
+                  className={checkboxClass}
                   onClick={(event) => event.stopPropagation()}
                   onChange={(event) => onToggle(entry, event.target.checked)}
                 />
