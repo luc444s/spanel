@@ -22,8 +22,13 @@ class SniError(Exception):
 
 
 def render_postfix_map(entries: Mapping[str, tuple[Path, Path]]) -> str:
+    """Render SNI entries with the key first, as Postfix expects.
+
+    ``tls_server_sni_maps`` values use the ``smtp_tls_chain_files`` syntax:
+    each private key must appear immediately before its certificate chain.
+    """
     lines = [
-        f"{hostname} {cert} {key}"
+        f"{hostname} {key} {cert}"
         for hostname, (cert, key) in sorted(entries.items())
     ]
     return "\n".join(lines) + ("\n" if lines else "")

@@ -317,8 +317,11 @@ def test_sni_rendering(tmp_path):
     cert = tmp_path / "fullchain.pem"
     key = tmp_path / "privkey.pem"
     entries = {"mail.systutor.com": (cert, key)}
-    assert "mail.systutor.com" in render_postfix_map(entries)
-    assert str(cert) in render_postfix_map(entries)
+    rendered_map = render_postfix_map(entries)
+    assert "mail.systutor.com" in rendered_map
+    assert str(cert) in rendered_map
+    # Postfix requires the key immediately before the certificate chain.
+    assert rendered_map.split() == ["mail.systutor.com", str(key), str(cert)]
     rendered = render_dovecot_local_name(entries)
     assert "local_name mail.systutor.com {" in rendered
     assert f"ssl_key = <{key}" in rendered
