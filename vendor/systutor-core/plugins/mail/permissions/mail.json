@@ -21,6 +21,10 @@
       "description": "View the mail TLS certificate inventory of the tenant domains"
     },
     {
+      "name": "mail.certificates.all",
+      "description": "View and administer the mail TLS certificate inventory across every tenant domain"
+    },
+    {
       "name": "mail.certificates.manage",
       "description": "Request issuance, force renewal and refresh the certificate agent"
     }

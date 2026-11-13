@@ -16,6 +16,8 @@ import { useCertificateManager } from "./certificates/useCertificateManager";
 type CertificatesDialogProps = {
   open: boolean;
   canManage: boolean;
+  /** `mail.certificates.all`: inventario completo de todos los tenants. */
+  canReadAll?: boolean;
   highlightHostname?: string | null;
   /** Dominios visibles en la página; filtra certificados de otros tenants. */
   visibleDomains?: string[];
@@ -27,13 +29,14 @@ type CertificatesDialogProps = {
 export function CertificatesDialog({
   open,
   canManage,
+  canReadAll = false,
   highlightHostname,
   visibleDomains,
   onlyHostname,
   onClose,
 }: CertificatesDialogProps) {
   const t = useT();
-  const manager = useCertificateManager(open);
+  const manager = useCertificateManager(open, canReadAll);
   const [selected, setSelected] = useState<string | null>(null);
 
   const data = manager.data;

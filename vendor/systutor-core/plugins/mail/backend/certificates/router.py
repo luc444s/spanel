@@ -22,13 +22,21 @@ from plugins.mail.backend.certificates.schemas import (
 )
 from plugins.mail.backend.certificates.service import CertificatesService
 from systutor.api.deps import get_db_session
-from systutor.kernel.auth.dependencies import get_current_tenant_context, require_permission
+from systutor.kernel.auth.dependencies import (
+    get_current_tenant_context,
+    require_any_permission,
+)
 from systutor.kernel.auth.models import User
 from systutor.kernel.tenants.context import TenantContext
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/certificates", tags=["mail-certificates"])
+
+# `mail.certificates.all` es el permiso delegado de infraestructura TLS: da
+# lectura y administración sobre todos los tenants sin `core.platform.admin`.
+READ_GUARD = require_any_permission("mail.certificates.read", "mail.certificates.all")
+MANAGE_GUARD = require_any_permission("mail.certificates.manage", "mail.certificates.all")
 
 
 def _get_certificate_service(
@@ -60,7 +68,7 @@ def _publish_certificate(
 def list_certificates(
     tenant_only: bool = False,
     tenant_context: TenantContext = Depends(get_current_tenant_context),
-    _current_user: User = Depends(require_permission("mail.certificates.read")),
+    _current_user: User = Depends(READ_GUARD),
     service: CertificatesService = Depends(_get_certificate_service),
 ) -> CertificatesResponse:
     return service.list_certificates(tenant_context, tenant_only=tenant_only)
@@ -70,7 +78,7 @@ def list_certificates(
 def refresh_certificates(
     request: Request,
     tenant_context: TenantContext = Depends(get_current_tenant_context),
-    _current_user: User = Depends(require_permission("mail.certificates.manage")),
+    _current_user: User = Depends(MANAGE_GUARD),
     service: CertificatesService = Depends(_get_certificate_service),
 ) -> CertificateRefreshResponse:
     response = service.refresh(tenant_context)
@@ -89,7 +97,7 @@ def refresh_certificates(
 @router.get("/health", response_model=CertificateHealthResponse)
 def get_certificate_health(
     tenant_context: TenantContext = Depends(get_current_tenant_context),
-    _current_user: User = Depends(require_permission("mail.certificates.read")),
+    _current_user: User = Depends(READ_GUARD),
     service: CertificatesService = Depends(_get_certificate_service),
 ) -> CertificateHealthResponse:
     return service.health(tenant_context)
@@ -98,7 +106,7 @@ def get_certificate_health(
 @router.get("/alerts", response_model=CertificateAlertsResponse)
 def get_certificate_alerts(
     tenant_context: TenantContext = Depends(get_current_tenant_context),
-    _current_user: User = Depends(require_permission("mail.certificates.read")),
+    _current_user: User = Depends(READ_GUARD),
     service: CertificatesService = Depends(_get_certificate_service),
 ) -> CertificateAlertsResponse:
     return service.alerts(tenant_context)
@@ -156,7 +164,7 @@ def verify_certificate(
     request: Request,
     body: CertificateAdminActionPayload | None = None,
     tenant_context: TenantContext = Depends(get_current_tenant_context),
-    _current_user: User = Depends(require_permission("mail.certificates.manage")),
+    _current_user: User = Depends(MANAGE_GUARD),
     service: CertificatesService = Depends(_get_certificate_service),
 ):
     return _admin_certificate_action(
@@ -174,7 +182,7 @@ def sync_certificate(
     request: Request,
     body: CertificateAdminActionPayload | None = None,
     tenant_context: TenantContext = Depends(get_current_tenant_context),
-    _current_user: User = Depends(require_permission("mail.certificates.manage")),
+    _current_user: User = Depends(MANAGE_GUARD),
     service: CertificatesService = Depends(_get_certificate_service),
 ):
     return _admin_certificate_action(
@@ -192,7 +200,7 @@ def install_certificate(
     request: Request,
     body: CertificateAdminActionPayload | None = None,
     tenant_context: TenantContext = Depends(get_current_tenant_context),
-    _current_user: User = Depends(require_permission("mail.certificates.manage")),
+    _current_user: User = Depends(MANAGE_GUARD),
     service: CertificatesService = Depends(_get_certificate_service),
 ):
     return _admin_certificate_action(
@@ -210,7 +218,7 @@ def rollback_certificate(
     request: Request,
     body: CertificateAdminActionPayload | None = None,
     tenant_context: TenantContext = Depends(get_current_tenant_context),
-    _current_user: User = Depends(require_permission("mail.certificates.manage")),
+    _current_user: User = Depends(MANAGE_GUARD),
     service: CertificatesService = Depends(_get_certificate_service),
 ):
     return _admin_certificate_action(
@@ -222,7 +230,7 @@ def rollback_certificate(
 def get_mail_certificate(
     hostname: str,
     tenant_context: TenantContext = Depends(get_current_tenant_context),
-    _current_user: User = Depends(require_permission("mail.certificates.read")),
+    _current_user: User = Depends(READ_GUARD),
     service: CertificatesService = Depends(_get_certificate_service),
 ) -> CertificateItem:
     return service.get_certificate(tenant_context, hostname)
@@ -233,7 +241,7 @@ def get_certificate_job(
     hostname: str,
     job_id: str,
     tenant_context: TenantContext = Depends(get_current_tenant_context),
-    _current_user: User = Depends(require_permission("mail.certificates.read")),
+    _current_user: User = Depends(READ_GUARD),
     service: CertificatesService = Depends(_get_certificate_service),
 ) -> CertificateJobResponse:
     return service.get_job(tenant_context, hostname, job_id)
@@ -249,7 +257,7 @@ def request_certificate(
     body: CertificateRequestPayload,
     request: Request,
     tenant_context: TenantContext = Depends(get_current_tenant_context),
-    _current_user: User = Depends(require_permission("mail.certificates.manage")),
+    _current_user: User = Depends(MANAGE_GUARD),
     service: CertificatesService = Depends(_get_certificate_service),
 ):
     try:

@@ -21,7 +21,7 @@ import {
 import type { PendingJob } from "./types";
 
 /** Estado, consultas y mutaciones del gestor de certificados. */
-export function useCertificateManager(open: boolean) {
+export function useCertificateManager(open: boolean, canReadAll = false) {
   const queryClient = useQueryClient();
   const [pending, setPending] = useState<Record<string, PendingJob>>({});
   const [forceTarget, setForceTarget] = useState<MailCertificate | null>(null);
@@ -32,7 +32,7 @@ export function useCertificateManager(open: boolean) {
 
   const listQuery = useQuery({
     queryKey: certificateKeys.list,
-    queryFn: listMailCertificates,
+    queryFn: () => listMailCertificates(!canReadAll),
     enabled: open,
     retry: false,
     refetchInterval: open && Object.keys(pending).length > 0 ? 5_000 : false,

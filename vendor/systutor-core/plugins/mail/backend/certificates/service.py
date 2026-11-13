@@ -76,6 +76,18 @@ class CertificatesService:
     def _inventory(self) -> Inventory:
         return self._load_inventory(self._config)
 
+    def _sees_all(self, tenant_context: TenantContext) -> bool:
+        """Alcance cross-tenant de lectura y administración TLS.
+
+        `mail.certificates.all` replica el patrón de `mail.accounts.all` y
+        delega la infraestructura TLS: un operador ve y administra el
+        inventario completo sin recibir `core.platform.admin`.
+        """
+
+        return tenant_context.is_platform or tenant_context.has_permission(
+            "mail.certificates.all"
+        )
+
     def _visible(self, inventory: Inventory, tenant_context: TenantContext) -> list[Certificate]:
         domains = self._tenant_domains(tenant_context.current_tenant_id)
         return [
@@ -83,7 +95,7 @@ class CertificatesService:
             for cert in inventory.certificates
             if cert.visible_to(
                 tenant_id=tenant_context.current_tenant_id,
-                is_platform=tenant_context.is_platform,
+                is_platform=self._sees_all(tenant_context),
                 tenant_domains=domains,
             )
         ]
@@ -104,7 +116,7 @@ class CertificatesService:
         domains = self._tenant_domains(tenant_context.current_tenant_id)
         if not certificate.visible_to(
             tenant_id=tenant_context.current_tenant_id,
-            is_platform=tenant_context.is_platform,
+            is_platform=self._sees_all(tenant_context),
             tenant_domains=domains,
         ):
             # 404 para no filtrar la existencia de hostnames de otros tenants.
@@ -157,7 +169,7 @@ class CertificatesService:
             return needle, None
         if not certificate.visible_to(
             tenant_id=tenant_context.current_tenant_id,
-            is_platform=tenant_context.is_platform,
+            is_platform=self._sees_all(tenant_context),
             tenant_domains=self._tenant_domains(tenant_context.current_tenant_id),
         ):
             # 404 para no filtrar la existencia de hostnames de otros tenants.
@@ -171,7 +183,7 @@ class CertificatesService:
     ) -> CertificatesResponse:
         inventory = self._inventory()
         domains = self._tenant_domains(tenant_context.current_tenant_id)
-        is_platform = tenant_context.is_platform and not tenant_only
+        is_platform = self._sees_all(tenant_context) and not tenant_only
         items = [
             CertificateItem(**cert.to_dict())
             for cert in inventory.certificates
@@ -202,7 +214,7 @@ class CertificatesService:
             **health_view(
                 inventory,
                 visible_hostnames={cert.hostname for cert in visible},
-                is_platform=tenant_context.is_platform,
+                is_platform=self._sees_all(tenant_context),
                 config=self._config,
             )
         )
@@ -215,7 +227,7 @@ class CertificatesService:
             payload,
             visible_hostnames={cert.hostname for cert in visible},
             default_name=self._config.default_name,
-            is_platform=tenant_context.is_platform,
+            is_platform=self._sees_all(tenant_context),
         )
         return CertificateAlertsResponse(**view)
 
@@ -314,8 +326,16 @@ class CertificatesService:
 
     ADMIN_ACTIONS = frozenset({"verify", "sync", "install", "rollback"})
 
-    def _require_platform(self, tenant_context: TenantContext) -> None:
-        if not tenant_context.is_platform:
+    def _require_admin_scope(self, tenant_context: TenantContext) -> None:
+        """Las acciones administrativas exigen alcance global.
+
+        `core.platform.admin` y `mail.certificates.all` habilitan el mismo
+        alcance: operar sobre certificados de cualquier tenant. El segundo
+        permite delegar la administración TLS sin entregar el rol de
+        plataforma.
+        """
+
+        if not self._sees_all(tenant_context):
             raise AppError(
                 "Only the infrastructure administrator can perform this action",
                 status_code=403,
@@ -337,7 +357,7 @@ class CertificatesService:
                 "Invalid action", status_code=422, code="mail.certificate_invalid_action"
             )
         certificate = self._visible_certificate(tenant_context, hostname)
-        self._require_platform(tenant_context)
+        self._require_admin_scope(tenant_context)
         if (
             action in ("sync", "install", "rollback")
             and certificate.scope == "global"

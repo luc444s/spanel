@@ -23,6 +23,7 @@ from systutor.kernel.tenants.context import TenantContext
 DEFAULT = "cf-mail"
 BASE = "/api/v1/plugins/mail/certificates"
 ADMIN = ("mail.certificates.read", "mail.certificates.manage", "core.platform.admin")
+ALL = ("mail.certificates.all",)
 TENANT = ("mail.certificates.read",)
 
 
@@ -217,6 +218,23 @@ def test_admin_sees_default_and_all_health(api):
     assert body["critical_count"] >= 1
 
 
+def test_certificates_all_sees_full_health_and_alerts(api):
+    build, _ = api
+    body = build(ALL).get(f"{BASE}/health").json()
+    assert {item["hostname"] for item in body["certificates"]} == {
+        "mail.systutor.com",
+        "mail.other.com",
+    }
+    assert body["default"]["name"] == DEFAULT
+
+    alerts = build(ALL).get(f"{BASE}/alerts").json()
+    assert {alert["code"] for alert in alerts["alerts"]} == {
+        "certificate_expiry_critical",
+        "postfix_failure",
+        "agent_stale",
+    }
+
+
 def test_alerts_are_filtered_and_global_alert_is_admin_only(api):
     build, _ = api
     tenant = build(TENANT).get(f"{BASE}/alerts")
@@ -293,6 +311,22 @@ def test_tenant_admin_of_other_tenant_cannot_touch_foreign_hostname(api):
         ("mail.certificates.read", "mail.certificates.manage"), tenant_id="t2"
     ).post(f"{BASE}/mail.systutor.com/verify", json={})
     assert response.status_code == 404
+
+
+@pytest.mark.parametrize("action", ["verify", "sync", "install", "rollback"])
+def test_certificates_all_can_run_admin_actions(api, action):
+    build, config = api
+    response = build(ALL).post(
+        f"{BASE}/mail.other.com/{action}", json={"reason": "delegated"}
+    )
+    assert response.status_code == 202
+    payload = json.loads(
+        (config.requests_dir / f"{response.json()['job_id']}.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert payload["action"] == action
+    assert payload["hostname"] == "mail.other.com"
 
 
 def test_admin_action_rejects_active_job(api):

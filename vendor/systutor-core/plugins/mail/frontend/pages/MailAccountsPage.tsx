@@ -108,8 +108,14 @@ export default function MailAccountsPage() {
   const queryClient = useQueryClient();
   const permissions = useAuthStore((state) => state.permissions);
   const tenantId = useAuthStore((state) => state.currentTenant?.id ?? "");
-  const canReadCertificates = permissions.includes("mail.certificates.read");
-  const canManageCertificates = permissions.includes("mail.certificates.manage");
+  const isPlatformAdmin = permissions.includes("core.platform.admin");
+  const canReadAllCertificates =
+    isPlatformAdmin || permissions.includes("mail.certificates.all");
+  const canReadCertificates =
+    canReadAllCertificates || permissions.includes("mail.certificates.read");
+  const canManageCertificates =
+    permissions.includes("mail.certificates.all") ||
+    permissions.includes("mail.certificates.manage");
   const isPortrait = useIsPortrait();
   const [selected, setSelected] = useState<string | null>(null);
   const [newPass, setNewPass] = useState("");
@@ -400,6 +406,7 @@ export default function MailAccountsPage() {
       <CertificatesDialog
         open={showCertificates && canReadCertificates}
         canManage={canManageCertificates}
+        canReadAll={canReadAllCertificates}
         visibleDomains={domain && domain !== "all" ? [domain] : undefined}
         onClose={() => setShowCertificates(false)}
       />

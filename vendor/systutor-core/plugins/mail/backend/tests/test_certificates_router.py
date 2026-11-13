@@ -151,6 +151,26 @@ def test_platform_admin_sees_global(api):
     }
 
 
+def test_certificates_all_sees_every_tenant_without_platform_admin(api):
+    build, _ = api
+    client = build(("mail.certificates.all",))
+
+    body = client.get(BASE).json()
+    assert {item["hostname"] for item in body["items"]} == {
+        DEFAULT,
+        "mail.systutor.com",
+        "mail.other.com",
+    }
+    assert client.get(f"{BASE}/mail.other.com").status_code == 200
+    assert client.get(f"{BASE}/{DEFAULT}").status_code == 200
+
+
+def test_certificates_all_still_honors_tenant_only(api):
+    build, _ = api
+    body = build(("mail.certificates.all",)).get(f"{BASE}?tenant_only=true").json()
+    assert [item["hostname"] for item in body["items"]] == ["mail.systutor.com"]
+
+
 def test_request_requires_manage_and_returns_202(api):
     build, config = api
     payload = {"action": "ensure", "reason": "manual"}
@@ -163,6 +183,12 @@ def test_request_requires_manage_and_returns_202(api):
         ("mail.certificates.read", "mail.certificates.manage")
     ).post(f"{BASE}/mail.systutor.com/request", json=payload)
     assert response.status_code == 202
+
+    delegated = build(("mail.certificates.all",)).post(
+        f"{BASE}/mail.other.com/request", json=payload
+    )
+    assert delegated.status_code == 202
+    assert delegated.json()["hostname"] == "mail.other.com"
     body = response.json()
     assert body["state"] == "queued"
     assert body["hostname"] == "mail.systutor.com"

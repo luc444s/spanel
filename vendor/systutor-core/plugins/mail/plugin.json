@@ -12,6 +12,7 @@
     "mail.accounts.create",
     "mail.account.password",
     "mail.certificates.read",
+    "mail.certificates.all",
     "mail.certificates.manage"
   ],
   "tenant_admin_permissions": [

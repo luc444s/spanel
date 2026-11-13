@@ -413,9 +413,16 @@ Frontend consulta el job y refresca el estado
 | Permiso | Quién | Alcance |
 |---|---|---|
 | `mail.certificates.read` | admin de infraestructura y tenants | Propios dominios; admin ve todo |
+| `mail.certificates.all` | operador TLS delegado | Inventario completo y administración de todos los tenants |
 | `mail.certificates.manage` | solo admin de infraestructura | Solicitar emisión, forzar y refrescar |
 
-`mail.certificates.manage` **no** se agrega a
+`mail.certificates.all` sustituye a `core.platform.admin` para la gestión TLS
+delegada: permite listar, ver y ejecutar acciones administrativas
+(`verify`/`sync`/`install`/`rollback`) sobre certificados de cualquier tenant
+sin entregar el rol de plataforma. No permite emitir un hostname nuevo que no
+exista en el inventario; eso sigue reservado a `core.platform.admin`.
+
+`mail.certificates.manage` y `mail.certificates.all` **no** se agregan a
 `tenant_admin_permissions`. El tenant puede consultar, no ejecutar Certbot.
 
 ### UI
