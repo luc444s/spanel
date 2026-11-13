@@ -9,7 +9,7 @@ export function Alert({ title, children, className, ...props }: AlertProps) {
   return (
     <div
       className={cn(
-        "rounded-md border border-warning/40 bg-transparent px-3 py-2 text-sm text-foreground/90",
+        "rounded-md border border-warning/30 bg-warning/[0.07] px-3 py-2 text-sm text-foreground/90",
         className
       )}
       {...props}
