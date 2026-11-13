@@ -13,7 +13,7 @@ export function normalizeDnsName(value: string) {
   return value.trim().toLowerCase().replace(/\.$/, "");
 }
 
-export function longestOwnedZone(domain: string, zones: ZoneItem[]) {
+export function longestOwnedZone<T extends { name: string }>(domain: string, zones: T[]) {
   const candidate = normalizeDnsName(domain);
   return zones
     .filter(({ name }) => candidate === normalizeDnsName(name)
@@ -50,9 +50,15 @@ export function dnsNameInScope(name: string, scope: string) {
   return !boundary || candidate === boundary || candidate.endsWith(`.${boundary}`);
 }
 
-export function dnsStatus(domain: string, zones: ZoneItem[], failed = false): DnsStatus {
-  if (failed) return "error";
+export function dnsStatus(
+  domain: string,
+  zones: ZoneItem[],
+  failed = false,
+  cloudflareZones: { name: string }[] = [],
+): DnsStatus {
   if (longestOwnedZone(domain, zones)) return "managed";
+  if (longestOwnedZone(domain, cloudflareZones)) return "cloudflare";
+  if (failed) return "error";
   return zones.length ? "external" : "no-zone";
 }
 

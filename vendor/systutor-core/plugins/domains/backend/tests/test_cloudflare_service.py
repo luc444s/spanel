@@ -67,8 +67,14 @@ class FakeCloudflare:
         self.counts = {"z1": 12, "z2": 0}
         self.records = {
             "z1": [
-                CloudflareRecord("r1", "example.com", "TXT", 120, False, None, None),
-                CloudflareRecord("r2", "www.example.com", "A", 300, True, None, None),
+                CloudflareRecord(
+                    "r1", "example.com", "TXT", "record-canary", 120, False,
+                    None, None, None,
+                ),
+                CloudflareRecord(
+                    "r2", "www.example.com", "A", "192.0.2.1", 300, True,
+                    None, None, None,
+                ),
             ]
         }
 

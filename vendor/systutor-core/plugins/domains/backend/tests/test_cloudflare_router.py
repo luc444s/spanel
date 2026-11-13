@@ -33,6 +33,7 @@ from plugins.domains.backend.models import CloudflareConnection, CloudflareOAuth
 from systutor.api.deps import get_db_session
 from systutor.core.database import Base
 from systutor.core.errors import register_exception_handlers
+from systutor.kernel.audit.models import AuditLog
 from systutor.kernel.auth.dependencies import get_current_tenant_context, get_current_user
 from systutor.kernel.tenants.context import TenantContext
 from systutor.kernel.tenants.models import Branch, Tenant
@@ -48,8 +49,11 @@ class FakeCloudflare:
             CloudflareZone("z1", "example.com", "active", "acct1", "Lab", ("ns1",), None, None)
         ]
         self.records = [
-            CloudflareRecord("r1", "example.com", "TXT", 120, False, None, None)
+            CloudflareRecord(
+                "r1", "example.com", "TXT", "record-canary", 120, False, None, None, None
+            )
         ]
+        self.mutations: list[tuple[str, str, str | None, dict[str, object] | None]] = []
 
     def authorization_url(self, *, state, code_challenge, **_kwargs):
         return f"https://dash.cloudflare.com/oauth2/auth?state={state}"
@@ -76,6 +80,25 @@ class FakeCloudflare:
         if self.record_error is not None:
             raise self.record_error
         return list(self.records)
+
+    def create_record(self, credentials, zone_id, payload, refresh=None):
+        self.mutations.append(("create", zone_id, None, payload))
+        return CloudflareRecord(
+            "r2", str(payload["name"]), str(payload["type"]),
+            str(payload["content"]), int(payload["ttl"]),
+            bool(payload.get("proxied", False)), payload.get("priority"), None, None,
+        )
+
+    def update_record(self, credentials, zone_id, record_id, payload, refresh=None):
+        self.mutations.append(("update", zone_id, record_id, payload))
+        return CloudflareRecord(
+            record_id, str(payload["name"]), str(payload["type"]),
+            str(payload["content"]), int(payload["ttl"]),
+            bool(payload.get("proxied", False)), payload.get("priority"), None, None,
+        )
+
+    def delete_record(self, credentials, zone_id, record_id, refresh=None):
+        self.mutations.append(("delete", zone_id, record_id, None))
 
     def revoke(self, **kwargs):
         self.revoked.append(kwargs["token"])
@@ -272,7 +295,7 @@ def test_start_and_disconnect_are_tenant_scoped(tmp_path: Path, monkeypatch) -> 
         engine.dispose()
 
 
-def test_zones_records_redaction_and_error_mapping(tmp_path: Path, monkeypatch) -> None:
+def test_zones_records_content_and_error_mapping(tmp_path: Path, monkeypatch) -> None:
     app, fake, db, holder, _cipher, engine = build_app(tmp_path, monkeypatch)
     try:
         with TestClient(app) as client:
@@ -287,8 +310,7 @@ def test_zones_records_redaction_and_error_mapping(tmp_path: Path, monkeypatch) 
             assert records.status_code == 200
             item = records.json()["items"][0]
             assert item["type"] == "TXT"
-            assert "content" not in item
-            assert "TXT" not in str(item.get("content", ""))
+            assert item["content"] == "record-canary"
 
             fake.record_error = CloudflareNotFound("absent")
             assert (
@@ -306,6 +328,55 @@ def test_zones_records_redaction_and_error_mapping(tmp_path: Path, monkeypatch) 
             fake.zone_error = CloudflareUnavailable("down")
             unavailable = client.get("/api/v1/plugins/domains/dns/cloudflare/zones")
             assert unavailable.status_code == 503
+    finally:
+        db.close()
+        engine.dispose()
+
+
+def test_record_crud_is_tenant_scoped_and_audit_redacts_content(
+    tmp_path: Path, monkeypatch
+) -> None:
+    app, fake, db, holder, _cipher, engine = build_app(tmp_path, monkeypatch)
+    payload = {
+        "name": "www.example.com",
+        "type": "A",
+        "content": "192.0.2.44",
+        "ttl": 300,
+        "proxied": True,
+    }
+    base = "/api/v1/plugins/domains/dns/cloudflare/zones/z1/records"
+    try:
+        with TestClient(app) as client:
+            holder["context"] = context("t1", "domains.dns.read")
+            assert client.post(base, json=payload).status_code == 403
+
+            holder["context"] = context("t1", "domains.dns.cloudflare")
+            created = client.post(base, json=payload)
+            assert created.status_code == 200
+            assert created.json()["content"] == "192.0.2.44"
+
+            updated_payload = {**payload, "content": "192.0.2.45", "proxied": False}
+            updated = client.put(f"{base}/r2", json=updated_payload)
+            assert updated.status_code == 200
+            assert updated.json()["content"] == "192.0.2.45"
+
+            deleted = client.delete(f"{base}/r2")
+            assert deleted.status_code == 200
+            assert deleted.json() == {
+                "zone_id": "z1",
+                "record_id": "r2",
+                "deleted": True,
+            }
+
+        assert [mutation[0] for mutation in fake.mutations] == [
+            "create", "update", "delete",
+        ]
+        audits = db.query(AuditLog).filter(
+            AuditLog.action.like("domains.dns.cloudflare_record_%")
+        ).all()
+        assert len(audits) == 3
+        assert "192.0.2.44" not in str([audit.details for audit in audits])
+        assert "192.0.2.45" not in str([audit.details for audit in audits])
     finally:
         db.close()
         engine.dispose()
@@ -412,7 +483,7 @@ def test_registration_requests_account_id_when_token_cannot_list_accounts(
     try:
         db.query(CloudflareOAuthClient).delete()
         db.commit()
-        fake.list_token_accounts = lambda _token: []
+        fake.list_token_accounts = lambda token: []
         holder["context"] = context(
             "t1", "domains.dns.cloudflare", "domains.cloudflare.register"
         )

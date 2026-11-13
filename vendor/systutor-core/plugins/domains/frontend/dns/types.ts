@@ -76,4 +76,4 @@ export type VerifyResult = {
   warning: string;
 };
 
-export type DnsStatus = "managed" | "external" | "no-zone" | "error";
+export type DnsStatus = "managed" | "cloudflare" | "external" | "no-zone" | "error";

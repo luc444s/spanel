@@ -27,6 +27,12 @@ describe("Domains DNS pure policy", () => {
     expect(dnsStatus("outside.test", zones)).toBe("external");
     expect(dnsStatus("outside.test", [])).toBe("no-zone");
     expect(dnsStatus("outside.test", [], true)).toBe("error");
+    expect(dnsStatus("www.cloudflare.test", [], false, [
+      { name: "cloudflare.test" },
+    ])).toBe("cloudflare");
+    expect(dnsStatus("www.cloudflare.test", [], true, [
+      { name: "cloudflare.test" },
+    ])).toBe("cloudflare");
   });
 
   it("distinguishes an apex from a child covered by its parent zone", () => {

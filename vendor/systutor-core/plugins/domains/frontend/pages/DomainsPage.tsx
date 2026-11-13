@@ -18,6 +18,13 @@ import { toast } from "@systutor/shell/ui/toast";
 import { t } from "@/i18n";
 import { DomainsTable } from "../components/DomainsTable";
 import { CloudflareConnectButton } from "../cloudflare/CloudflareConnectButton";
+import { CloudflareDnsDialog } from "../cloudflare/CloudflareDnsDialog";
+import {
+  cloudflareKeys,
+  getCloudflareStatus,
+  listCloudflareZones,
+} from "../cloudflare/api";
+import type { CloudflareZone } from "../cloudflare/types";
 import { DnsZoneDialog } from "../dns/DnsZoneDialog";
 import { NameserversDialog } from "../dns/NameserversDialog";
 import { dnsKeys, listZones } from "../dns/api";
@@ -36,6 +43,7 @@ export default function DomainsPage() {
   const platform = permissions.includes("core.platform.admin");
   const canManage = permissions.includes("domains.domains.manage");
   const canReadDns = permissions.includes("domains.dns.read");
+  const canUseCloudflare = permissions.includes("domains.dns.cloudflare");
 
   const domainsQuery = useQuery({
     queryKey: [...domainsKeys.list, platform ? "all" : "tenant"],
@@ -45,6 +53,22 @@ export default function DomainsPage() {
     queryKey: dnsKeys.zones,
     queryFn: listZones,
     enabled: canReadDns,
+    retry: false,
+  });
+  const cloudflareStatusQuery = useQuery({
+    queryKey: cloudflareKeys.status,
+    queryFn: getCloudflareStatus,
+    enabled: canUseCloudflare,
+    retry: false,
+  });
+  const cloudflareConnected = Boolean(
+    cloudflareStatusQuery.data?.connected
+      && cloudflareStatusQuery.data.status === "active",
+  );
+  const cloudflareZonesQuery = useQuery({
+    queryKey: cloudflareKeys.zones,
+    queryFn: listCloudflareZones,
+    enabled: canUseCloudflare && cloudflareConnected,
     retry: false,
   });
 
@@ -57,6 +81,7 @@ export default function DomainsPage() {
   const [linkSiteId, setLinkSiteId] = useState("");
   const [removing, setRemoving] = useState<DomainItem | null>(null);
   const [dnsDomain, setDnsDomain] = useState<DomainItem | null>(null);
+  const [cloudflareZone, setCloudflareZone] = useState<CloudflareZone | null>(null);
   const [nameserversOpen, setNameserversOpen] = useState(false);
 
   const items = domainsQuery.data?.items ?? [];
@@ -68,6 +93,7 @@ export default function DomainsPage() {
   const linkTarget
     = ownSites.find((site) => site.site_id === linkSiteId) ?? ownSites[0];
   const dnsZones = zonesQuery.data?.items ?? [];
+  const cloudflareZones = cloudflareZonesQuery.data?.items ?? [];
   const activeZone = dnsDomain ? longestOwnedZone(dnsDomain.domain, dnsZones) : null;
   const dnsSubdomains = activeZone ? items
     .filter((item) => !item.tenant_id || item.tenant_id === currentTenant?.id)
@@ -136,6 +162,16 @@ export default function DomainsPage() {
     setLinking(item);
   }
 
+  function openDns(item: DomainItem, matchedCloudflareZone: CloudflareZone | null) {
+    if (matchedCloudflareZone) {
+      setDnsDomain(null);
+      setCloudflareZone(matchedCloudflareZone);
+      return;
+    }
+    setCloudflareZone(null);
+    setDnsDomain(item);
+  }
+
   return (
     <section className="space-y-4 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -149,7 +185,7 @@ export default function DomainsPage() {
           {canReadDns && <Button size="sm" variant="secondary" onClick={() => setNameserversOpen(true)}>{t("Nameservers")}</Button>}
           <CloudflareConnectButton
             permissions={permissions}
-            onConnected={() => void zonesQuery.refetch()}
+            onConnected={() => void cloudflareZonesQuery.refetch()}
           />
           {canManage && <Button size="sm" onClick={openAdd}>{t("Add domain")}</Button>}
         </div>
@@ -180,10 +216,11 @@ export default function DomainsPage() {
             : t("No domains yet. Add one to publish it in this tenant.")}
         </p>
       ) : (
-        <DomainsTable items={items} zones={dnsZones} dnsError={zonesQuery.isError}
+        <DomainsTable items={items} zones={dnsZones} cloudflareZones={cloudflareZones}
+          dnsError={zonesQuery.isError}
           platform={platform} canReadDns={canReadDns} canManage={canManage}
           currentTenantId={currentTenant?.id} hasOwnSites={ownSites.length > 0}
-          onOpenDns={setDnsDomain} onLink={openLink} onRemove={setRemoving} />
+          onOpenDns={openDns} onLink={openLink} onRemove={setRemoving} />
       )}
 
       <Dialog open={addOpen} title={t("Add domain")} onClose={() => setAddOpen(false)}>
@@ -340,6 +377,7 @@ export default function DomainsPage() {
         retryZoneList={() => void zonesQuery.refetch()}
         onClose={() => setDnsDomain(null)}
       />
+      <CloudflareDnsDialog zone={cloudflareZone} onClose={() => setCloudflareZone(null)} />
       <NameserversDialog open={nameserversOpen} onClose={() => setNameserversOpen(false)}
         permissions={permissions} zones={zonesQuery.data?.items ?? []} />
     </section>

@@ -40,6 +40,35 @@ export type CloudflareZone = {
 
 export type CloudflareZoneList = { items: CloudflareZone[] };
 
+export type CloudflareRecord = {
+  id: string;
+  name: string;
+  type: string;
+  content: string;
+  ttl: number;
+  proxied: boolean;
+  priority: number | null;
+  created_on: string | null;
+  modified_on: string | null;
+};
+
+export type CloudflareRecordList = { zone_id: string; items: CloudflareRecord[] };
+
+export type CloudflareRecordWrite = {
+  name: string;
+  type: string;
+  content: string;
+  ttl: number;
+  proxied: boolean;
+  priority?: number;
+};
+
+export type CloudflareRecordDeleteResponse = {
+  zone_id: string;
+  record_id: string;
+  deleted: boolean;
+};
+
 export type CloudflareDisconnectResponse = {
   tenant_id: string;
   applied: boolean;

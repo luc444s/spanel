@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class _Strict(BaseModel):
@@ -78,13 +78,15 @@ class CloudflareZoneListResponse(BaseModel):
 
 
 class CloudflareRecordItem(BaseModel):
-    """Record content is intentionally absent from the public contract."""
+    """Tenant-scoped DNS record returned only to an authorized connection."""
 
     id: str
     name: str
     type: str
+    content: str
     ttl: int = 0
     proxied: bool = False
+    priority: int | None = None
     created_on: str | None = None
     modified_on: str | None = None
 
@@ -92,3 +94,28 @@ class CloudflareRecordItem(BaseModel):
 class CloudflareRecordListResponse(BaseModel):
     zone_id: str
     items: list[CloudflareRecordItem] = Field(default_factory=list)
+
+
+class CloudflareRecordWrite(_Strict):
+    name: str = Field(min_length=1, max_length=253)
+    type: str = Field(min_length=1, max_length=16)
+    content: str = Field(min_length=1, max_length=65535)
+    ttl: int = Field(default=1, ge=1, le=2147483647)
+    proxied: bool = False
+    priority: int | None = Field(default=None, ge=0, le=65535)
+
+    @field_validator("name", "type")
+    @classmethod
+    def strip_value(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("type")
+    @classmethod
+    def uppercase_type(cls, value: str) -> str:
+        return value.upper()
+
+
+class CloudflareRecordDeleteResponse(BaseModel):
+    zone_id: str
+    record_id: str
+    deleted: bool

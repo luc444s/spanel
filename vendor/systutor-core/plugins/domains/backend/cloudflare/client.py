@@ -142,13 +142,15 @@ class CloudflareZone:
 
 @dataclass(frozen=True)
 class CloudflareRecord:
-    """A redacted record: raw content is deliberately not represented."""
+    """A DNS record visible only through the tenant-scoped records API."""
 
     id: str
     name: str
     type: str
+    content: str
     ttl: int
     proxied: bool
+    priority: int | None
     created_on: str | None
     modified_on: str | None
 
@@ -157,8 +159,10 @@ class CloudflareRecord:
             "id": self.id,
             "name": self.name,
             "type": self.type,
+            "content": self.content,
             "ttl": self.ttl,
             "proxied": self.proxied,
+            "priority": self.priority,
             "created_on": self.created_on,
             "modified_on": self.modified_on,
         }
@@ -291,6 +295,20 @@ class CloudflareClient:
 
     def _api_get(self, path: str, token: str) -> tuple[Any, dict[str, Any]]:
         return self._request("GET", f"{API_BASE}{path}", headers=self._bearer(token))
+
+    def _api_write(
+        self,
+        method: str,
+        path: str,
+        token: str,
+        payload: dict[str, object] | None = None,
+    ) -> Any:
+        headers = {**self._bearer(token), "Content-Type": "application/json"}
+        body = None if payload is None else json.dumps(payload, separators=(",", ":")).encode()
+        result, _info = self._request(
+            method, f"{API_BASE}{path}", headers=headers, body=body
+        )
+        return result
 
     @staticmethod
     def _basic(client_id: str, client_secret: str) -> str:
@@ -533,6 +551,25 @@ class CloudflareClient:
             modified_on=str(item.get("modified_on", "") or "") or None,
         )
 
+    @staticmethod
+    def _record(item: dict[str, Any]) -> CloudflareRecord:
+        raw_priority = item.get("priority")
+        try:
+            priority = int(raw_priority) if raw_priority is not None else None
+        except (TypeError, ValueError):
+            priority = None
+        return CloudflareRecord(
+            id=str(item.get("id", "")).strip(),
+            name=str(item.get("name", "")).strip(),
+            type=str(item.get("type", "")).strip().upper(),
+            content=str(item.get("content", "") or ""),
+            ttl=int(item.get("ttl", 0) or 0),
+            proxied=bool(item.get("proxied", False)),
+            priority=priority,
+            created_on=str(item.get("created_on", "") or "") or None,
+            modified_on=str(item.get("modified_on", "") or "") or None,
+        )
+
     def list_zones(
         self,
         credentials: CloudflareCredentials,
@@ -593,22 +630,71 @@ class CloudflareClient:
             for item in result:
                 if not isinstance(item, dict):
                     continue
-                records.append(
-                    CloudflareRecord(
-                        id=str(item.get("id", "")).strip(),
-                        name=str(item.get("name", "")).strip(),
-                        type=str(item.get("type", "")).strip().upper(),
-                        ttl=int(item.get("ttl", 0) or 0),
-                        proxied=bool(item.get("proxied", False)),
-                        created_on=str(item.get("created_on", "") or "") or None,
-                        modified_on=str(item.get("modified_on", "") or "") or None,
-                    )
-                )
+                records.append(self._record(item))
             total_pages = self._total_pages(info, page, len(result), 100)
             if page >= total_pages or not result:
                 break
             page += 1
         return records
+
+    def create_record(
+        self,
+        credentials: CloudflareCredentials,
+        zone_id: str,
+        payload: dict[str, object],
+        refresh: RefreshCallback | None = None,
+    ) -> CloudflareRecord:
+        def call(token: str) -> Any:
+            return self._api_write(
+                "POST",
+                f"/zones/{quote(zone_id, safe='')}/dns_records",
+                token,
+                payload,
+            )
+
+        result = self._with_refresh(credentials, refresh, call)
+        if not isinstance(result, dict):
+            raise CloudflareUpstream("Cloudflare returned an invalid DNS record")
+        return self._record(result)
+
+    def update_record(
+        self,
+        credentials: CloudflareCredentials,
+        zone_id: str,
+        record_id: str,
+        payload: dict[str, object],
+        refresh: RefreshCallback | None = None,
+    ) -> CloudflareRecord:
+        def call(token: str) -> Any:
+            return self._api_write(
+                "PUT",
+                f"/zones/{quote(zone_id, safe='')}/dns_records/"
+                f"{quote(record_id, safe='')}",
+                token,
+                payload,
+            )
+
+        result = self._with_refresh(credentials, refresh, call)
+        if not isinstance(result, dict):
+            raise CloudflareUpstream("Cloudflare returned an invalid DNS record")
+        return self._record(result)
+
+    def delete_record(
+        self,
+        credentials: CloudflareCredentials,
+        zone_id: str,
+        record_id: str,
+        refresh: RefreshCallback | None = None,
+    ) -> None:
+        def call(token: str) -> Any:
+            return self._api_write(
+                "DELETE",
+                f"/zones/{quote(zone_id, safe='')}/dns_records/"
+                f"{quote(record_id, safe='')}",
+                token,
+            )
+
+        self._with_refresh(credentials, refresh, call)
 
     def count_records(
         self,

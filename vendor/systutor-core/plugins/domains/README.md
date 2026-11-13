@@ -171,12 +171,12 @@ Configuration requires both `domains.dns.nameservers` and
 sends an explicit approved set. An empty set is reserved for first-settings
 bootstrap. Registrar delegation, DNSSEC and Cloudflare remain outside the UI.
 
-## Cloudflare OAuth and discovery (A.SPEC 0071)
+## Cloudflare OAuth and DNS management (A.SPEC 0071/0074)
 
-The backend and CLI can connect one tenant to Cloudflare through the
-Authorization Code flow with S256 PKCE. This layer is **read-only**: it lists
-authorized accounts, zones and redacted DNS records but has no endpoint that
-creates, edits or deletes records, zones, nameservers or proxy settings.
+The backend and panel can connect one tenant to Cloudflare through the
+Authorization Code flow with S256 PKCE. Authorized users can discover zones
+and list, create, edit or delete their DNS records. Zone creation, nameserver
+changes and account settings remain outside this integration.
 A.SPEC 0072 adds a tenant-scoped Cloudflare connection card to the Domains page
 for users with `domains.dns.cloudflare`.
 

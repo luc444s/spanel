@@ -1,8 +1,8 @@
-"""Tenant-aware Cloudflare OAuth, persistence and read-only discovery.
+"""Tenant-aware Cloudflare OAuth, persistence and DNS management.
 
 This module orchestrates the OAuth flow and storage.  It never returns tokens,
-client secrets, authorization codes, PKCE verifiers or DNS record content, and
-it audits every successful register/connect/disconnect action without secrets.
+client secrets, authorization codes or PKCE verifiers. DNS record content is
+returned only through tenant-scoped APIs and is never included in audits.
 """
 
 from __future__ import annotations
@@ -708,7 +708,7 @@ class CloudflareService:
     def status(self, context: TenantContext) -> dict[str, object]:
         return self.status_for_tenant(self._tenant_id(context))
 
-    # -- read-only discovery ------------------------------------------------
+    # -- tenant-scoped discovery and DNS management ------------------------
     def _active_credentials(self, tenant_id: str) -> CloudflareCredentials:
         row = self._connection(tenant_id)
         credentials = self._credentials(row)
@@ -738,23 +738,111 @@ class CloudflareService:
     def zones(self, context: TenantContext) -> list[dict[str, object]]:
         return self.zones_for_tenant(self._tenant_id(context))
 
-    def records_for_tenant(self, tenant_id: str, zone_id: str) -> list[dict[str, object]]:
+    def records_for_tenant(
+        self, tenant_id: str, zone_id: str, *, include_content: bool = False
+    ) -> list[dict[str, object]]:
+        credentials, refresh, _zone = self._zone_access(tenant_id, zone_id)
+        items = [
+            record.to_dict() for record in self._client.list_records(credentials, zone_id, refresh)
+        ]
+        if not include_content:
+            for item in items:
+                item.pop("content", None)
+        return items
+
+    def records(self, context: TenantContext, zone_id: str) -> list[dict[str, object]]:
+        return self.records_for_tenant(
+            self._tenant_id(context), zone_id, include_content=True
+        )
+
+    def _zone_access(
+        self, tenant_id: str, zone_id: str
+    ) -> tuple[CloudflareCredentials, Callable[[], CloudflareCredentials], CloudflareZone]:
+        connection = self._connection(tenant_id)
         credentials = self._active_credentials(tenant_id)
 
         def refresh() -> CloudflareCredentials:
             return self._refresh_locked(tenant_id, credentials.access_token)
 
-        # A zone outside this tenant's authorization must look absent.
         zone = self._client.get_zone(credentials, zone_id, refresh)
-        if not zone.id:
+        if (
+            not zone.id
+            or (
+                zone.account_id
+                and connection.cloudflare_account_id
+                and zone.account_id != connection.cloudflare_account_id
+            )
+        ):
             raise CloudflareNotFound("Cloudflare zone not found")
-        return [
-            record.to_dict()
-            for record in self._client.list_records(credentials, zone_id, refresh)
-        ]
+        return credentials, refresh, zone
 
-    def records(self, context: TenantContext, zone_id: str) -> list[dict[str, object]]:
-        return self.records_for_tenant(self._tenant_id(context), zone_id)
+    @staticmethod
+    def _record_audit_details(
+        zone_id: str, record_id: str, values: dict[str, object]
+    ) -> dict[str, object]:
+        return {
+            "zone_id": zone_id,
+            "record_id": record_id,
+            "type": str(values.get("type", "")),
+            "name": str(values.get("name", "")),
+        }
+
+    def create_record(
+        self,
+        context: TenantContext,
+        zone_id: str,
+        values: dict[str, object],
+    ) -> dict[str, object]:
+        tenant_id = self._tenant_id(context)
+        credentials, refresh, _zone = self._zone_access(tenant_id, zone_id)
+        record = self._client.create_record(credentials, zone_id, values, refresh)
+        self._audit(
+            "domains.dns.cloudflare_record_created",
+            tenant_id=tenant_id,
+            entity_id=record.id,
+            details=self._record_audit_details(zone_id, record.id, values),
+            context=context,
+        )
+        self._db.commit()
+        return record.to_dict()
+
+    def update_record(
+        self,
+        context: TenantContext,
+        zone_id: str,
+        record_id: str,
+        values: dict[str, object],
+    ) -> dict[str, object]:
+        tenant_id = self._tenant_id(context)
+        credentials, refresh, _zone = self._zone_access(tenant_id, zone_id)
+        record = self._client.update_record(
+            credentials, zone_id, record_id, values, refresh
+        )
+        self._audit(
+            "domains.dns.cloudflare_record_updated",
+            tenant_id=tenant_id,
+            entity_id=record.id,
+            details=self._record_audit_details(zone_id, record.id, values),
+            context=context,
+        )
+        self._db.commit()
+        return record.to_dict()
+
+    def delete_record(
+        self, context: TenantContext, zone_id: str, record_id: str
+    ) -> dict[str, object]:
+        tenant_id = self._tenant_id(context)
+        credentials, refresh, _zone = self._zone_access(tenant_id, zone_id)
+        self._client.delete_record(credentials, zone_id, record_id, refresh)
+        self._audit(
+            "domains.dns.cloudflare_record_deleted",
+            tenant_id=tenant_id,
+            entity_id=record_id,
+            details={"zone_id": zone_id, "record_id": record_id},
+            context=context,
+        )
+        self._db.commit()
+        return {"zone_id": zone_id, "record_id": record_id, "deleted": True}
 
     # -- disconnect ---------------------------------------------------------
     def disconnect_for_tenant(

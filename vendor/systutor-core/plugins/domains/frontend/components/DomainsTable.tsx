@@ -17,6 +17,7 @@ import {
   shouldOpenDnsRow,
 } from "../dns/logic";
 import type { ZoneItem } from "../dns/types";
+import type { CloudflareZone } from "../cloudflare/types";
 
 function certificateLabel(info: CertificateInfo | undefined) {
   if (!info) return t("No data");
@@ -56,17 +57,18 @@ function CertificateCell({ domain, published, readable }: {
   </div>;
 }
 
-export function DomainsTable({ items, zones, dnsError, platform, canReadDns, canManage,
+export function DomainsTable({ items, zones, cloudflareZones, dnsError, platform, canReadDns, canManage,
   currentTenantId, hasOwnSites, onOpenDns, onLink, onRemove }: {
   items: DomainItem[];
   zones: ZoneItem[];
+  cloudflareZones: CloudflareZone[];
   dnsError: boolean;
   platform: boolean;
   canReadDns: boolean;
   canManage: boolean;
   currentTenantId: string | undefined;
   hasOwnSites: boolean;
-  onOpenDns: (item: DomainItem) => void;
+  onOpenDns: (item: DomainItem, cloudflareZone: CloudflareZone | null) => void;
   onLink: (item: DomainItem) => void;
   onRemove: (item: DomainItem) => void;
 }) {
@@ -93,6 +95,7 @@ export function DomainsTable({ items, zones, dnsError, platform, canReadDns, can
         const published = item.published ?? true;
         const owned = !item.tenant_id || item.tenant_id === currentTenantId;
         const managedZone = longestOwnedZone(item.domain, zones);
+        const cloudflareZone = longestOwnedZone(item.domain, cloudflareZones);
         const key = `${item.tenant_id ?? ""}:${item.domain}`;
         const expanded = expandedDomains.has(key);
         return <tr key={key}
@@ -102,14 +105,16 @@ export function DomainsTable({ items, zones, dnsError, platform, canReadDns, can
           onDoubleClick={(event) => {
             const blocked = (event.target as HTMLElement).closest("button,a,input,select,textarea");
             if (canReadDns && shouldOpenDnsRow(owned, blocked?.tagName
-              ?? (event.target as HTMLElement).tagName)) onOpenDns(item);
+              ?? (event.target as HTMLElement).tagName)) {
+              onOpenDns(item, managedZone ? null : cloudflareZone);
+            }
           }}
           onKeyDown={(event) => {
             if (event.currentTarget !== event.target
               && (event.target as HTMLElement).closest("button,a,input,select,textarea")) return;
             if (canReadDns && shouldOpenDnsRow(
               owned, (event.target as HTMLElement).tagName, event.key,
-            )) onOpenDns(item);
+            )) onOpenDns(item, managedZone ? null : cloudflareZone);
           }}>
           <td className="px-3 py-3 font-medium text-foreground">
             <div className={`flex min-w-0 gap-2 ${child ? "pl-6" : ""}`}>
@@ -145,8 +150,8 @@ export function DomainsTable({ items, zones, dnsError, platform, canReadDns, can
           <td className="px-3 py-3"><CertificateCell domain={item.domain}
             published={published} readable={owned} /></td>
           {canReadDns && <td className="px-3 py-3"><DnsStatusCell
-            status={dnsStatus(item.domain, zones, dnsError)} domain={item.domain}
-            zoneName={managedZone?.name ?? null} /></td>}
+            status={dnsStatus(item.domain, zones, dnsError, cloudflareZones)} domain={item.domain}
+            zoneName={managedZone?.name ?? cloudflareZone?.name ?? null} /></td>}
           <td className="px-3 py-3"><div className="flex items-center justify-end gap-1.5">
             {item.owner === "domains" && canManage && owned && item.editable && <>
               {!published && hasOwnSites && <Button variant="secondary" className="h-7 whitespace-nowrap px-2 text-xs" onClick={() => onLink(item)}>{t("Link")}</Button>}

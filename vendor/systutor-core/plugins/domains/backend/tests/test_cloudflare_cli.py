@@ -36,7 +36,9 @@ class FakeCloudflare:
             CloudflareZone("z1", "example.com", "active", "acct1", "Lab", ("ns1",), None, None)
         ]
         self.records = [
-            CloudflareRecord("r1", "example.com", "TXT", 120, False, None, None)
+            CloudflareRecord(
+                "r1", "example.com", "TXT", "record-canary", 120, False, None, None, None
+            )
         ]
 
     def list_scopes(self, token):

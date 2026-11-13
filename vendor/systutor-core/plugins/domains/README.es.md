@@ -172,14 +172,15 @@ El diálogo global **Servidores de nombres** muestra y verifica el estado por
 UDP/TCP. Configurar exige `domains.dns.nameservers` y `core.platform.admin`,
 planifica las zonas propias listadas explícitamente y siempre envía un conjunto
 aprobado explícito. El conjunto vacío queda reservado al bootstrap inicial.
-La delegación del registrador, DNSSEC y Cloudflare quedan fuera de la interfaz.
+La delegación del registrador, DNSSEC y Cloudflare no son modificados por esta
+interfaz local de nameservers.
 
-## Cloudflare OAuth y descubrimiento (A.SPEC 0071)
+## Cloudflare OAuth y gestión DNS (A.SPEC 0071/0074)
 
-El backend y la CLI pueden conectar un tenant con Cloudflare mediante
-Authorization Code con PKCE S256. Esta capa es **de solo lectura**: lista
-cuentas autorizadas, zonas y registros DNS redactados, pero no tiene ningún
-endpoint que cree, edite o elimine registros, zonas, nameservers ni proxy.
+El backend y el panel pueden conectar un tenant con Cloudflare mediante
+Authorization Code con PKCE S256. Los usuarios autorizados pueden descubrir
+zonas y listar, crear, editar o eliminar sus registros DNS. Crear zonas,
+cambiar nameservers y administrar la cuenta quedan fuera de esta integración.
 La A.SPEC 0072 añade una tarjeta de conexión de Cloudflare, con alcance de
 tenant, en la página de Dominios para usuarios con `domains.dns.cloudflare`.
 

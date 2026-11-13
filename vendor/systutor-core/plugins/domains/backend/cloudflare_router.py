@@ -16,8 +16,10 @@ from plugins.domains.backend.cloudflare.client import (
 from plugins.domains.backend.cloudflare.config import CloudflareConfig, CloudflareConfigError
 from plugins.domains.backend.cloudflare.service import CloudflareService
 from plugins.domains.backend.cloudflare_schemas import (
+    CloudflareRecordDeleteResponse,
     CloudflareRecordItem,
     CloudflareRecordListResponse,
+    CloudflareRecordWrite,
     CloudflareZoneItem,
     CloudflareZoneListResponse,
     ConnectionStatusResponse,
@@ -242,3 +244,67 @@ def list_records(
         zone_id=zone_id,
         items=[CloudflareRecordItem.model_validate(item) for item in items],
     )
+
+
+@router.post(
+    "/dns/cloudflare/zones/{zone_id}/records",
+    response_model=CloudflareRecordItem,
+)
+def create_record(
+    zone_id: str,
+    body: CloudflareRecordWrite,
+    request: Request,
+    tenant_context: TenantContext = Depends(get_current_tenant_context),
+    _current_user: User = Depends(require_permission(CLOUDFLARE)),
+    db: Session = Depends(get_db_session),
+) -> CloudflareRecordItem:
+    try:
+        item = _service(request, db).create_record(
+            tenant_context, zone_id, body.model_dump(exclude_none=True)
+        )
+    except CloudflareError as exc:
+        raise _translate(exc) from exc
+    return CloudflareRecordItem.model_validate(item)
+
+
+@router.put(
+    "/dns/cloudflare/zones/{zone_id}/records/{record_id}",
+    response_model=CloudflareRecordItem,
+)
+def update_record(
+    zone_id: str,
+    record_id: str,
+    body: CloudflareRecordWrite,
+    request: Request,
+    tenant_context: TenantContext = Depends(get_current_tenant_context),
+    _current_user: User = Depends(require_permission(CLOUDFLARE)),
+    db: Session = Depends(get_db_session),
+) -> CloudflareRecordItem:
+    try:
+        item = _service(request, db).update_record(
+            tenant_context, zone_id, record_id, body.model_dump(exclude_none=True)
+        )
+    except CloudflareError as exc:
+        raise _translate(exc) from exc
+    return CloudflareRecordItem.model_validate(item)
+
+
+@router.delete(
+    "/dns/cloudflare/zones/{zone_id}/records/{record_id}",
+    response_model=CloudflareRecordDeleteResponse,
+)
+def delete_record(
+    zone_id: str,
+    record_id: str,
+    request: Request,
+    tenant_context: TenantContext = Depends(get_current_tenant_context),
+    _current_user: User = Depends(require_permission(CLOUDFLARE)),
+    db: Session = Depends(get_db_session),
+) -> CloudflareRecordDeleteResponse:
+    try:
+        payload = _service(request, db).delete_record(
+            tenant_context, zone_id, record_id
+        )
+    except CloudflareError as exc:
+        raise _translate(exc) from exc
+    return CloudflareRecordDeleteResponse.model_validate(payload)

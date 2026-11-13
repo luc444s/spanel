@@ -3,6 +3,10 @@ import { ApiError, apiRequest } from "@systutor/shell/api/client";
 import type {
   CloudflareClientStatus,
   CloudflareDisconnectResponse,
+  CloudflareRecord,
+  CloudflareRecordDeleteResponse,
+  CloudflareRecordList,
+  CloudflareRecordWrite,
   CloudflareStartResponse,
   CloudflareStatus,
   CloudflareZoneList,
@@ -15,6 +19,7 @@ export const cloudflareKeys = {
   status: ["domains", "cloudflare", "status"] as const,
   client: ["domains", "cloudflare", "client"] as const,
   zones: ["domains", "cloudflare", "zones"] as const,
+  records: (zoneId: string) => ["domains", "cloudflare", "zones", zoneId, "records"] as const,
 };
 
 export const getCloudflareClient = () =>
@@ -46,6 +51,30 @@ export async function getCloudflareStatus(): Promise<CloudflareStatus | null> {
 
 export const listCloudflareZones = () =>
   apiRequest<CloudflareZoneList>(`${BASE}/zones`);
+
+export const listCloudflareRecords = (zoneId: string) =>
+  apiRequest<CloudflareRecordList>(`${BASE}/zones/${encodeURIComponent(zoneId)}/records`);
+
+export const createCloudflareRecord = (zoneId: string, payload: CloudflareRecordWrite) =>
+  apiRequest<CloudflareRecord>(`${BASE}/zones/${encodeURIComponent(zoneId)}/records`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+export const updateCloudflareRecord = (
+  zoneId: string,
+  recordId: string,
+  payload: CloudflareRecordWrite,
+) => apiRequest<CloudflareRecord>(
+  `${BASE}/zones/${encodeURIComponent(zoneId)}/records/${encodeURIComponent(recordId)}`,
+  { method: "PUT", body: JSON.stringify(payload) },
+);
+
+export const deleteCloudflareRecord = (zoneId: string, recordId: string) =>
+  apiRequest<CloudflareRecordDeleteResponse>(
+    `${BASE}/zones/${encodeURIComponent(zoneId)}/records/${encodeURIComponent(recordId)}`,
+    { method: "DELETE" },
+  );
 
 export const disconnectCloudflare = () =>
   apiRequest<CloudflareDisconnectResponse>(`${BASE}/disconnect`, {

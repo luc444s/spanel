@@ -279,7 +279,7 @@ def test_authorization_url_is_fixed_and_contains_pkce(tmp_path: Path) -> None:
     assert query["state"] == ["state-1"]
 
 
-def test_zone_and_record_pagination_and_redaction(tmp_path: Path) -> None:
+def test_zone_and_record_pagination(tmp_path: Path) -> None:
     zone_page_one = [
         {
             "id": "z1",
@@ -333,9 +333,48 @@ def test_zone_and_record_pagination_and_redaction(tmp_path: Path) -> None:
     assert client.get_zone(credentials, "z1").name == "example.com"
     records = client.list_records(credentials, "z1")
     assert [record.type for record in records] == ["TXT", "A"]
-    assert "content" not in records[0].to_dict()
-    assert "TXT-CONTENT-CANARY" not in json.dumps(records[0].to_dict())
+    assert records[0].content == "TXT-CONTENT-CANARY"
     assert client.count_records(credentials, "z1") == 2
+
+
+def test_record_create_update_delete_contract(tmp_path: Path) -> None:
+    created = {
+        "id": "r1",
+        "name": "www.example.com",
+        "type": "A",
+        "content": "192.0.2.10",
+        "ttl": 300,
+        "proxied": True,
+    }
+
+    def handler(method, url, body):
+        if method == "POST":
+            return 200, envelope(created)
+        if method == "PUT":
+            return 200, envelope({**created, "content": "192.0.2.11"})
+        if method == "DELETE":
+            return 200, envelope({"id": "r1"})
+        raise AssertionError((method, url))
+
+    transport = Transport(handler)
+    client = CloudflareClient(config(tmp_path), transport=transport)
+    credentials = CloudflareCredentials("access-1")
+    payload: dict[str, object] = {
+        "name": "www.example.com",
+        "type": "A",
+        "content": "192.0.2.10",
+        "ttl": 300,
+        "proxied": True,
+    }
+    assert client.create_record(credentials, "z1", payload).id == "r1"
+    assert client.update_record(credentials, "z1", "r1", payload).content == "192.0.2.11"
+    client.delete_record(credentials, "z1", "r1")
+
+    assert [call["method"] for call in transport.calls] == ["POST", "PUT", "DELETE"]
+    assert transport.calls[0]["url"].endswith("/zones/z1/dns_records")
+    assert transport.calls[1]["url"].endswith("/zones/z1/dns_records/r1")
+    assert json.loads(transport.calls[0]["body"]) == payload
+    assert transport.calls[2]["body"] == ""
 
 
 def test_refresh_once_on_401_then_permission(tmp_path: Path) -> None:
