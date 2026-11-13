@@ -1,24 +1,26 @@
-# Cloudflare OAuth: registro y reparación por CLI
+# Cloudflare OAuth: CLI registration and repair
 
-Esta guía documenta cómo registrar o reparar el cliente OAuth privado de
-Cloudflare usado por Spanel. El procedimiento sirve, entre otros casos, para
-añadir el permiso `Zone Write` requerido por el aprovisionamiento automático de
-zonas.
+**English** | [Español](README-cloudflare-register-cli.es.md)
 
-> El `dry-run` fue comprobado en producción. Nunca pegues tokens en comandos,
-> logs, tickets o conversaciones.
+This guide explains how to register or repair the private Cloudflare OAuth
+client used by Spanel. The procedure can be used to add the `Zone Write`
+permission required for automatic zone provisioning.
 
-## Qué modifica
+> The dry run has been verified in production. Never paste tokens into command
+> arguments, logs, tickets, or conversations.
 
-Con `--apply`, el comando:
+## What it changes
 
-1. consulta los IDs de los scopes OAuth requeridos;
-2. actualiza el cliente OAuth privado existente mediante `PATCH`;
-3. conserva el `client_secret` existente;
-4. si el cliente remoto fue eliminado, crea uno nuevo y cifra su secreto;
-5. guarda metadatos y una auditoría sin secretos.
+With `--apply`, the command:
 
-Scopes configurados:
+1. retrieves the IDs of the required OAuth scopes;
+2. updates the existing private OAuth client with `PATCH`;
+3. preserves the existing `client_secret`;
+4. creates a replacement and encrypts its secret if the remote client was
+   deleted;
+5. stores metadata and a secret-free audit entry.
+
+Configured scopes:
 
 ```text
 Zone Read
@@ -28,25 +30,25 @@ DNS Write
 offline_access
 ```
 
-No crea zonas, no modifica registros DNS, no cambia nameservers y no renueva
-automáticamente las autorizaciones de los tenants.
+It does not create zones, modify DNS records, change nameservers, or
+automatically renew tenant authorizations.
 
-## Requisitos
+## Requirements
 
-- Ejecutar desde la raíz del despliegue, normalmente `/opt/spanel`.
-- Contenedor `app` actualizado y operativo.
-- Account ID de Cloudflare.
-- URL pública HTTPS de Spanel.
-- API token temporal de Cloudflare con:
+- Run commands from the deployment root, normally `/opt/spanel`.
+- The `app` container must be current and healthy.
+- Cloudflare Account ID.
+- Public HTTPS URL of Spanel.
+- A temporary Cloudflare API token with:
 
 ```text
 Account → OAuth Clients → Edit
-Account resources → la cuenta que se registrará
+Account resources → the account being registered
 ```
 
-El API token bootstrap se usa una sola vez y Spanel nunca lo persiste.
+The bootstrap API token is used once and is never persisted by Spanel.
 
-## 1. Capturar el token sin exponerlo
+## 1. Capture the token without exposing it
 
 ```bash
 umask 077
@@ -57,7 +59,7 @@ unset CF_TOKEN
 chmod 600 /root/cloudflare-bootstrap-token
 ```
 
-Copiarlo temporalmente al contenedor:
+Copy it temporarily into the container:
 
 ```bash
 docker compose exec -T app sh -c \
@@ -65,9 +67,9 @@ docker compose exec -T app sh -c \
   < /root/cloudflare-bootstrap-token
 ```
 
-## 2. Validar el plan sin llamar a Cloudflare
+## 2. Validate the plan without calling Cloudflare
 
-Sustituye los valores entre `<...>`:
+Replace the values enclosed in `<...>`:
 
 ```bash
 docker compose exec -T app python -c \
@@ -79,7 +81,7 @@ docker compose exec -T app python -c \
   --json
 ```
 
-El resultado debe contener:
+The result should contain:
 
 ```json
 {
@@ -89,12 +91,12 @@ El resultado debe contener:
 }
 ```
 
-Este modo no lee el token, no llama a Cloudflare y no modifica SQL ni DNS. Por
-lo tanto, un `dry-run` correcto no demuestra todavía que el token sea válido.
+This mode does not read the token, call Cloudflare, or modify SQL or DNS.
+Therefore, a successful dry run does not prove that the token is valid.
 
-## 3. Aplicar la reparación
+## 3. Apply the repair
 
-Repite el comando anterior añadiendo `--apply`:
+Repeat the previous command with `--apply`:
 
 ```bash
 docker compose exec -T app python -c \
@@ -107,24 +109,24 @@ docker compose exec -T app python -c \
   --json
 ```
 
-Continuar únicamente si devuelve `"applied": true` y muestra `Zone Write`.
+Continue only if it returns `"applied": true` and includes `Zone Write`.
 
-## 4. Eliminar el token temporal
+## 4. Remove the temporary token
 
-Después de un apply exitoso:
+After a successful apply:
 
 ```bash
 docker compose exec -T app rm -f /tmp/cloudflare-bootstrap-token
 rm -f /root/cloudflare-bootstrap-token
 ```
 
-El token también puede revocarse en Cloudflare si no se reutilizará para otra
-reparación administrativa.
+You may also revoke the token in Cloudflare if it will not be reused for another
+administrative repair.
 
-## 5. Reconectar cada tenant
+## 5. Reconnect each tenant
 
-Reparar el cliente global no amplía tokens tenant ya emitidos. Reconecta cada
-tenant por slug:
+Repairing the global client does not expand previously issued tenant tokens.
+Reconnect each tenant by slug:
 
 ```bash
 docker compose exec -T app python -c \
@@ -134,10 +136,10 @@ docker compose exec -T app python -c \
   --wait-seconds 0
 ```
 
-Abre la URL resultante y completa el consentimiento. La conexión anterior se
-conserva si el callback nuevo falla.
+Open the resulting URL and complete consent. The previous connection remains
+available if the new callback fails.
 
-Verifica el resultado:
+Verify the result:
 
 ```bash
 docker compose exec -T app python -c \
@@ -147,9 +149,9 @@ docker compose exec -T app python -c \
   --json
 ```
 
-La lista `scopes` debe incluir `Zone Write`.
+The `scopes` list must include `Zone Write`.
 
-## 6. Probar aprovisionamiento sin modificar DNS
+## 6. Test provisioning without modifying DNS
 
 ```bash
 docker compose exec -T app python -c \
@@ -161,31 +163,31 @@ docker compose exec -T app python -c \
   --json
 ```
 
-Un código de salida `3` significa que existe drift pendiente; es normal durante
-un plan. No uses `--apply` ni `--replace` hasta revisar el JSON.
+Exit code `3` means that pending drift exists; this is normal for a plan. Do not
+use `--apply` or `--replace` until the JSON has been reviewed.
 
-## Problemas comunes
+## Common problems
 
 ### `No module named 'fastapi'`
 
-El Python del host no contiene las dependencias. Ejecuta el módulo dentro del
-contenedor `app`, como muestran los comandos de esta guía.
+The host Python environment does not contain the backend dependencies. Run the
+module inside the `app` container as shown in this guide.
 
 ### `the bootstrap token file is missing`
 
-El archivo se eliminó o no fue copiado al contenedor. Repite los pasos 1 y 2.
+The file was deleted or was not copied into the container. Repeat steps 1 and 2.
 
 ### `Cloudflare rejected the authorization`
 
-El API token es incorrecto, expiró, pertenece a otra cuenta o no tiene
-`Account → OAuth Clients → Edit`.
+The API token is incorrect, expired, belongs to another account, or does not
+have `Account → OAuth Clients → Edit`.
 
 ### `the Cloudflare OAuth client must be repaired before authorization`
 
-El cliente global todavía no incluye todos los scopes. Completa primero el
-paso 3 y después reconecta el tenant.
+The global client still lacks one or more required scopes. Complete step 3
+before reconnecting the tenant.
 
 ### `Cloudflare authorization must be renewed with Zone Write`
 
-El cliente global ya puede estar reparado, pero el tenant conserva un token
-anterior. Ejecuta el paso 5.
+The global client may already be repaired, but the tenant still has an older
+token. Complete step 5.
