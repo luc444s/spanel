@@ -308,26 +308,35 @@ def _wait_for_container(container: str) -> None:
 
 def _compose_labels(container: str) -> tuple[str, str, list[str]]:
     """Return (project, service, config files) from the Compose labels."""
-    template = (
-        '{{index .Config.Labels "com.docker.compose.project"}}\\n'
-        '{{index .Config.Labels "com.docker.compose.service"}}\\n'
-        '{{index .Config.Labels "com.docker.compose.project.config_files"}}\\n'
-        '{{index .Config.Labels "com.docker.compose.project.working_dir"}}'
-    )
-    result = _run(["docker", "inspect", "-f", template, container], check=False)
-    lines = (result.stdout.splitlines() + [""] * 4)[:4]
-    project, service, files, working_dir = lines
-    if result.returncode != 0 or not project.strip() or not service.strip():
+    result = _run(["docker", "inspect", container], check=False)
+    if result.returncode != 0:
+        raise ConfigureError(
+            f"cannot inspect {container}: {result.stderr.strip() or result.stdout.strip()}"
+        )
+    try:
+        payload = json.loads(result.stdout)[0]
+        labels = payload["Config"]["Labels"] or {}
+    except (IndexError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        raise ConfigureError(
+            f"invalid docker inspect response for {container}"
+        ) from exc
+    project = str(labels.get("com.docker.compose.project") or "").strip()
+    service = str(labels.get("com.docker.compose.service") or "").strip()
+    files = str(labels.get("com.docker.compose.project.config_files") or "").strip()
+    working_dir = str(
+        labels.get("com.docker.compose.project.working_dir") or ""
+    ).strip()
+    if not project or not service:
         raise ConfigureError(
             f"{container} is not managed by Docker Compose; recreate it manually "
             "so Docker Mailserver regenerates /etc/postfix/main.cf"
         )
     config_files = [item for item in files.split(",") if item.strip()]
-    if not config_files and working_dir.strip():
-        config_files = [str(Path(working_dir.strip()) / "docker-compose.yml")]
+    if not config_files and working_dir:
+        config_files = [str(Path(working_dir) / "docker-compose.yml")]
     if not config_files:
         raise ConfigureError(f"no Compose file found for {container}")
-    return project.strip(), service.strip(), config_files
+    return project, service, config_files
 
 
 def _compose_argv(project: str, service: str, config_files: list[str]) -> list[str]:

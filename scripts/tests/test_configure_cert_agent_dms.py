@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
+
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
@@ -95,3 +98,69 @@ def test_compose_argv_recreates_only_the_service() -> None:
     assert "--file" in argv
     assert "--force-recreate" in argv
     assert argv[-1] == "mailserver"
+
+
+class _Result:
+    returncode = 0
+    stderr = ""
+
+    def __init__(self, stdout: str) -> None:
+        self.stdout = stdout
+
+
+def test_compose_labels_reads_container_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = [
+        {
+            "Config": {
+                "Labels": {
+                    "com.docker.compose.project": "mail",
+                    "com.docker.compose.service": "mailserver",
+                    "com.docker.compose.project.config_files": (
+                        "/opt/stacks/mail/docker-compose.yml"
+                    ),
+                }
+            }
+        }
+    ]
+    monkeypatch.setattr(
+        configure, "_run", lambda *args, **kwargs: _Result(json.dumps(payload))
+    )
+
+    assert configure._compose_labels("mailserver") == (
+        "mail",
+        "mailserver",
+        ["/opt/stacks/mail/docker-compose.yml"],
+    )
+
+
+def test_compose_labels_falls_back_to_working_dir(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = [
+        {
+            "Config": {
+                "Labels": {
+                    "com.docker.compose.project": "mail",
+                    "com.docker.compose.service": "mailserver",
+                    "com.docker.compose.project.working_dir": "/opt/stacks/mail",
+                }
+            }
+        }
+    ]
+    monkeypatch.setattr(
+        configure, "_run", lambda *args, **kwargs: _Result(json.dumps(payload))
+    )
+
+    assert configure._compose_labels("mailserver")[2] == [
+        "/opt/stacks/mail/docker-compose.yml"
+    ]
+
+
+def test_compose_labels_rejects_plain_docker(monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = [{"Config": {"Labels": {}}}]
+    monkeypatch.setattr(
+        configure, "_run", lambda *args, **kwargs: _Result(json.dumps(payload))
+    )
+
+    with pytest.raises(configure.ConfigureError):
+        configure._compose_labels("mailserver")
